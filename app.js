@@ -15,7 +15,7 @@ function save(){ try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e
 const fmt = v => 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 
 // GOOGLE DRIVE INTEGRATION
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID'; // Replace with your OAuth 2.0 Client ID
+const GOOGLE_CLIENT_ID = '1071645887652-c55v01e2qidqs1nnsa5rfc629ck3bern.apps.googleusercontent.com'; // Replace with your OAuth 2.0 Client ID
 const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
