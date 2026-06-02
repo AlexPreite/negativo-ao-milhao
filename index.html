@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#0a0a0a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Neg → Milhão"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<title>Do Negativo ao Milhão</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --bg2: #141414;
+    --bg3: #1c1c1c;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f0;
+    --muted: #888;
+    --green: #4ade80;
+    --green-dim: rgba(74,222,128,0.12);
+    --red: #f87171;
+    --red-dim: rgba(248,113,113,0.12);
+    --yellow: #facc15;
+    --yellow-dim: rgba(250,204,21,0.12);
+    --blue: #60a5fa;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif; }
+  body { overflow: hidden; }
+
+  /* LAYOUT */
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: 430px; margin: 0 auto; }
+  #header { padding: 52px 20px 12px; flex-shrink: 0; }
+  #header h1 { font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  #header h2 { font-size: 22px; font-weight: 600; color: var(--text); margin-top: 2px; }
+  #nav { display: flex; gap: 6px; padding: 0 20px 12px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+  #nav::-webkit-scrollbar { display: none; }
+  .nav-btn { flex-shrink: 0; padding: 7px 16px; border-radius: 20px; border: 1px solid var(--border2); background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .nav-btn.active { background: var(--text); color: var(--bg); border-color: transparent; }
+  #content { flex: 1; overflow-y: auto; padding: 0 20px 30px; scrollbar-width: none; }
+  #content::-webkit-scrollbar { display: none; }
+
+  /* CARDS */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+  .card-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .big-num { font-size: 32px; font-weight: 700; letter-spacing: -0.5px; }
+  .c-green { color: var(--green); }
+  .c-red { color: var(--red); }
+  .c-yellow { color: var(--yellow); }
+  .c-muted { color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .mc { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; }
+  .mc-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .mc-val { font-size: 16px; font-weight: 600; }
+
+  /* METER */
+  .meter-wrap { margin: 10px 0 4px; }
+  .meter-bar { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .meter-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+  .meter-tip { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* PROGRESS */
+  .prog-wrap { margin: 8px 0; }
+  .prog-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .prog-bar { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 3px; background: var(--green); transition: width 0.5s; }
+
+  /* ITEMS */
+  .item-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .item-row:last-child { border-bottom: none; }
+  .item-name { flex: 1; color: var(--text); }
+  .item-val { font-weight: 600; margin-right: 10px; }
+  .item-del { color: var(--muted); cursor: pointer; font-size: 20px; line-height: 1; padding: 0 4px; }
+  .item-del:active { color: var(--red); }
+
+  /* BADGES */
+  .badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; margin-left: 6px; }
+  .b-rec { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .b-unp { background: var(--red-dim); color: var(--red); }
+  .b-laz { background: var(--yellow-dim); color: var(--yellow); }
+  .b-vg  { background: var(--green-dim); color: var(--green); }
+
+  /* PRIO CARDS */
+  .prio { border-radius: var(--radius-sm); padding: 12px; margin-bottom: 8px; }
+  .prio-r { background: var(--red-dim); border: 1px solid rgba(248,113,113,0.25); }
+  .prio-y { background: var(--yellow-dim); border: 1px solid rgba(250,204,21,0.25); }
+  .prio-g { background: var(--green-dim); border: 1px solid rgba(74,222,128,0.25); }
+  .prio-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .prio-r .prio-tag { color: var(--red); }
+  .prio-y .prio-tag { color: var(--yellow); }
+  .prio-g .prio-tag { color: var(--green); }
+  .prio-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .prio-detail { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+  /* DIVIDA ROW */
+  .div-row { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 8px; }
+  .div-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .div-name { font-weight: 600; font-size: 14px; }
+  .ataque-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; }
+  .at-1 { background: var(--red-dim); color: var(--red); }
+  .at-2 { background: var(--yellow-dim); color: var(--yellow); }
+  .at-3 { background: var(--green-dim); color: var(--green); }
+  .div-line { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
+
+  /* ALERT */
+  .alert { border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; margin-bottom: 10px; line-height: 1.4; }
+  .alert-r { background: var(--red-dim); border: 1px solid rgba(248,113,113,0.3); color: var(--red); }
+  .alert-y { background: var(--yellow-dim); border: 1px solid rgba(250,204,21,0.3); color: var(--yellow); }
+
+  /* BTNS */
+  .btn { width: 100%; padding: 13px; border-radius: var(--radius-sm); border: 1px solid var(--border2); background: transparent; color: var(--text); font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 8px; transition: background 0.15s; }
+  .btn:active { background: var(--bg3); }
+  .btn-g { border-color: rgba(74,222,128,0.4); color: var(--green); }
+  .btn-r { border-color: rgba(248,113,113,0.4); color: var(--red); }
+  .btn-primary { background: var(--text); color: var(--bg); border-color: transparent; font-weight: 600; }
+
+  /* MODAL */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: flex-end; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--bg2); border-radius: 20px 20px 0 0; padding: 20px 20px 40px; width: 100%; max-width: 430px; max-height: 88vh; overflow-y: auto; border-top: 1px solid var(--border2); }
+  .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
+  .modal-close { float: right; cursor: pointer; color: var(--muted); font-size: 24px; line-height: 1; }
+  .input-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .input-row label { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .input-row input, .input-row select {
+    padding: 12px 14px; border: 1px solid var(--border2); border-radius: var(--radius-sm);
+    background: var(--bg3); color: var(--text); font-size: 15px; width: 100%;
+    -webkit-appearance: none; outline: none;
+  }
+  .input-row input:focus, .input-row select:focus { border-color: var(--green); }
+  .tag-row { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tag { padding: 7px 14px; border-radius: 20px; border: 1px solid var(--border2); font-size: 13px; cursor: pointer; background: transparent; color: var(--muted); font-weight: 500; }
+  .tag.sel { background: var(--text); color: var(--bg); border-color: transparent; }
+
+  /* AI CHAT */
+  .qs-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .qs { padding: 7px 13px; border: 1px solid var(--border2); border-radius: 20px; font-size: 12px; color: var(--muted); cursor: pointer; background: transparent; }
+  .qs:active { background: var(--bg3); }
+  #chat-msgs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; min-height: 60px; }
+  .ai-msg { border-radius: var(--radius-sm); padding: 12px 14px; font-size: 14px; line-height: 1.65; }
+  .ai-bot { background: var(--bg2); border: 1px solid var(--border); }
+  .ai-user { background: var(--bg3); border: 1px solid var(--border2); text-align: right; }
+  .ai-loading { color: var(--muted); font-style: italic; font-size: 13px; }
+  .ai-input-row { display: flex; gap: 8px; position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 0; }
+  .ai-input-row input { flex: 1; padding: 12px 14px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text); font-size: 14px; outline: none; }
+  .ai-input-row input:focus { border-color: var(--green); }
+  .ai-input-row button { padding: 12px 16px; border-radius: var(--radius-sm); background: var(--green); color: #000; border: none; font-size: 16px; cursor: pointer; font-weight: 700; }
+
+  /* SETTINGS */
+  .settings-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .settings-item:last-child { border-bottom: none; }
+  .settings-val { color: var(--muted); font-size: 13px; }
+
+  /* ONBOARDING */
+  #onboarding { position: fixed; inset: 0; background: var(--bg); z-index: 300; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; text-align: center; }
+  .logo-circle { width: 80px; height: 80px; border-radius: 50%; background: var(--green-dim); border: 2px solid var(--green); display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 24px; }
+  #onboarding h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+  #onboarding p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 32px; }
+  .key-input-wrap { width: 100%; margin-bottom: 16px; }
+  .key-input-wrap input { width: 100%; padding: 14px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text); font-size: 14px; outline: none; text-align: center; }
+  .key-input-wrap input:focus { border-color: var(--green); }
+  .skip-btn { font-size: 13px; color: var(--muted); cursor: pointer; margin-top: 12px; text-decoration: underline; }
+
+  .sec-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; margin-top: 4px; }
+  .total-row { display: flex; justify-content: space-between; padding: 10px 0 0; font-weight: 700; font-size: 14px; border-top: 1px solid var(--border); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ONBOARDING -->
+<div id="onboarding">
+  <div class="logo-circle">📈</div>
+  <h1>Do Negativo<br>ao Milhão</h1>
+  <p>Seu agente financeiro pessoal.<br>Cole sua Gemini API Key para ativar a IA.</p>
+  <div class="key-input-wrap">
+    <input type="password" id="key-input" placeholder="Cole sua Gemini API Key aqui..." />
+  </div>
+  <button class="btn btn-primary" onclick="salvarKey()">Começar →</button>
+  <span class="skip-btn" onclick="pularKey()">Usar sem IA por enquanto</span>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none;">
+  <div id="header">
+    <h1>Do Negativo ao Milhão</h1>
+    <h2 id="header-title">Resumo do mês</h2>
+  </div>
+  <nav id="nav">
+    <button class="nav-btn active" onclick="go('resumo')">Resumo</button>
+    <button class="nav-btn" onclick="go('receitas')">Receitas</button>
+    <button class="nav-btn" onclick="go('gastos')">Gastos</button>
+    <button class="nav-btn" onclick="go('dividas')">Dívidas</button>
+    <button class="nav-btn" onclick="go('metas')">Metas</button>
+    <button class="nav-btn" onclick="go('agente')">Agente IA</button>
+    <button class="nav-btn" onclick="go('config')">Config</button>
+  </nav>
+  <div id="content">
+
+    <!-- RESUMO -->
+    <div id="sec-resumo" class="section">
+      <div id="alerta-box"></div>
+      <div class="card">
+        <p class="card-label">Saldo disponível</p>
+        <p class="big-num" id="saldo-disp">R$ 0,00</p>
+        <div class="meter-wrap">
+          <div class="meter-bar"><div class="meter-fill" id="meter-fill" style="width:100%;background:var(--green);"></div></div>
+          <p class="meter-tip" id="meter-tip">Cadastre sua receita para começar</p>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="mc"><p class="mc-label">Receitas</p><p class="mc-val c-green" id="r-rec">R$ 0</p></div>
+        <div class="mc"><p class="mc-label">Gastos</p><p class="mc-val c-red" id="r-gas">R$ 0</p></div>
+      </div>
+      <div class="grid2">
+        <div class="mc"><p class="mc-label">Fixos</p><p class="mc-val c-yellow" id="r-fix">R$ 0</p></div>
+        <div class="mc"><p class="mc-label">Dívidas</p><p class="mc-val c-red" id="r-div">R$ 0</p></div>
+      </div>
+      <div class="card">
+        <p class="card-label">O que pagar primeiro</p>
+        <div id="prio-lista"><p style="font-size:13px;color:var(--muted);">Cadastre gastos e dívidas para ver as prioridades.</p></div>
+      </div>
+      <div class="card">
+        <p class="card-label">Meta: R$ 100 mil</p>
+        <div class="prog-wrap">
+          <div class="prog-row"><span id="prog-val">R$ 0 guardado</span><span id="prog-pct">0%</span></div>
+          <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%;"></div></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="go('agente')">📊 Consultar agente financeiro</button>
+    </div>
+
+    <!-- RECEITAS -->
+    <div id="sec-receitas" class="section" style="display:none;">
+      <p class="sec-title">Receitas do mês</p>
+      <div id="lista-receitas"></div>
+      <button class="btn btn-g" onclick="openM('m-receita')">+ Adicionar receita</button>
+    </div>
+
+    <!-- GASTOS -->
+    <div id="sec-gastos" class="section" style="display:none;">
+      <p class="sec-title">Gastos registrados</p>
+      <div id="breakdown-gastos"></div>
+      <div id="lista-gastos"></div>
+      <button class="btn" onclick="openM('m-gasto')">+ Adicionar gasto</button>
+    </div>
+
+    <!-- DÍVIDAS -->
+    <div id="sec-dividas" class="section" style="display:none;">
+      <p class="sec-title">Dívidas — ordem de ataque</p>
+      <div class="card" style="margin-bottom:12px;">
+        <p class="card-label">Total devedor</p>
+        <p class="big-num c-red" id="total-div-big">R$ 0</p>
+        <p style="font-size:12px;color:var(--muted);margin-top:6px;" id="custo-juros-txt"></p>
+      </div>
+      <div id="lista-dividas"></div>
+      <button class="btn btn-r" onclick="openM('m-divida')">+ Cadastrar dívida</button>
+    </div>
+
+    <!-- METAS -->
+    <div id="sec-metas" class="section" style="display:none;">
+      <p class="sec-title">Metas & economias</p>
+      <div id="lista-metas"></div>
+      <button class="btn btn-g" onclick="openM('m-meta')">+ Criar meta</button>
+    </div>
+
+    <!-- AGENTE -->
+    <div id="sec-agente" class="section" style="display:none;">
+      <p class="sec-title">Agente financeiro</p>
+      <div class="qs-wrap">
+        <button class="qs" onclick="ask('Onde estou perdendo mais dinheiro?')">Onde vaza o dinheiro?</button>
+        <button class="qs" onclick="ask('Qual dívida devo atacar primeiro e por quê?')">Qual dívida atacar?</button>
+        <button class="qs" onclick="ask('Crie um plano realista para chegar nos R$100 mil')">Plano R$100k</button>
+        <button class="qs" onclick="ask('Quais gastos posso cortar agora para acelerar a quitação das dívidas?')">O que cortar?</button>
+        <button class="qs" onclick="ask('Quanto tempo para quitar todas as dívidas no ritmo atual?')">Tempo para quitar</button>
+        <button class="qs" onclick="ask('Quando chegar o 13° salário, o que devo fazer com ele?')">Usar o 13°?</button>
+      </div>
+      <div id="chat-msgs"></div>
+      <div class="ai-input-row">
+        <input type="text" id="ai-input" placeholder="Pergunte ao seu agente..." onkeydown="if(event.key==='Enter')sendMsg()"/>
+        <button onclick="sendMsg()">→</button>
+      </div>
+    </div>
+
+    <!-- CONFIG -->
+    <div id="sec-config" class="section" style="display:none;">
+      <p class="sec-title">Configurações</p>
+      <div class="card">
+        <div class="settings-item">
+          <span>API Key (Gemini)</span>
+          <span class="settings-val" id="key-status">Não configurada</span>
+        </div>
+        <button class="btn" onclick="openM('m-key')">Atualizar API Key</button>
+      </div>
+      <div class="card">
+        <div class="settings-item"><span>Google Drive</span><span class="settings-val" id="drive-status">Desconectado</span></div>
+        <button class="btn" onclick="loginDrive()">Conectar Google Drive</button>
+        <button class="btn" onclick="syncDrive()" style="margin-top:4px;">Sincronizar agora</button>
+      </div>
+      <div class="card">
+        <div class="settings-item"><span>Versão</span><span class="settings-val">1.0.0</span></div>
+        <div class="settings-item"><span>Dados salvos</span><span class="settings-val">Local + Drive</span></div>
+      </div>
+      <button class="btn btn-r" onclick="if(confirm('Apagar todos os dados?')){localStorage.clear();location.reload();}">Apagar todos os dados</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAIS -->
+<div class="modal-bg" id="m-receita">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-receita')">×</span>
+    <p class="modal-title">Nova receita</p>
+    <div class="input-row"><label>Descrição</label><input type="text" id="r-desc" placeholder="Ex: Salário, PLR, Bônus"/></div>
+    <div class="input-row"><label>Valor (R$)</label><input type="number" id="r-val" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Tipo</label>
+      <select id="r-tipo">
+        <option value="salario">Salário fixo</option>
+        <option value="13">13° salário</option>
+        <option value="plr">PLR</option>
+        <option value="bonus">Bônus</option>
+        <option value="outro">Outro</option>
+      </select>
+    </div>
+    <button class="btn btn-g" onclick="addReceita()">Salvar receita</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-gasto">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-gasto')">×</span>
+    <p class="modal-title">Novo gasto</p>
+    <div class="input-row"><label>Descrição</label><input type="text" id="g-desc" placeholder="Ex: Aluguel, Supermercado..."/></div>
+    <div class="input-row"><label>Valor (R$)</label><input type="number" id="g-val" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Categoria</label></div>
+    <div class="tag-row" id="cat-tags">
+      <button class="tag sel" data-cat="recorrente" onclick="selTag(this)">Fixo/Recorrente</button>
+      <button class="tag" data-cat="nao_planejado" onclick="selTag(this)">Não planejado</button>
+      <button class="tag" data-cat="lazer" onclick="selTag(this)">Lazer</button>
+      <button class="tag" data-cat="viagem" onclick="selTag(this)">Viagem</button>
+    </div>
+    <div class="input-row"><label>Comprovante (opcional)</label><input type="file" id="g-file" accept="image/*,.pdf"/></div>
+    <button class="btn" onclick="addGasto()">Salvar gasto</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-divida">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-divida')">×</span>
+    <p class="modal-title">Cadastrar dívida</p>
+    <div class="input-row"><label>Credor</label><input type="text" id="d-credor" placeholder="Ex: Nubank, Bradesco..."/></div>
+    <div class="input-row"><label>Saldo devedor (R$)</label><input type="number" id="d-saldo" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Juros ao mês (%)</label><input type="number" id="d-juros" placeholder="Ex: 12.5" step="0.1" inputmode="decimal"/></div>
+    <div class="input-row"><label>Parcela mensal (R$) — se houver</label><input type="number" id="d-parcela" placeholder="Opcional" inputmode="decimal"/></div>
+    <div class="input-row"><label>Tipo</label>
+      <select id="d-tipo">
+        <option value="cartao">Cartão de crédito</option>
+        <option value="emprestimo">Empréstimo</option>
+      </select>
+    </div>
+    <button class="btn btn-r" onclick="addDivida()">Salvar dívida</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-meta">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-meta')">×</span>
+    <p class="modal-title">Nova meta</p>
+    <div class="input-row"><label>Nome</label><input type="text" id="mt-nome" placeholder="Ex: Reserva de emergência, Viagem"/></div>
+    <div class="input-row"><label>Valor total (R$)</label><input type="number" id="mt-total" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Já guardado (R$)</label><input type="number" id="mt-atual" placeholder="0,00" inputmode="decimal"/></div>
+    <button class="btn btn-g" onclick="addMeta()">Criar meta</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-key">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-key')">×</span>
+    <p class="modal-title">Atualizar API Key</p>
+    <div class="input-row"><label>Gemini API Key</label><input type="password" id="new-key" placeholder="Cole a chave aqui..."/></div>
+    <button class="btn btn-g" onclick="atualizarKey()">Salvar chave</button>
+  </div>
+</div>
+
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
