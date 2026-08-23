@@ -107,6 +107,17 @@
   .at-3 { background: var(--green-dim); color: var(--green); }
   .div-line { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
 
+  /* MÊS */
+  .mes-switch { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 14px; }
+  .mes-switch button { background: var(--bg2); border: 1px solid var(--border2); color: var(--text); width: 32px; height: 32px; border-radius: 50%; font-size: 16px; cursor: pointer; }
+  .mes-switch button:active { background: var(--bg3); }
+  .mes-label { font-size: 14px; font-weight: 600; min-width: 130px; text-align: center; }
+
+  /* PARCELAS DO ACORDO */
+  .parcelas-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .parcela-pill { width: 28px; height: 28px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); cursor: pointer; }
+  .pp-paga { background: var(--green-dim); color: var(--green); border-color: rgba(74,222,128,0.4); }
+
   /* ALERT */
   .alert { border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; margin-bottom: 10px; line-height: 1.4; }
   .alert-r { background: var(--red-dim); border: 1px solid rgba(248,113,113,0.3); color: var(--red); }
@@ -203,6 +214,7 @@
 
     <!-- RESUMO -->
     <div id="sec-resumo" class="section">
+      <div class="mes-switch"><button onclick="mudarMes(-1)">‹</button><span class="mes-label">Mês/Ano</span><button onclick="mudarMes(1)">›</button></div>
       <div id="alerta-box"></div>
       <div class="card">
         <p class="card-label">Saldo disponível</p>
@@ -236,17 +248,19 @@
 
     <!-- RECEITAS -->
     <div id="sec-receitas" class="section" style="display:none;">
+      <div class="mes-switch"><button onclick="mudarMes(-1)">‹</button><span class="mes-label">Mês/Ano</span><button onclick="mudarMes(1)">›</button></div>
       <p class="sec-title">Receitas do mês</p>
       <div id="lista-receitas"></div>
-      <button class="btn btn-g" onclick="openM('m-receita')">+ Adicionar receita</button>
+      <button class="btn btn-g" onclick="abrirModalReceita()">+ Adicionar receita</button>
     </div>
 
     <!-- GASTOS -->
     <div id="sec-gastos" class="section" style="display:none;">
+      <div class="mes-switch"><button onclick="mudarMes(-1)">‹</button><span class="mes-label">Mês/Ano</span><button onclick="mudarMes(1)">›</button></div>
       <p class="sec-title">Gastos registrados</p>
       <div id="breakdown-gastos"></div>
       <div id="lista-gastos"></div>
-      <button class="btn" onclick="openM('m-gasto')">+ Adicionar gasto</button>
+      <button class="btn" onclick="abrirModalGasto()">+ Adicionar gasto</button>
     </div>
 
     <!-- DÍVIDAS -->
@@ -319,6 +333,7 @@
     <p class="modal-title">Nova receita</p>
     <div class="input-row"><label>Descrição</label><input type="text" id="r-desc" placeholder="Ex: Salário, PLR, Bônus"/></div>
     <div class="input-row"><label>Valor (R$)</label><input type="number" id="r-val" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Data</label><input type="date" id="r-data"/></div>
     <div class="input-row"><label>Tipo</label>
       <select id="r-tipo">
         <option value="salario">Salário fixo</option>
@@ -340,6 +355,7 @@
     <p class="modal-title">Novo gasto</p>
     <div class="input-row"><label>Descrição</label><input type="text" id="g-desc" placeholder="Ex: Aluguel, Supermercado..."/></div>
     <div class="input-row"><label>Valor (R$)</label><input type="number" id="g-val" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Data</label><input type="date" id="g-data"/></div>
     <div class="input-row"><label>Categoria</label></div>
     <div class="tag-row" id="cat-tags">
       <button class="tag sel" data-cat="recorrente" onclick="selTag(this)">Fixo/Recorrente</button>
@@ -368,6 +384,18 @@
       </select>
     </div>
     <button class="btn btn-r" onclick="addDivida()">Salvar dívida</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-acordo">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-acordo')">×</span>
+    <p class="modal-title">Registrar acordo — <span id="ac-credor"></span></p>
+    <div class="input-row"><label>Valor total do acordo (R$)</label><input type="number" id="ac-total" inputmode="decimal"/></div>
+    <div class="input-row"><label>Entrada (R$)</label><input type="number" id="ac-entrada" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Número de parcelas</label><input type="number" id="ac-parcelas" placeholder="Ex: 9" inputmode="numeric"/></div>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">Ex: total R$1.000, entrada R$100, 9x → 9 parcelas de ~R$100.</p>
+    <button class="btn btn-r" onclick="salvarAcordo()">Salvar acordo</button>
   </div>
 </div>
 
