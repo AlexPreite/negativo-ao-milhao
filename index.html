@@ -297,9 +297,10 @@
         <button class="btn" onclick="openM('m-key')">Atualizar API Key</button>
       </div>
       <div class="card">
-        <div class="settings-item"><span>Google Drive</span><span class="settings-val" id="drive-status">Desconectado</span></div>
-        <button class="btn" onclick="loginDrive()">Conectar Google Drive</button>
+        <div class="settings-item"><span>Nuvem (Google)</span><span class="settings-val" id="drive-status">Desconectado</span></div>
+        <button class="btn" onclick="loginDrive()">Conectar com Google</button>
         <button class="btn" onclick="syncDrive()" style="margin-top:4px;">Sincronizar agora</button>
+        <button class="btn" onclick="logoutDrive()" style="margin-top:4px;">Desconectar</button>
       </div>
       <div class="card">
         <div class="settings-item"><span>Versão</span><span class="settings-val">1.0.0</span></div>
@@ -327,6 +328,8 @@
         <option value="outro">Outro</option>
       </select>
     </div>
+    <div class="input-row"><label>Holerite/comprovante (foto ou PDF, opcional)</label><input type="file" id="r-file" accept="image/*,.pdf" onchange="lerReceitaComIA()"/></div>
+    <p id="r-ocr-status" style="font-size:12px;color:var(--muted);margin:4px 0 8px;"></p>
     <button class="btn btn-g" onclick="addReceita()">Salvar receita</button>
   </div>
 </div>
@@ -344,7 +347,8 @@
       <button class="tag" data-cat="lazer" onclick="selTag(this)">Lazer</button>
       <button class="tag" data-cat="viagem" onclick="selTag(this)">Viagem</button>
     </div>
-    <div class="input-row"><label>Comprovante (opcional)</label><input type="file" id="g-file" accept="image/*,.pdf"/></div>
+    <div class="input-row"><label>Comprovante (foto ou PDF, opcional)</label><input type="file" id="g-file" accept="image/*,.pdf" onchange="lerGastoComIA()"/></div>
+    <p id="g-ocr-status" style="font-size:12px;color:var(--muted);margin:4px 0 8px;"></p>
     <button class="btn" onclick="addGasto()">Salvar gasto</button>
   </div>
 </div>
@@ -387,7 +391,9 @@
   </div>
 </div>
 
-<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
