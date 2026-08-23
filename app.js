@@ -158,12 +158,75 @@ document.querySelectorAll('.modal-bg').forEach(m=>{
 
 function selTag(el){ document.querySelectorAll('#cat-tags .tag').forEach(t=>t.classList.remove('sel')); el.classList.add('sel'); }
 
+// LEITURA DE COMPROVANTES/HOLERITES COM IA (Gemini Vision — grátis no plano free)
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result.split(',')[1]);
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function extrairComImagem(file, tipoDoc){
+  if(!apiKey){ alert('Configure a Gemini API Key em Configurações primeiro.'); go('config'); return null; }
+  const base64=await fileToBase64(file);
+  const prompt = tipoDoc==='gasto'
+    ? 'Você recebeu a foto ou PDF de um recibo, nota fiscal ou comprovante de pagamento brasileiro. Extraia o valor total pago e uma descrição curta (nome do estabelecimento ou produto/serviço). Responda APENAS em JSON puro, sem markdown, sem texto extra, no formato exato: {"descricao":"string curta","valor":number,"data":"DD/MM/AAAA ou vazio"}. Se não conseguir identificar com confiança, retorne {"descricao":"","valor":0,"data":""}.'
+    : 'Você recebeu a foto ou PDF de um holerite, contracheque ou comprovante de depósito/PIX brasileiro. Extraia o valor líquido recebido e uma descrição curta (ex: "Salário", "PLR", "13º salário", "Bônus", "Férias"). Responda APENAS em JSON puro, sem markdown, sem texto extra, no formato exato: {"descricao":"string curta","valor":number,"data":"DD/MM/AAAA ou vazio"}. Se não conseguir identificar com confiança, retorne {"descricao":"","valor":0,"data":""}.';
+
+  const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      contents:[{role:'user',parts:[{text:prompt},{inline_data:{mime_type:file.type||'image/jpeg',data:base64}}]}],
+      generationConfig:{responseMimeType:'application/json',maxOutputTokens:300}
+    })
+  });
+  const data=await resp.json();
+  const text=data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if(!text) throw new Error(data.error?.message||'Sem resposta da IA');
+  return JSON.parse(text);
+}
+
+async function lerGastoComIA(){
+  const file=document.getElementById('g-file').files[0];
+  const st=document.getElementById('g-ocr-status');
+  if(!file){ if(st) st.textContent=''; return; }
+  if(st) st.textContent='🔎 Lendo comprovante...';
+  try{
+    const r=await extrairComImagem(file,'gasto');
+    if(r && r.valor>0){
+      document.getElementById('g-desc').value=r.descricao||'';
+      document.getElementById('g-val').value=r.valor;
+      if(st) st.textContent='✅ Lido! Confira os valores antes de salvar.';
+    } else if(st) st.textContent='⚠️ Não consegui ler os valores — preencha manualmente.';
+  }catch(e){ if(st) st.textContent='❌ Erro ao ler: '+e.message; console.error(e); }
+}
+
+async function lerReceitaComIA(){
+  const file=document.getElementById('r-file').files[0];
+  const st=document.getElementById('r-ocr-status');
+  if(!file){ if(st) st.textContent=''; return; }
+  if(st) st.textContent='🔎 Lendo holerite...';
+  try{
+    const r=await extrairComImagem(file,'receita');
+    if(r && r.valor>0){
+      document.getElementById('r-desc').value=r.descricao||'';
+      document.getElementById('r-val').value=r.valor;
+      if(st) st.textContent='✅ Lido! Confira os valores antes de salvar.';
+    } else if(st) st.textContent='⚠️ Não consegui ler os valores — preencha manualmente.';
+  }catch(e){ if(st) st.textContent='❌ Erro ao ler: '+e.message; console.error(e); }
+}
+
 // CRUD
 function addReceita(){
   const desc=document.getElementById('r-desc').value.trim(), val=parseFloat(document.getElementById('r-val').value), tipo=document.getElementById('r-tipo').value;
   if(!desc||!val||val<=0) return;
   S.receitas.push({id:Date.now(),desc,val,tipo}); save(); closeM('m-receita'); render();
   document.getElementById('r-desc').value=''; document.getElementById('r-val').value='';
+  const rf=document.getElementById('r-file'); if(rf) rf.value='';
+  const rst=document.getElementById('r-ocr-status'); if(rst) rst.textContent='';
 }
 function addGasto(){
   const desc=document.getElementById('g-desc').value.trim(), val=parseFloat(document.getElementById('g-val').value);
@@ -171,6 +234,8 @@ function addGasto(){
   if(!desc||!val||val<=0) return;
   S.gastos.push({id:Date.now(),desc,val,cat}); save(); closeM('m-gasto'); render();
   document.getElementById('g-desc').value=''; document.getElementById('g-val').value='';
+  const gf=document.getElementById('g-file'); if(gf) gf.value='';
+  const gst=document.getElementById('g-ocr-status'); if(gst) gst.textContent='';
 }
 function addDivida(){
   const credor=document.getElementById('d-credor').value.trim(), saldo=parseFloat(document.getElementById('d-saldo').value);
