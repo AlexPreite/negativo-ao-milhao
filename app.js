@@ -11,94 +11,85 @@ function loadState(){
   try { gdriveFolderId=localStorage.getItem('dnm_gdrive_folder')||''; } catch(e){}
 }
 
-function save(){ try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){} }
 const fmt = v => 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 
-// GOOGLE DRIVE INTEGRATION
-const GOOGLE_CLIENT_ID = '1071645887652-c55v01e2qidqs1nnsa5rfc629ck3bern.apps.googleusercontent.com'; // Replace with your OAuth 2.0 Client ID
-const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+// FIREBASE INTEGRATION
+// 1. Crie um projeto em https://console.firebase.google.com
+// 2. Ative Authentication > Método de login > Google
+// 3. Ative Firestore Database (modo produção)
+// 4. Configurações do projeto > copie o firebaseConfig e cole abaixo
+const firebaseConfig = {
+  apiKey: "AIzaSyBlFODuPRjVS4vfyin6vNC13v4ATxF8g6A",
+  authDomain: "controle-de-despesas-8bd81.firebaseapp.com",
+  projectId: "controle-de-despesas-8bd81",
+  storageBucket: "controle-de-despesas-8bd81.firebasestorage.app",
+  messagingSenderId: "1071645887652",
+  appId: "1:1071645887652:web:e2373db3e9bcc35e472a31",
+  measurementId: "G-XTRG0XMJCC"
+};
+
+let fbUser = null;
+let fbDb = null;
+let saveTimer = null;
 
 function initGoogleAPI(){
-  gapi.load('client:auth2', () => {
-    gapi.client.init({
-      clientId: GOOGLE_CLIENT_ID,
-      discoveryDocs: DISCOVERY_DOCS,
-      scope: SCOPES
-    }).then(() => { updateDriveStatus(); });
-  });
+  try {
+    firebase.initializeApp(firebaseConfig);
+    fbDb = firebase.firestore();
+    firebase.auth().onAuthStateChanged(user => {
+      fbUser = user;
+      updateDriveStatus();
+      if(user) loadFromCloud();
+    });
+  } catch(e) { console.error('Erro ao iniciar Firebase. Confira o firebaseConfig.', e); }
 }
 
 function loginDrive(){
-  gapi.auth2.getAuthInstance().signIn().then(() => {
-    const user = gapi.auth2.getAuthInstance().currentUser.get();
-    gdriveToken = user.getAuthResponse().id_token;
-    localStorage.setItem('dnm_gdrive_token', gdriveToken);
-    ensureFolder().then(() => { syncDrive(); updateDriveStatus(); });
-  }).catch(e => alert('Erro ao conectar com Google Drive: '+e.error_description));
+  const provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider)
+    .then(() => syncDrive())
+    .catch(e => alert('Erro ao conectar com Google: '+e.message));
+}
+
+function logoutDrive(){
+  firebase.auth().signOut().then(() => updateDriveStatus());
 }
 
 function updateDriveStatus(){
   const el = document.getElementById('drive-status');
   if(!el) return;
-  const auth = gapi.auth2?.getAuthInstance();
-  if(auth?.isSignedIn?.get?.()) {
-    el.textContent = '✅ Conectado';
-  } else {
-    el.textContent = '❌ Desconectado';
-  }
+  el.textContent = fbUser ? `✅ Conectado (${fbUser.email})` : '❌ Desconectado';
 }
 
-async function ensureFolder(){
-  if(gdriveFolderId) return;
+async function loadFromCloud(){
+  if(!fbUser || !fbDb) return;
   try {
-    const res = await gapi.client.drive.files.list({
-      q: "name='Negativo ao Milhão' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-      spaces: 'drive',
-      pageSize: 1,
-      fields: 'files(id)'
-    });
-    if(res.result.files.length) {
-      gdriveFolderId = res.result.files[0].id;
-    } else {
-      const folderRes = await gapi.client.drive.files.create({
-        resource: { name: 'Negativo ao Milhão', mimeType: 'application/vnd.google-apps.folder' },
-        fields: 'id'
-      });
-      gdriveFolderId = folderRes.result.id;
+    const doc = await fbDb.collection('usuarios').doc(fbUser.uid).get();
+    if(doc.exists){
+      S = {...S, ...doc.data()};
+      save();
+      render();
     }
-    localStorage.setItem('dnm_gdrive_folder', gdriveFolderId);
-  } catch(e) { console.error('Erro ao criar/encontrar pasta:', e); }
+  } catch(e) { console.error('Erro ao carregar dados da nuvem:', e); }
 }
 
 async function syncDrive(){
-  if(!gapi.auth2?.getAuthInstance()?.isSignedIn?.get?.()) { alert('Conecte ao Google Drive primeiro'); return; }
-  await ensureFolder();
+  if(!fbUser || !fbDb) { alert('Conecte-se com o Google primeiro'); return; }
   try {
-    const fileData = JSON.stringify(S, null, 2);
-    const blob = new Blob([fileData], {type: 'application/json'});
-    const res = await gapi.client.drive.files.list({
-      q: `name='dnm-backup.json' and '${gdriveFolderId}' in parents and trashed=false`,
-      spaces: 'drive',
-      fields: 'files(id)',
-      pageSize: 1
-    });
-    const existingFileId = res.result.files?.[0]?.id;
-    if(existingFileId) {
-      await gapi.client.drive.files.update({
-        fileId: existingFileId,
-        resource: { modifiedTime: new Date() },
-        media: { mimeType: 'application/json', body: fileData }
-      });
-    } else {
-      await gapi.client.drive.files.create({
-        resource: { name: 'dnm-backup.json', parents: [gdriveFolderId] },
-        media: { mimeType: 'application/json', body: fileData },
-        fields: 'id'
-      });
-    }
-    alert('✅ Dados sincronizados com Google Drive!');
+    await fbDb.collection('usuarios').doc(fbUser.uid).set(S);
+    alert('✅ Dados sincronizados!');
   } catch(e) { alert('Erro ao sincronizar: '+e.message); }
+}
+
+// Salva local sempre; se logado, sincroniza na nuvem com debounce (evita gravar a cada tecla)
+function save(){
+  try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){}
+  if(fbUser && fbDb){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      fbDb.collection('usuarios').doc(fbUser.uid).set(S).catch(e=>console.error('Erro ao sincronizar:',e));
+    }, 1500);
+  }
 }
 
 // ONBOARDING
