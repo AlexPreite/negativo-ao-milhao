@@ -100,7 +100,11 @@ function fazerLogin(){
   if(d.length<10||!senha){ msg.textContent='Preencha telefone e senha.'; return; }
   msg.textContent='Entrando...';
   firebase.auth().signInWithEmailAndPassword(telefoneParaEmail(d), senha)
-    .catch(()=>{ msg.textContent='Telefone ou senha incorretos.'; });
+    .catch(e=>{
+      if(e.code==='auth/user-not-found') msg.textContent='Esse telefone ainda não tem conta — toque em "Criar minha conta".';
+      else if(e.code==='auth/wrong-password'||e.code==='auth/invalid-credential') msg.textContent='Senha incorreta.';
+      else msg.textContent='Erro ao entrar: '+e.message;
+    });
 }
 
 function sair(){
@@ -140,18 +144,28 @@ async function syncDrive(){
 
 function salvarFamiliaId(){
   const v=document.getElementById('familia-id').value.trim();
-  if(!v){ alert('Digite um código (ex: preite-familia-2026).'); return; }
+  if(!v){ alert('Digite um código.'); return; }
+  if(!fbUser || !fbDb){ alert('Faça login primeiro.'); return; }
   familiaId=v; localStorage.setItem('dnm_familia_id',v);
   updateFamiliaStatus();
-  if(fbUser && fbDb){
-    loadFromCloud().then(()=>{
-      fbDb.collection('usuarios').doc(familiaId).set(S).catch(e=>console.error('Erro ao sincronizar:',e));
-      render();
-      alert('Código salvo e sincronizado! Use exatamente o mesmo código no aparelho da Gabi, em Configurações.');
-    });
-  } else {
-    alert('Código salvo. Faça login pra sincronizar.');
-  }
+  fbDb.collection('usuarios').doc(familiaId).get().then(doc=>{
+    if(doc.exists){
+      // Já existe dado nesse código — este aparelho ADOTA os dados, nunca sobrescreve.
+      S = {...S, ...doc.data()};
+      if(S.apiKey) apiKey=S.apiKey;
+      try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){}
+      updateKeyStatus(); render();
+      alert('Código vinculado! Os dados da família já foram carregados aqui.');
+    } else {
+      // Ninguém criou esse código ainda — este aparelho vira a base.
+      fbDb.collection('usuarios').doc(familiaId).set(S)
+        .then(()=>alert('Código salvo! Este foi o primeiro aparelho com esse código — os dados daqui viraram a base da família.'))
+        .catch(e=>alert('Erro ao gravar na nuvem: '+e.message+'\n\nProvavelmente as regras do Firestore estão bloqueando. Veja a mensagem que te mandei sobre isso.'));
+    }
+  }).catch(e=>{
+    alert('Erro ao acessar a nuvem: '+e.message+'\n\nProvavelmente as regras do Firestore estão bloqueando o acesso a este código.');
+    console.error(e);
+  });
 }
 function updateFamiliaStatus(){
   const el=document.getElementById('familia-status');
@@ -166,7 +180,7 @@ function save(){
   if(fbUser && fbDb && id){
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      fbDb.collection('usuarios').doc(id).set(S).catch(e=>console.error('Erro ao sincronizar:',e));
+      fbDb.collection('usuarios').doc(id).set(S).catch(e=>console.error('Erro ao sincronizar (confira as regras do Firestore):',e));
     }, 1500);
   }
 }
