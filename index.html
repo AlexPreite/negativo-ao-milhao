@@ -169,6 +169,9 @@
 
   /* ONBOARDING */
   #onboarding { position: fixed; inset: 0; background: var(--bg); z-index: 300; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; text-align: center; }
+  #tela-login { position: fixed; inset: 0; background: var(--bg); z-index: 310; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; text-align: center; }
+  #tela-login h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+  #tela-login p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 28px; }
   .logo-circle { width: 80px; height: 80px; border-radius: 50%; background: var(--green-dim); border: 2px solid var(--green); display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 24px; }
   #onboarding h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
   #onboarding p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 32px; }
@@ -182,6 +185,18 @@
 </style>
 </head>
 <body>
+
+<!-- LOGIN -->
+<div id="tela-login">
+  <div class="logo-circle">🔐</div>
+  <h1>Do Negativo<br>ao Milhão</h1>
+  <p>Entre com telefone e senha.<br>Cada pessoa da família cria seu próprio login.</p>
+  <div class="key-input-wrap"><input type="tel" id="login-tel" placeholder="Telefone com DDD (só números)" inputmode="numeric" maxlength="11"/></div>
+  <div class="key-input-wrap"><input type="password" id="login-senha" placeholder="Senha (mín. 6 caracteres)"/></div>
+  <button class="btn btn-primary" onclick="fazerLogin()">Entrar</button>
+  <button class="btn" style="margin-top:8px;" onclick="fazerCadastro()">Criar minha conta</button>
+  <p id="login-msg" style="color:var(--red);font-size:13px;margin-top:14px;min-height:16px;"></p>
+</div>
 
 <!-- ONBOARDING -->
 <div id="onboarding">
@@ -206,6 +221,7 @@
     <button class="nav-btn" onclick="go('receitas')">Receitas</button>
     <button class="nav-btn" onclick="go('gastos')">Gastos</button>
     <button class="nav-btn" onclick="go('dividas')">Dívidas</button>
+    <button class="nav-btn" onclick="go('investimentos')">Invest.</button>
     <button class="nav-btn" onclick="go('metas')">Metas</button>
     <button class="nav-btn" onclick="go('agente')">Agente IA</button>
     <button class="nav-btn" onclick="go('config')">Config</button>
@@ -275,6 +291,18 @@
       <button class="btn btn-r" onclick="openM('m-divida')">+ Cadastrar dívida</button>
     </div>
 
+    <!-- INVESTIMENTOS -->
+    <div id="sec-investimentos" class="section" style="display:none;">
+      <p class="sec-title">Investimentos</p>
+      <div class="card" style="margin-bottom:12px;">
+        <p class="card-label">Valor atual total</p>
+        <p class="big-num c-green" id="total-inv-big">R$ 0</p>
+        <p style="font-size:12px;color:var(--muted);margin-top:6px;" id="rend-inv-txt"></p>
+      </div>
+      <div id="lista-investimentos"></div>
+      <button class="btn btn-g" onclick="abrirModalInvestimento()">+ Cadastrar investimento</button>
+    </div>
+
     <!-- METAS -->
     <div id="sec-metas" class="section" style="display:none;">
       <p class="sec-title">Metas & economias</p>
@@ -311,14 +339,19 @@
         <button class="btn" onclick="openM('m-key')">Atualizar API Key</button>
       </div>
       <div class="card">
-        <div class="settings-item"><span>Nuvem (Google)</span><span class="settings-val" id="drive-status">Desconectado</span></div>
-        <button class="btn" onclick="loginDrive()">Conectar com Google</button>
-        <button class="btn" onclick="syncDrive()" style="margin-top:4px;">Sincronizar agora</button>
-        <button class="btn" onclick="logoutDrive()" style="margin-top:4px;">Desconectar</button>
+        <div class="settings-item"><span>Conta</span><span class="settings-val" id="conta-status">Desconectado</span></div>
+        <button class="btn" onclick="syncDrive()">Sincronizar agora</button>
+        <button class="btn btn-r" onclick="sair()" style="margin-top:4px;">Sair da conta</button>
+      </div>
+      <div class="card">
+        <div class="settings-item"><span>Código da família</span><span class="settings-val" id="familia-status">Não definido</span></div>
+        <p style="font-size:12px;color:var(--muted);margin:2px 0 10px;">Combine o mesmo código nos dois celulares (seu e da Gabi) pra ficarem com os mesmos dados na nuvem.</p>
+        <input type="text" id="familia-id" placeholder="Ex: preite-familia-2026" style="padding:12px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg3);color:var(--text);width:100%;font-size:15px;"/>
+        <button class="btn" onclick="salvarFamiliaId()">Salvar código</button>
       </div>
       <div class="card">
         <div class="settings-item"><span>Versão</span><span class="settings-val">1.0.0</span></div>
-        <div class="settings-item"><span>Dados salvos</span><span class="settings-val">Local + Drive</span></div>
+        <div class="settings-item"><span>Dados salvos</span><span class="settings-val">Local + Nuvem</span></div>
       </div>
       <button class="btn btn-r" onclick="if(confirm('Apagar todos os dados?')){localStorage.clear();location.reload();}">Apagar todos os dados</button>
     </div>
@@ -366,6 +399,19 @@
     <div class="input-row"><label>Comprovante (foto ou PDF, opcional)</label><input type="file" id="g-file" accept="image/*,.pdf" onchange="lerGastoComIA()"/></div>
     <p id="g-ocr-status" style="font-size:12px;color:var(--muted);margin:4px 0 8px;"></p>
     <button class="btn" onclick="addGasto()">Salvar gasto</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-investimento">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-investimento')">×</span>
+    <p class="modal-title">Cadastrar investimento</p>
+    <div class="input-row"><label>Banco/Instituição</label><input type="text" id="inv-banco" placeholder="Ex: Tesouro Direto, Nubank, C6..."/></div>
+    <div class="input-row"><label>Valor investido (R$)</label><input type="number" id="inv-valor" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Rendimento ao mês (%)</label><input type="number" id="inv-taxa" placeholder="Ex: 0.9" step="0.01" inputmode="decimal"/></div>
+    <div class="input-row"><label>Data da aplicação</label><input type="date" id="inv-data"/></div>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">O valor atual evolui sozinho todo mês, com base na taxa (juros compostos).</p>
+    <button class="btn btn-g" onclick="addInvestimento()">Salvar investimento</button>
   </div>
 </div>
 
