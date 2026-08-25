@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dnm-v1';
+const CACHE_NAME = 'dnm-v2';
 const urlsToCache = [
   './',
   './index.html',
