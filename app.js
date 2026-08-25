@@ -6,6 +6,8 @@ function loadState(){
   try { const d=localStorage.getItem('dnm_data'); if(d) S={...S,...JSON.parse(d)}; } catch(e){}
   try { familiaId=localStorage.getItem('dnm_familia_id')||''; } catch(e){}
   if(S.apiKey) apiKey=S.apiKey;
+  if(!S.apiKey){ try{ const legado=localStorage.getItem('dnm_key'); if(legado){ S.apiKey=legado; apiKey=legado; } }catch(e){} }
+  if(!S.onboardingDone && (S.apiKey || localStorage.getItem('dnm_skip'))) S.onboardingDone=true;
   // Migração: garante que registros antigos (sem mês/status) continuem aparecendo
   const hoje=new Date().toISOString().slice(0,10);
   (S.receitas||[]).forEach(r=>{ if(!r.data) r.data=hoje; });
@@ -141,8 +143,15 @@ function salvarFamiliaId(){
   if(!v){ alert('Digite um código (ex: preite-familia-2026).'); return; }
   familiaId=v; localStorage.setItem('dnm_familia_id',v);
   updateFamiliaStatus();
-  if(fbUser){ loadFromCloud().then(()=>render()); alert('Código salvo! Use exatamente o mesmo código no aparelho da Gabi, em Configurações, pra ficarem no mesmo lugar.'); }
-  else alert('Código salvo.');
+  if(fbUser && fbDb){
+    loadFromCloud().then(()=>{
+      fbDb.collection('usuarios').doc(familiaId).set(S).catch(e=>console.error('Erro ao sincronizar:',e));
+      render();
+      alert('Código salvo e sincronizado! Use exatamente o mesmo código no aparelho da Gabi, em Configurações.');
+    });
+  } else {
+    alert('Código salvo. Faça login pra sincronizar.');
+  }
 }
 function updateFamiliaStatus(){
   const el=document.getElementById('familia-status');
