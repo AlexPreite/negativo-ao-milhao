@@ -84,6 +84,16 @@
   .b-unp { background: var(--red-dim); color: var(--red); }
   .b-laz { background: var(--yellow-dim); color: var(--yellow); }
   .b-vg  { background: var(--green-dim); color: var(--green); }
+  .b-titular { background: rgba(168,85,247,0.18); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
+  .b-parc { background: rgba(59,130,246,0.18); color: #93c5fd; }
+  .b-inad { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.4); font-weight: 700; }
+  .status-btn { background: var(--bg3); border: 1px solid var(--border2); color: var(--muted); border-radius: 6px; padding: 4px 8px; font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s; }
+  .status-btn.pago { background: var(--green-dim); border-color: rgba(74,222,128,0.4); color: var(--green); font-weight: 600; }
+  .status-btn.pendente { background: var(--red-dim); border-color: rgba(248,113,113,0.4); color: var(--red); font-weight: 600; }
+  .btn-adiantar { font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(250,204,21,0.4); color: var(--yellow); background: var(--yellow-dim); cursor: pointer; }
+  .btn-adiantar:active { background: rgba(250,204,21,0.25); }
+  .filtro-pill { padding: 5px 12px; border-radius: 14px; border: 1px solid var(--border2); font-size: 12px; cursor: pointer; background: transparent; color: var(--muted); white-space: nowrap; }
+  .filtro-pill.sel { background: var(--text); color: var(--bg); border-color: transparent; font-weight: 600; }
 
   /* PRIO CARDS */
   .prio { border-radius: var(--radius-sm); padding: 12px; margin-bottom: 8px; }
@@ -265,6 +275,7 @@
     <!-- RECEITAS -->
     <div id="sec-receitas" class="section" style="display:none;">
       <div class="mes-switch"><button onclick="mudarMes(-1)">‹</button><span class="mes-label">Mês/Ano</span><button onclick="mudarMes(1)">›</button></div>
+      <div id="filtro-titular-receitas" style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;"></div>
       <p class="sec-title">Receitas do mês</p>
       <div id="lista-receitas"></div>
       <button class="btn btn-g" onclick="abrirModalReceita()">+ Adicionar receita</button>
@@ -273,6 +284,8 @@
     <!-- GASTOS -->
     <div id="sec-gastos" class="section" style="display:none;">
       <div class="mes-switch"><button onclick="mudarMes(-1)">‹</button><span class="mes-label">Mês/Ano</span><button onclick="mudarMes(1)">›</button></div>
+      <div id="filtro-titular-gastos" style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;"></div>
+      <div id="inadimplencia-box"></div>
       <p class="sec-title">Gastos registrados</p>
       <div id="breakdown-gastos"></div>
       <div id="lista-gastos"></div>
@@ -360,10 +373,13 @@
 </div>
 
 <!-- MODAIS -->
+<datalist id="titulares-list"></datalist>
+
 <div class="modal-bg" id="m-receita">
   <div class="modal">
     <span class="modal-close" onclick="closeM('m-receita')">×</span>
     <p class="modal-title">Nova receita</p>
+    <div class="input-row"><label>Titular</label><input type="text" id="r-titular" placeholder="Ex: Alex, Gabi..." list="titulares-list"/></div>
     <div class="input-row"><label>Descrição</label><input type="text" id="r-desc" placeholder="Ex: Salário, PLR, Bônus"/></div>
     <div class="input-row"><label>Valor (R$)</label><input type="number" id="r-val" placeholder="0,00" inputmode="decimal"/></div>
     <div class="input-row"><label>Data</label><input type="date" id="r-data"/></div>
@@ -386,8 +402,9 @@
   <div class="modal">
     <span class="modal-close" onclick="closeM('m-gasto')">×</span>
     <p class="modal-title">Novo gasto</p>
-    <div class="input-row"><label>Descrição</label><input type="text" id="g-desc" placeholder="Ex: Aluguel, Supermercado..."/></div>
-    <div class="input-row"><label>Valor (R$)</label><input type="number" id="g-val" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Titular</label><input type="text" id="g-titular" placeholder="Ex: Alex, Gabi..." list="titulares-list"/></div>
+    <div class="input-row"><label>Descrição</label><input type="text" id="g-desc" placeholder="Ex: Aluguel, Supermercado, Viagem..."/></div>
+    <div class="input-row"><label>Valor (R$)</label><input type="number" id="g-val" placeholder="0,00" inputmode="decimal" oninput="atualizarPreviewParcelas()"/></div>
     <div class="input-row"><label>Data</label><input type="date" id="g-data"/></div>
     <div class="input-row"><label>Categoria</label></div>
     <div class="tag-row" id="cat-tags">
@@ -396,6 +413,30 @@
       <button class="tag" data-cat="lazer" onclick="selTag(this)">Lazer</button>
       <button class="tag" data-cat="viagem" onclick="selTag(this)">Viagem</button>
     </div>
+
+    <!-- PARCELAMENTO / DÍVIDA -->
+    <div class="input-row" style="margin-top:6px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:14px;">
+        <input type="checkbox" id="g-is-parcelado" onchange="toggleCamposParcelamento()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;"/>
+        <span>Compra parcelada / Dívida</span>
+      </label>
+    </div>
+    <div id="g-bloco-parcelamento" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+      <div class="input-row">
+        <label>Tipo de dívida</label>
+        <select id="g-tipo-divida">
+          <option value="cartao">Cartão de crédito</option>
+          <option value="emprestimo">Empréstimo bancário</option>
+          <option value="emprestimo_pf">Empréstimo pessoa física</option>
+        </select>
+      </div>
+      <div class="input-row">
+        <label>Número de parcelas</label>
+        <input type="number" id="g-num-parcelas" placeholder="Ex: 10" min="2" max="72" value="2" inputmode="numeric" oninput="atualizarPreviewParcelas()"/>
+      </div>
+      <p id="g-preview-parcela" style="font-size:13px;color:var(--yellow);font-weight:600;margin-top:2px;"></p>
+    </div>
+
     <div class="input-row"><label>Comprovante (foto ou PDF, opcional)</label><input type="file" id="g-file" accept="image/*,.pdf" onchange="lerGastoComIA()"/></div>
     <p id="g-ocr-status" style="font-size:12px;color:var(--muted);margin:4px 0 8px;"></p>
     <button class="btn" onclick="addGasto()">Salvar gasto</button>
@@ -406,6 +447,7 @@
   <div class="modal">
     <span class="modal-close" onclick="closeM('m-investimento')">×</span>
     <p class="modal-title">Cadastrar investimento</p>
+    <div class="input-row"><label>Titular</label><input type="text" id="inv-titular" placeholder="Ex: Alex, Gabi..." list="titulares-list"/></div>
     <div class="input-row"><label>Banco/Instituição</label><input type="text" id="inv-banco" placeholder="Ex: Tesouro Direto, Nubank, C6..."/></div>
     <div class="input-row"><label>Valor investido (R$)</label><input type="number" id="inv-valor" placeholder="0,00" inputmode="decimal"/></div>
     <div class="input-row"><label>Rendimento ao mês (%)</label><input type="number" id="inv-taxa" placeholder="Ex: 0.9" step="0.01" inputmode="decimal"/></div>
@@ -419,6 +461,7 @@
   <div class="modal">
     <span class="modal-close" onclick="closeM('m-divida')">×</span>
     <p class="modal-title">Cadastrar dívida</p>
+    <div class="input-row"><label>Titular</label><input type="text" id="d-titular" placeholder="Ex: Alex, Gabi..." list="titulares-list"/></div>
     <div class="input-row"><label>Credor</label><input type="text" id="d-credor" placeholder="Ex: Nubank, Bradesco..."/></div>
     <div class="input-row"><label>Saldo devedor (R$)</label><input type="number" id="d-saldo" placeholder="0,00" inputmode="decimal"/></div>
     <div class="input-row"><label>Juros ao mês (%)</label><input type="number" id="d-juros" placeholder="Ex: 12.5" step="0.1" inputmode="decimal"/></div>
@@ -426,7 +469,8 @@
     <div class="input-row"><label>Tipo</label>
       <select id="d-tipo">
         <option value="cartao">Cartão de crédito</option>
-        <option value="emprestimo">Empréstimo</option>
+        <option value="emprestimo">Empréstimo bancário</option>
+        <option value="emprestimo_pf">Empréstimo pessoa física</option>
       </select>
     </div>
     <button class="btn btn-r" onclick="addDivida()">Salvar dívida</button>
@@ -462,6 +506,30 @@
     <p class="modal-title">Atualizar API Key</p>
     <div class="input-row"><label>Gemini API Key</label><input type="password" id="new-key" placeholder="Cole a chave aqui..."/></div>
     <button class="btn btn-g" onclick="atualizarKey()">Salvar chave</button>
+  </div>
+<div class="modal-bg" id="m-adiantar">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-adiantar')">×</span>
+    <p class="modal-title">Adiantar parcela</p>
+    <p id="ad-compra-nome" style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px;"></p>
+    <p id="ad-compra-status" style="font-size:12px;color:var(--muted);margin-bottom:16px;"></p>
+    
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn btn-g" style="text-align:left;padding:14px;" onclick="confirmarAdiantamento('proxima')">
+        <div style="font-weight:700;font-size:14px;color:var(--green);">⏭️ Adiantar do mês seguinte</div>
+        <div id="ad-txt-proxima" style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4;">Paga a próxima parcela no mês atual e deixa o mês que vem livre.</div>
+      </button>
+      
+      <button class="btn btn-primary" style="text-align:left;padding:14px;" onclick="confirmarAdiantamento('final')">
+        <div style="font-weight:700;font-size:14px;">🏁 Amortizar do final (última parcela)</div>
+        <div id="ad-txt-final" style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4;">Paga a última parcela da fila agora e encurta o prazo final da dívida.</div>
+      </button>
+    </div>
+
+    <div style="margin-top:18px;">
+      <p style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;">Histórico e status das parcelas</p>
+      <div id="ad-grade-parcelas" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;"></div>
+    </div>
   </div>
 </div>
 
