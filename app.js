@@ -1,9 +1,10 @@
 // STATE
-let S = { receitas:[], gastos:[], dividas:[], metas:[], investimentos:[], chat:[], apiKey:'', onboardingDone:false };
+let S = { receitas:[], gastos:[], dividas:[], metas:[], investimentos:[], membrosFamilia:['Alex', 'Gabi'], chat:[], apiKey:'', onboardingDone:false };
 let apiKey = '';
 
 function loadState(){
   try { const d=localStorage.getItem('dnm_data'); if(d) S={...S,...JSON.parse(d)}; } catch(e){}
+  if(!S.membrosFamilia) S.membrosFamilia = ['Alex', 'Gabi'];
   try { familiaId=localStorage.getItem('dnm_familia_id')||''; } catch(e){}
   if(S.apiKey) apiKey=S.apiKey;
   if(!S.apiKey){ try{ const legado=localStorage.getItem('dnm_key'); if(legado){ S.apiKey=legado; apiKey=legado; } }catch(e){} }
@@ -239,8 +240,8 @@ function updateKeyStatus(){
 }
 
 // NAV
-const TITLES={resumo:'Resumo do mês',receitas:'Receitas',gastos:'Gastos',dividas:'Dívidas',investimentos:'Investimentos',metas:'Metas & Economias',agente:'Agente Financeiro',config:'Configurações'};
-const SECS=['resumo','receitas','gastos','dividas','investimentos','metas','agente','config'];
+const TITLES={resumo:'Resumo do mês',receitas:'Receitas',gastos:'Gastos',dividas:'Dívidas',metas:'Investimentos & Metas',agente:'Agente Financeiro',config:'Configurações'};
+const SECS=['resumo','receitas','gastos','dividas','metas','agente','config'];
 function go(id){
   document.querySelectorAll('.section').forEach(s=>s.style.display='none');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -307,7 +308,7 @@ function escapeHtml(str) {
 
 // TITULARES & FILTROS
 function obterTitularesUnicos() {
-  const set = new Set();
+  const set = new Set(S.membrosFamilia || []);
   (S.receitas||[]).forEach(r => { if (r.titular && r.titular.trim()) set.add(r.titular.trim()); });
   (S.gastos||[]).forEach(g => { if (g.titular && g.titular.trim()) set.add(g.titular.trim()); });
   (S.dividas||[]).forEach(d => { if (d.titular && d.titular.trim()) set.add(d.titular.trim()); });
@@ -320,6 +321,39 @@ function atualizarDatalistTitulares() {
   if (!dl) return;
   const nomes = obterTitularesUnicos();
   dl.innerHTML = nomes.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+}
+
+function addMembroFamilia(){
+  const input = document.getElementById('novo-membro');
+  const nome = input.value.trim();
+  if(!nome) return;
+  if(!S.membrosFamilia) S.membrosFamilia = [];
+  if(!S.membrosFamilia.includes(nome)){
+    S.membrosFamilia.push(nome);
+    save();
+    render();
+  }
+  input.value = '';
+}
+
+function delMembroFamilia(nome){
+  if(confirm(`Deseja remover ${nome} da lista de membros da família?`)){
+    S.membrosFamilia = S.membrosFamilia.filter(n => n !== nome);
+    save();
+    render();
+  }
+}
+
+function renderConfig(){
+  const el = document.getElementById('lista-membros');
+  if(el){
+    el.innerHTML = (S.membrosFamilia || []).map(nome => `
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg3);padding:8px 12px;border-radius:var(--radius-sm);">
+        <span>${escapeHtml(nome)}</span>
+        <span class="item-del" style="font-size:18px;" onclick="delMembroFamilia('${escapeHtml(nome)}')">×</span>
+      </div>
+    `).join('');
+  }
 }
 
 function setFiltroTitularGasto(titular) {
@@ -522,7 +556,11 @@ function abrirModalGasto(){
   openM('m-gasto');
 }
 function abrirModalReceita(){ document.getElementById('r-data').value=dataDefaultParaModal(); openM('m-receita'); }
-function abrirModalInvestimento(){ document.getElementById('inv-data').value=new Date().toISOString().slice(0,10); openM('m-investimento'); }
+function abrirModalInvestimento(metaId){
+  document.getElementById('inv-meta-id').value = metaId || '';
+  document.getElementById('inv-data').value=new Date().toISOString().slice(0,10); 
+  openM('m-investimento'); 
+}
 
 function brDateToISO(str){
   const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec((str||'').trim());
@@ -711,14 +749,17 @@ function del(arr,id){ return arr.filter(i=>i.id!==id); }
 function addInvestimento(){
   const titular=(document.getElementById('inv-titular')?.value||'').trim();
   const banco=document.getElementById('inv-banco').value.trim();
+  const tipo=document.getElementById('inv-tipo').value;
+  const metaId=document.getElementById('inv-meta-id').value;
   const valorInicial=parseFloat(document.getElementById('inv-valor').value);
-  const taxaMensal=parseFloat(document.getElementById('inv-taxa').value);
+  const taxaMensal=parseFloat(document.getElementById('inv-taxa').value) || 0;
   const dataInicio=document.getElementById('inv-data').value || new Date().toISOString().slice(0,10);
-  if(!banco||!valorInicial||valorInicial<=0||isNaN(taxaMensal)){ alert('Preencha banco, valor investido e a taxa mensal.'); return; }
-  S.investimentos.push({id:Date.now(),banco,valorInicial,taxaMensal,dataInicio,titular});
+  if(!banco||!valorInicial||valorInicial<=0){ alert('Preencha banco e valor aportado.'); return; }
+  S.investimentos.push({id:Date.now(), metaId: metaId ? parseInt(metaId) : null, tipo, banco, valorInicial, taxaMensal, dataInicio, titular});
   save(); closeM('m-investimento'); render();
   document.getElementById('inv-banco').value=''; document.getElementById('inv-valor').value=''; document.getElementById('inv-taxa').value='';
   if(document.getElementById('inv-titular')) document.getElementById('inv-titular').value='';
+  document.getElementById('inv-meta-id').value='';
 }
 
 function mesesEntre(dataInicioISO){
@@ -731,39 +772,6 @@ function mesesEntre(dataInicioISO){
 function valorAtualInvestimento(inv){
   const meses=mesesEntre(inv.dataInicio);
   return inv.valorInicial*Math.pow(1+(inv.taxaMensal/100), meses);
-}
-
-function renderInvestimentos(){
-  const el=document.getElementById('lista-investimentos');
-  const totalEl=document.getElementById('total-inv-big');
-  const rendEl=document.getElementById('rend-inv-txt');
-  if(!S.investimentos.length){
-    if(el) el.innerHTML='<p style="color:var(--muted);font-size:14px;padding:8px 0;">Nenhum investimento cadastrado ainda.</p>';
-    if(totalEl) totalEl.textContent=fmt(0);
-    if(rendEl) rendEl.textContent='';
-    return;
-  }
-  let totalInicial=0, totalAtual=0;
-  const html=S.investimentos.map(inv=>{
-    const meses=mesesEntre(inv.dataInicio);
-    const atual=valorAtualInvestimento(inv);
-    const rendimento=atual-inv.valorInicial;
-    totalInicial+=inv.valorInicial; totalAtual+=atual;
-    return `<div class="div-row">
-      <div class="div-header">
-        <span class="div-name">${escapeHtml(inv.banco)}${inv.titular ? ' <span class="badge b-titular">'+escapeHtml(inv.titular)+'</span>' : ''}</span>
-        <span class="item-del" onclick="if(confirm('Excluir este investimento?')){S.investimentos=del(S.investimentos,${inv.id});save();render();}">×</span>
-      </div>
-      <div class="div-line"><span style="color:var(--muted);">Valor investido</span><span>${fmt(inv.valorInicial)}</span></div>
-      <div class="div-line"><span style="color:var(--muted);">Taxa</span><span>${inv.taxaMensal}% ao mês</span></div>
-      <div class="div-line"><span style="color:var(--muted);">Tempo aplicado</span><span>${meses} ${meses===1?'mês':'meses'}</span></div>
-      <div class="div-line"><span style="color:var(--muted);">Valor atual</span><span class="c-green" style="font-weight:600;">${fmt(atual)}</span></div>
-      <div class="div-line"><span style="color:var(--muted);">Rendimento</span><span class="c-green">+${fmt(rendimento)}</span></div>
-    </div>`;
-  }).join('');
-  if(el) el.innerHTML=html;
-  if(totalEl) totalEl.textContent=fmt(totalAtual);
-  if(rendEl) rendEl.textContent=totalAtual>totalInicial?`Rendimento acumulado: +${fmt(totalAtual-totalInicial)} sobre ${fmt(totalInicial)} investidos`:'';
 }
 
 // DÍVIDAS — quitação direta e acordos parcelados
@@ -851,12 +859,12 @@ function calcTotais(){
 function render(){
   atualizarDatalistTitulares();
   updateMesLabel();
+  renderMetas(); // Atualiza m.atual
   renderResumo();
   renderReceitas();
   renderGastos();
   renderDividas();
-  renderMetas();
-  renderInvestimentos();
+  renderConfig();
 }
 
 function renderResumo(){
@@ -910,11 +918,78 @@ function renderResumo(){
     ? prios.slice(0,5).map(p=>`<div class="${classMap[p.c]}"><p class="prio-tag">${p.tag}</p><p class="prio-name">${p.nome}</p><p class="prio-detail">${p.det}</p></div>`).join('')
     : '<p style="font-size:13px;color:var(--muted);">Cadastre gastos e dívidas para ver as prioridades.</p>';
 
-  const guardado=S.metas.find(m=>m.nome.toLowerCase().includes('reserva'))?.atual||S.metas[0]?.atual||0;
-  const pct100k=Math.min(100,Math.round((guardado/100000)*100));
-  $('prog-val').textContent=fmt(guardado)+' guardado';
-  $('prog-pct').textContent=pct100k+'%';
-  $('prog-fill').style.width=pct100k+'%';
+  const metasContainer = $('dashboard-metas');
+  if(metasContainer){
+    if(S.metas.length > 0) {
+      metasContainer.innerHTML = S.metas.map(m => {
+        const pct=Math.min(100,Math.round((m.atual/m.total)*100));
+        return `<div style="margin-bottom:10px;">
+          <div class="prog-row" style="margin-bottom:2px;"><span style="font-weight:600;color:var(--text);">${escapeHtml(m.nome)}</span><span>${pct}%</span></div>
+          <div class="prog-row" style="font-size:11px;"><span>${fmt(m.atual)} de ${fmt(m.total)}</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;"></div></div>
+        </div>`;
+      }).join('');
+      $('dashboard-metas-container').style.display = 'block';
+    } else {
+      $('dashboard-metas-container').style.display = 'none';
+    }
+  }
+
+  // Renderiza gráfico
+  renderChart();
+}
+
+let resumoChart = null;
+function renderChart() {
+  const ctx = document.getElementById('chart-resumo');
+  if (!ctx || typeof Chart === 'undefined') return;
+
+  const mesesStr = [];
+  const dadosRec = [];
+  const dadosGas = [];
+  
+  const [anoAtual, mesAtualNum] = mesAtual.split('-').map(Number);
+  
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(anoAtual, mesAtualNum - 1 - i, 1);
+    const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    mesesStr.push(mesLabel(ym).substring(0,3) + '/' + String(d.getFullYear()).substring(2,4));
+    
+    const recMes = S.receitas.filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
+    const gasMes = S.gastos.filter(g => (g.dataOriginal||g.data||'').slice(0,7) === ym).reduce((s,g) => s + g.val, 0);
+    
+    dadosRec.push(recMes);
+    dadosGas.push(gasMes);
+  }
+
+  if (resumoChart) {
+    resumoChart.destroy();
+  }
+
+  Chart.defaults.color = '#888';
+  Chart.defaults.font.family = '-apple-system, sans-serif';
+
+  resumoChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: mesesStr,
+      datasets: [
+        { label: 'Receitas', data: dadosRec, borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2 },
+        { label: 'Gastos', data: dadosGas, borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+        tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => ctx.dataset.label + ': ' + fmt(ctx.parsed.y) } }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { callback: (v) => 'R$' + (v>=1000 ? (v/1000)+'k' : v) } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
 }
 
 function renderReceitas(){
@@ -1079,24 +1154,129 @@ function renderDividas(){
   el.innerHTML=html || '<p style="color:var(--muted);font-size:14px;padding:8px 0;">Nenhuma dívida em aberto. 🎉</p>';
 }
 
+const TIPO_INV_LABELS = { caixinha: 'Caixinha/Poupança', cdb: 'CDB/LCI/LCA', tesouro: 'Tesouro Direto', previdencia: 'Previdência Privada', acoes: 'Ações/B3', fii: 'FIIs', exterior: 'Exterior/Stocks', outro: 'Outro' };
+
 function renderMetas(){
   const el=document.getElementById('lista-metas');
-  if(!S.metas.length){el.innerHTML='<p style="color:var(--muted);font-size:14px;padding:8px 0;">Nenhuma meta criada.</p>';return;}
-  el.innerHTML=S.metas.map(m=>{
+  
+  // Atualiza o total global de investimentos no topo
+  let totalGlobalInv = 0;
+  let totalInicialGlobal = 0;
+  S.investimentos.forEach(inv => {
+    const atual = valorAtualInvestimento(inv);
+    totalGlobalInv += atual;
+    totalInicialGlobal += inv.valorInicial;
+  });
+  
+  const totalBox = document.getElementById('total-inv-box');
+  if(totalBox) {
+    if(totalGlobalInv > 0 || S.metas.length > 0) {
+      totalBox.style.display = 'block';
+      document.getElementById('total-inv-big').textContent = fmt(totalGlobalInv);
+      const rendGlobal = totalGlobalInv - totalInicialGlobal;
+      document.getElementById('rend-inv-txt').textContent = rendGlobal > 0 ? `Rendimento: +${fmt(rendGlobal)}` : '';
+    } else {
+      totalBox.style.display = 'none';
+    }
+  }
+
+  if(!S.metas.length && !S.investimentos.length){
+    if(el) el.innerHTML='<p style="color:var(--muted);font-size:14px;padding:8px 0;">Nenhuma meta ou investimento criado.</p>';
+    return;
+  }
+
+  // Agrupar investimentos por meta
+  const invsPorMeta = {};
+  S.metas.forEach(m => invsPorMeta[m.id] = []);
+  const invsSemMeta = [];
+  S.investimentos.forEach(inv => {
+    if(inv.metaId && invsPorMeta[inv.metaId]) {
+      invsPorMeta[inv.metaId].push(inv);
+    } else {
+      invsSemMeta.push(inv);
+    }
+  });
+
+  // Atualizar m.atual para cada meta somando os investimentos vinculados
+  S.metas.forEach(m => {
+    const totalAportes = invsPorMeta[m.id].reduce((acc, inv) => acc + valorAtualInvestimento(inv), 0);
+    // Se a meta tiver um m.atual manual maior, mantém ele pra não perder dados legados, senão usa a soma real.
+    if (totalAportes > 0) {
+      m.atual = totalAportes; 
+    }
+  });
+
+  let html = S.metas.map(m => {
     const pct=Math.min(100,Math.round((m.atual/m.total)*100));
     const falta=Math.max(0,m.total-m.atual);
+    const aportes = invsPorMeta[m.id];
+    
+    let aportesHtml = '';
+    if(aportes.length > 0) {
+      aportesHtml = `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
+        <p style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Aportes / Investimentos</p>
+        ${aportes.map(inv => {
+          const meses = mesesEntre(inv.dataInicio);
+          const atual = valorAtualInvestimento(inv);
+          const tipoStr = TIPO_INV_LABELS[inv.tipo] || inv.tipo || 'Investimento';
+          return `<div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:6px;font-size:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <span style="font-weight:600;">${escapeHtml(inv.banco)} <span style="font-weight:400;color:var(--muted);font-size:11px;">(${tipoStr})</span></span>
+              <span class="item-del" style="font-size:16px;" onclick="if(confirm('Excluir aporte?')){S.investimentos=del(S.investimentos,${inv.id});save();render();}">×</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;color:var(--muted);margin-bottom:2px;">
+              <span>Investido: ${fmt(inv.valorInicial)}</span>
+              <span>Rende ${inv.taxaMensal}%/mês (${meses}m)</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-weight:600;color:var(--green);">
+              <span>Atual</span>
+              <span>${fmt(atual)}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
     return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <span style="font-weight:600;font-size:14px;">${escapeHtml(m.nome)}</span>
-        <span class="item-del" onclick="S.metas=del(S.metas,${m.id});save();render()">×</span>
+        <span style="font-weight:600;font-size:15px;">${escapeHtml(m.nome)}</span>
+        <span class="item-del" onclick="if(confirm('Excluir esta meta?')){S.metas=del(S.metas,${m.id});save();render()}">×</span>
       </div>
       <div class="prog-wrap">
         <div class="prog-row"><span>${fmt(m.atual)} de ${fmt(m.total)}</span><span>${pct}%</span></div>
         <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;"></div></div>
       </div>
       <p style="font-size:12px;color:var(--muted);margin-top:8px;">Faltam ${fmt(falta)}</p>
+      ${aportesHtml}
+      <button class="btn" style="margin-top:12px;padding:8px;font-size:12px;border-color:var(--border);" onclick="abrirModalInvestimento(${m.id})">+ Adicionar Aporte</button>
     </div>`;
   }).join('');
+
+  if(invsSemMeta.length > 0) {
+    html += `<p class="sec-title" style="margin-top:20px;font-size:14px;">Outros Investimentos (Sem meta)</p>`;
+    html += invsSemMeta.map(inv => {
+      const meses = mesesEntre(inv.dataInicio);
+      const atual = valorAtualInvestimento(inv);
+      const tipoStr = TIPO_INV_LABELS[inv.tipo] || inv.tipo || 'Investimento';
+      return `<div class="card" style="padding:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-weight:600;font-size:14px;">${escapeHtml(inv.banco)} <span style="font-weight:400;color:var(--muted);font-size:11px;">(${tipoStr})</span></span>
+          <span class="item-del" style="font-size:18px;" onclick="if(confirm('Excluir aporte?')){S.investimentos=del(S.investimentos,${inv.id});save();render();}">×</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-bottom:4px;">
+          <span>Investido: ${fmt(inv.valorInicial)}</span>
+          <span>${inv.taxaMensal}%/mês (${meses}m)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:600;color:var(--green);font-size:13px;">
+          <span>Atual</span>
+          <span>${fmt(atual)}</span>
+        </div>
+      </div>`;
+    }).join('');
+    html += `<button class="btn" style="margin-top:12px;" onclick="abrirModalInvestimento()">+ Adicionar Investimento Avulso</button>`;
+  }
+
+  if(el) el.innerHTML=html;
 }
 
 // AI AGENT (Gemini)

@@ -231,8 +231,7 @@
     <button class="nav-btn" onclick="go('receitas')">Receitas</button>
     <button class="nav-btn" onclick="go('gastos')">Gastos</button>
     <button class="nav-btn" onclick="go('dividas')">Dívidas</button>
-    <button class="nav-btn" onclick="go('investimentos')">Invest.</button>
-    <button class="nav-btn" onclick="go('metas')">Metas</button>
+    <button class="nav-btn" onclick="go('metas')">Investimentos & Metas</button>
     <button class="nav-btn" onclick="go('agente')">Agente IA</button>
     <button class="nav-btn" onclick="go('config')">Config</button>
   </nav>
@@ -262,12 +261,15 @@
         <p class="card-label">O que pagar primeiro</p>
         <div id="prio-lista"><p style="font-size:13px;color:var(--muted);">Cadastre gastos e dívidas para ver as prioridades.</p></div>
       </div>
-      <div class="card">
-        <p class="card-label">Meta: R$ 100 mil</p>
-        <div class="prog-wrap">
-          <div class="prog-row"><span id="prog-val">R$ 0 guardado</span><span id="prog-pct">0%</span></div>
-          <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%;"></div></div>
+      <div class="card" style="padding-bottom:20px;">
+        <p class="card-label">Evolução (12 meses)</p>
+        <div style="height:200px; width:100%; position:relative;">
+          <canvas id="chart-resumo"></canvas>
         </div>
+      </div>
+      <div class="card" id="dashboard-metas-container">
+        <p class="card-label">Progresso das Metas</p>
+        <div id="dashboard-metas"></div>
       </div>
       <button class="btn btn-primary" onclick="go('agente')">📊 Consultar agente financeiro</button>
     </div>
@@ -304,23 +306,18 @@
       <button class="btn btn-r" onclick="openM('m-divida')">+ Cadastrar dívida</button>
     </div>
 
-    <!-- INVESTIMENTOS -->
-    <div id="sec-investimentos" class="section" style="display:none;">
-      <p class="sec-title">Investimentos</p>
-      <div class="card" style="margin-bottom:12px;">
-        <p class="card-label">Valor atual total</p>
+    <!-- METAS E INVESTIMENTOS -->
+    <div id="sec-metas" class="section" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;margin-top:4px;">
+        <p class="sec-title" style="margin:0;">Metas & Investimentos</p>
+        <button class="btn btn-g" style="width:auto;margin:0;padding:8px 12px;font-size:12px;" onclick="openM('m-meta')">+ Nova Meta</button>
+      </div>
+      <div class="card" style="margin-bottom:12px;display:none;" id="total-inv-box">
+        <p class="card-label">Total Guardado/Investido</p>
         <p class="big-num c-green" id="total-inv-big">R$ 0</p>
         <p style="font-size:12px;color:var(--muted);margin-top:6px;" id="rend-inv-txt"></p>
       </div>
-      <div id="lista-investimentos"></div>
-      <button class="btn btn-g" onclick="abrirModalInvestimento()">+ Cadastrar investimento</button>
-    </div>
-
-    <!-- METAS -->
-    <div id="sec-metas" class="section" style="display:none;">
-      <p class="sec-title">Metas & economias</p>
       <div id="lista-metas"></div>
-      <button class="btn btn-g" onclick="openM('m-meta')">+ Criar meta</button>
     </div>
 
     <!-- AGENTE -->
@@ -344,6 +341,17 @@
     <!-- CONFIG -->
     <div id="sec-config" class="section" style="display:none;">
       <p class="sec-title">Configurações</p>
+      
+      <div class="card">
+        <p class="sec-title" style="margin-top:0;">Membros da Família</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Quem participa das receitas, gastos e investimentos.</p>
+        <div class="input-row" style="flex-direction:row;align-items:center;">
+          <input type="text" id="novo-membro" placeholder="Novo nome (ex: Maria)" style="flex:1;"/>
+          <button class="btn btn-g" style="width:auto;margin:0;padding:12px 16px;" onclick="addMembroFamilia()">Add</button>
+        </div>
+        <div id="lista-membros" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
       <div class="card">
         <div class="settings-item">
           <span>API Key (Gemini)</span>
@@ -446,14 +454,27 @@
 <div class="modal-bg" id="m-investimento">
   <div class="modal">
     <span class="modal-close" onclick="closeM('m-investimento')">×</span>
-    <p class="modal-title">Cadastrar investimento</p>
+    <p class="modal-title">Novo Aporte / Investimento</p>
+    <input type="hidden" id="inv-meta-id"/>
     <div class="input-row"><label>Titular</label><input type="text" id="inv-titular" placeholder="Ex: Alex, Gabi..." list="titulares-list"/></div>
-    <div class="input-row"><label>Banco/Instituição</label><input type="text" id="inv-banco" placeholder="Ex: Tesouro Direto, Nubank, C6..."/></div>
-    <div class="input-row"><label>Valor investido (R$)</label><input type="number" id="inv-valor" placeholder="0,00" inputmode="decimal"/></div>
-    <div class="input-row"><label>Rendimento ao mês (%)</label><input type="number" id="inv-taxa" placeholder="Ex: 0.9" step="0.01" inputmode="decimal"/></div>
+    <div class="input-row"><label>Tipo de Investimento</label>
+      <select id="inv-tipo">
+        <option value="caixinha">Caixinha Nubank / Poupança</option>
+        <option value="cdb">CDB / LCI / LCA</option>
+        <option value="tesouro">Tesouro Direto</option>
+        <option value="previdencia">Previdência Privada</option>
+        <option value="acoes">Ações / B3</option>
+        <option value="fii">FIIs (Fundos Imobiliários)</option>
+        <option value="exterior">Exterior / Stocks</option>
+        <option value="outro">Outro</option>
+      </select>
+    </div>
+    <div class="input-row"><label>Banco/Corretora</label><input type="text" id="inv-banco" placeholder="Ex: Nubank, XP, Rico..."/></div>
+    <div class="input-row"><label>Valor aportado (R$)</label><input type="number" id="inv-valor" placeholder="0,00" inputmode="decimal"/></div>
+    <div class="input-row"><label>Rendimento esperado ao mês (%)</label><input type="number" id="inv-taxa" placeholder="Ex: 0.9" step="0.01" inputmode="decimal"/></div>
     <div class="input-row"><label>Data da aplicação</label><input type="date" id="inv-data"/></div>
-    <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">O valor atual evolui sozinho todo mês, com base na taxa (juros compostos).</p>
-    <button class="btn btn-g" onclick="addInvestimento()">Salvar investimento</button>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">O valor atual evolui automaticamente com base na taxa de rendimento preenchida.</p>
+    <button class="btn btn-g" onclick="addInvestimento()">Salvar Aporte</button>
   </div>
 </div>
 
@@ -536,6 +557,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
