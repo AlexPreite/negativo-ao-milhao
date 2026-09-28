@@ -1,15 +1,58 @@
 // STATE
-let S = { receitas:[], gastos:[], dividas:[], metas:[], investimentos:[], membrosFamilia:['Alex', 'Gabi'], chat:[], apiKey:'', onboardingDone:false };
+const DEFAULT_CATEGORIAS_GASTOS = [
+  { id: 'recorrente', nome: 'Fixo/Recorrente', cor: 'c-yellow' },
+  { id: 'nao_planejado', nome: 'Não planejado', cor: 'c-red' },
+  { id: 'lazer', nome: 'Lazer', cor: 'c-red' },
+  { id: 'viagem', nome: 'Viagem', cor: 'c-muted' }
+];
+
+const DEFAULT_TIPOS_DIVIDA = [
+  { id: 'cartao', nome: 'Cartão de crédito' },
+  { id: 'emprestimo', nome: 'Empréstimo bancário' },
+  { id: 'emprestimo_pf', nome: 'Empréstimo pessoa física' }
+];
+
+let TIPOS_DIVIDA = {
+  cartao: 'Cartão de crédito',
+  emprestimo: 'Empréstimo bancário',
+  emprestimo_pf: 'Empréstimo pessoa física'
+};
+
+function sincronizarTiposDividaMap() {
+  const map = {};
+  (S.tiposDivida || DEFAULT_TIPOS_DIVIDA).forEach(td => {
+    map[td.id] = td.nome;
+  });
+  TIPOS_DIVIDA = map;
+}
+
+let S = {
+  receitas:[],
+  gastos:[],
+  dividas:[],
+  metas:[],
+  investimentos:[],
+  membrosFamilia:['Alex', 'Gabi'],
+  categoriasGastos:[...DEFAULT_CATEGORIAS_GASTOS],
+  tiposDivida:[...DEFAULT_TIPOS_DIVIDA],
+  chat:[],
+  apiKey:'',
+  onboardingDone:false
+};
 let apiKey = '';
 
 function loadState(){
   try { const d=localStorage.getItem('dnm_data'); if(d) S={...S,...JSON.parse(d)}; } catch(e){}
   if(!S.membrosFamilia) S.membrosFamilia = ['Alex', 'Gabi'];
+  if(!S.categoriasGastos || !S.categoriasGastos.length) S.categoriasGastos = [...DEFAULT_CATEGORIAS_GASTOS];
+  if(!S.tiposDivida || !S.tiposDivida.length) S.tiposDivida = [...DEFAULT_TIPOS_DIVIDA];
+  sincronizarTiposDividaMap();
+
   try { familiaId=localStorage.getItem('dnm_familia_id')||''; } catch(e){}
   if(S.apiKey) apiKey=S.apiKey;
   if(!S.apiKey){ try{ const legado=localStorage.getItem('dnm_key'); if(legado){ S.apiKey=legado; apiKey=legado; } }catch(e){} }
   if(!S.onboardingDone && (S.apiKey || localStorage.getItem('dnm_skip'))) S.onboardingDone=true;
-  // Migração: garante que registros antigos (sem mês/status/titular) continuem funcionando
+  // Migração: garante que registros antigos (sem mês/status/titular/recorrência) continuem funcionando
   const hoje=new Date().toISOString().slice(0,10);
   (S.receitas||[]).forEach(r=>{
     if(!r.data) r.data=hoje;
@@ -21,6 +64,8 @@ function loadState(){
     if(g.pago===undefined) g.pago=true;
     if(g.parcelado===undefined) g.parcelado=false;
     if(g.parcelado && !g.dataOriginal) g.dataOriginal=g.data;
+    if(g.recorrente===undefined) g.recorrente=false;
+    if(g.origemDivida===undefined) g.origemDivida='';
   });
   (S.dividas||[]).forEach(d=>{
     if(d.titular===undefined) d.titular='';
@@ -266,11 +311,15 @@ let mesAtual = new Date().toISOString().slice(0,7); // "YYYY-MM"
 let filtroTitularGasto = 'todos';
 let filtroTitularReceita = 'todos';
 
-const TIPOS_DIVIDA = {
-  cartao: 'Cartão de crédito',
-  emprestimo: 'Empréstimo bancário',
-  emprestimo_pf: 'Empréstimo pessoa física'
-};
+function getNomeCategoria(catId){
+  const found = (S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS).find(c => c.id === catId);
+  return found ? found.nome : (catId || 'Outro');
+}
+
+function getCorCategoria(catId){
+  const found = (S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS).find(c => c.id === catId);
+  return found && found.cor ? found.cor : 'c-muted';
+}
 
 function mesLabel(ym){
   if(!ym) return '';
@@ -295,7 +344,7 @@ function adicionarMeses(isoDateStr, qtdMeses) {
   return `${dataObj.getFullYear()}-${String(dataObj.getMonth() + 1).padStart(2, '0')}-${String(diaReal).padStart(2, '0')}`;
 }
 
-// // SANITIZAÇÃO & XSS
+// SANITIZAÇÃO & XSS
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -344,6 +393,78 @@ function delMembroFamilia(nome){
   }
 }
 
+// CATEGORIAS DE GASTOS DINÂMICAS
+function addCategoriaGasto(){
+  const input = document.getElementById('nova-categoria');
+  const nome = input.value.trim();
+  if(!nome) return;
+  const id = 'cat_' + Date.now().toString(36);
+  if(!S.categoriasGastos) S.categoriasGastos = [...DEFAULT_CATEGORIAS_GASTOS];
+  if(!S.categoriasGastos.some(c => c.nome.toLowerCase() === nome.toLowerCase())){
+    S.categoriasGastos.push({ id, nome, cor: 'c-muted' });
+    save();
+    render();
+  }
+  input.value = '';
+}
+
+function delCategoriaGasto(id){
+  if(confirm('Deseja remover esta categoria de gastos?')){
+    S.categoriasGastos = (S.categoriasGastos || []).filter(c => c.id !== id);
+    if(!S.categoriasGastos.length) S.categoriasGastos = [...DEFAULT_CATEGORIAS_GASTOS];
+    save();
+    render();
+  }
+}
+
+function renderCategoriasConfig(){
+  const el = document.getElementById('lista-categorias');
+  if(!el) return;
+  el.innerHTML = (S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS).map(c => `
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg3);padding:8px 12px;border-radius:var(--radius-sm);">
+      <span>${escapeHtml(c.nome)}</span>
+      <span class="item-del" style="font-size:18px;" onclick="delCategoriaGasto('${escapeHtml(c.id)}')">×</span>
+    </div>
+  `).join('');
+}
+
+// TIPOS DE DÍVIDAS DINÂMICOS
+function addTipoDivida(){
+  const input = document.getElementById('novo-tipo-divida');
+  const nome = input.value.trim();
+  if(!nome) return;
+  const id = 'tipo_' + Date.now().toString(36);
+  if(!S.tiposDivida) S.tiposDivida = [...DEFAULT_TIPOS_DIVIDA];
+  if(!S.tiposDivida.some(t => t.nome.toLowerCase() === nome.toLowerCase())){
+    S.tiposDivida.push({ id, nome });
+    sincronizarTiposDividaMap();
+    save();
+    render();
+  }
+  input.value = '';
+}
+
+function delTipoDivida(id){
+  if(confirm('Deseja remover este tipo de dívida?')){
+    S.tiposDivida = (S.tiposDivida || []).filter(t => t.id !== id);
+    if(!S.tiposDivida.length) S.tiposDivida = [...DEFAULT_TIPOS_DIVIDA];
+    sincronizarTiposDividaMap();
+    save();
+    render();
+  }
+}
+
+function renderTiposDividaConfig(){
+  const el = document.getElementById('lista-tipos-divida');
+  if(!el) return;
+  el.innerHTML = (S.tiposDivida || DEFAULT_TIPOS_DIVIDA).map(t => `
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg3);padding:8px 12px;border-radius:var(--radius-sm);">
+      <span>${escapeHtml(t.nome)}</span>
+      <span class="item-del" style="font-size:18px;" onclick="delTipoDivida('${escapeHtml(t.id)}')">×</span>
+    </div>
+  `).join('');
+}
+
 function renderConfig(){
   const el = document.getElementById('lista-membros');
   if(el){
@@ -354,6 +475,27 @@ function renderConfig(){
       </div>
     `).join('');
   }
+  renderCategoriasConfig();
+  renderTiposDividaConfig();
+}
+
+function renderCategoriasModalGasto(){
+  const el = document.getElementById('cat-tags');
+  if(!el) return;
+  const cats = S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS;
+  const selAtual = document.querySelector('#cat-tags .tag.sel')?.dataset.cat || cats[0]?.id || 'recorrente';
+  el.innerHTML = cats.map(c => `
+    <button type="button" class="tag ${c.id===selAtual?'sel':''}" data-cat="${escapeHtml(c.id)}" onclick="selTag(this)">${escapeHtml(c.nome)}</button>
+  `).join('');
+}
+
+function atualizarSelectsTipoDivida(){
+  const sGasto = document.getElementById('g-tipo-divida');
+  const sDivida = document.getElementById('d-tipo');
+  const tipos = S.tiposDivida || DEFAULT_TIPOS_DIVIDA;
+  const optionsHtml = tipos.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.nome)}</option>`).join('');
+  if(sGasto) sGasto.innerHTML = optionsHtml;
+  if(sDivida) sDivida.innerHTML = optionsHtml;
 }
 
 function setFiltroTitularGasto(titular) {
@@ -416,7 +558,58 @@ function toggleCamposParcelamento(){
   const chk = document.getElementById('g-is-parcelado');
   const bloco = document.getElementById('g-bloco-parcelamento');
   if (bloco) bloco.style.display = chk && chk.checked ? 'block' : 'none';
+  if (chk && chk.checked) {
+    const chkRec = document.getElementById('g-is-recorrente');
+    if (chkRec && chkRec.checked) {
+      chkRec.checked = false;
+      toggleCamposRecorrente();
+    }
+  }
   atualizarPreviewParcelas();
+}
+
+function toggleCamposRecorrente(){
+  const chk = document.getElementById('g-is-recorrente');
+  const bloco = document.getElementById('g-bloco-recorrente');
+  if (bloco) bloco.style.display = chk && chk.checked ? 'block' : 'none';
+  if (chk && chk.checked) {
+    const chkParc = document.getElementById('g-is-parcelado');
+    if (chkParc && chkParc.checked) {
+      chkParc.checked = false;
+      toggleCamposParcelamento();
+    }
+  }
+  atualizarPreviewRecorrente();
+}
+
+function atualizarPreviewRecorrente(){
+  const chk = document.getElementById('g-is-recorrente');
+  const prev = document.getElementById('g-preview-recorrente');
+  if (!chk || !chk.checked) { if (prev) prev.textContent = ''; return; }
+  const val = parseFloat(document.getElementById('g-val').value) || 0;
+  const prazoSel = document.getElementById('g-prazo-recorrente')?.value || '12';
+  const rowPers = document.getElementById('g-row-meses-personalizado');
+  
+  let qtdMeses = 12;
+  if (prazoSel === 'personalizado') {
+    if(rowPers) rowPers.style.display = 'block';
+    qtdMeses = parseInt(document.getElementById('g-meses-recorrente')?.value) || 12;
+  } else {
+    if(rowPers) rowPers.style.display = 'none';
+    if (prazoSel === 'ano_atual') {
+      const dataVal = document.getElementById('g-data')?.value || mesAtual;
+      const mesNum = parseInt(dataVal.split('-')[1]) || 1;
+      qtdMeses = Math.max(1, 12 - mesNum + 1);
+    } else {
+      qtdMeses = parseInt(prazoSel) || 12;
+    }
+  }
+
+  if (val > 0) {
+    prev.textContent = `Serão gerados ${qtdMeses} meses de ${fmt(val)} cada (total de ${fmt(val * qtdMeses)} no período).`;
+  } else {
+    prev.textContent = `Serão gerados ${qtdMeses} meses recorrentes com este valor mensal.`;
+  }
 }
 
 function atualizarPreviewParcelas(){
@@ -553,6 +746,19 @@ function abrirModalGasto(){
   document.getElementById('g-bloco-parcelamento').style.display = 'none';
   document.getElementById('g-num-parcelas').value = '2';
   document.getElementById('g-preview-parcela').textContent = '';
+  if(document.getElementById('g-origem-divida')) document.getElementById('g-origem-divida').value = '';
+  
+  if(document.getElementById('g-is-recorrente')) {
+    document.getElementById('g-is-recorrente').checked = false;
+    document.getElementById('g-bloco-recorrente').style.display = 'none';
+    document.getElementById('g-prazo-recorrente').value = '12';
+    document.getElementById('g-meses-recorrente').value = '12';
+    const rowPers = document.getElementById('g-row-meses-personalizado');
+    if(rowPers) rowPers.style.display = 'none';
+    document.getElementById('g-preview-recorrente').textContent = '';
+  }
+  renderCategoriasModalGasto();
+  atualizarSelectsTipoDivida();
   openM('m-gasto');
 }
 function abrirModalReceita(){ document.getElementById('r-data').value=dataDefaultParaModal(); openM('m-receita'); }
@@ -655,11 +861,13 @@ function addGasto(){
   const cat=document.querySelector('#cat-tags .tag.sel')?.dataset.cat||'recorrente';
   const data=document.getElementById('g-data').value || new Date().toISOString().slice(0,10);
   const isParcelado = document.getElementById('g-is-parcelado')?.checked;
+  const isRecorrente = document.getElementById('g-is-recorrente')?.checked;
   if(!desc||!val||val<=0) return;
 
   if (isParcelado) {
     const num = Math.max(2, parseInt(document.getElementById('g-num-parcelas').value) || 2);
     const tipoDivida = document.getElementById('g-tipo-divida')?.value || 'cartao';
+    const origemDivida = (document.getElementById('g-origem-divida')?.value || '').trim();
     const baseCentavos = Math.floor((val / num) * 100);
     const restoCentavos = Math.round(val * 100) - (baseCentavos * num);
     const grupoId = 'parc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
@@ -678,13 +886,50 @@ function addGasto(){
         cat,
         titular,
         tipoDivida,
+        origemDivida,
         parcelado: true,
+        recorrente: false,
         parcelaNum: i,
         totalParcelas: num,
         data: dt,
         dataOriginal: dt,
         pago: false,
         dataPagto: null,
+        adiantada: false
+      });
+    }
+  } else if (isRecorrente) {
+    const prazoSel = document.getElementById('g-prazo-recorrente')?.value || '12';
+    let qtdMeses = 12;
+    if (prazoSel === 'personalizado') {
+      qtdMeses = Math.max(2, parseInt(document.getElementById('g-meses-recorrente')?.value) || 12);
+    } else if (prazoSel === 'ano_atual') {
+      const mesNum = parseInt(data.split('-')[1]) || 1;
+      qtdMeses = Math.max(1, 12 - mesNum + 1);
+    } else {
+      qtdMeses = Math.max(2, parseInt(prazoSel) || 12);
+    }
+    const grupoId = 'rec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+    for (let i = 1; i <= qtdMeses; i++) {
+      const dt = adicionarMeses(data, i - 1);
+      const isPrimeiro = (i === 1);
+      S.gastos.push({
+        id: Date.now() + i,
+        grupoId,
+        desc: `${desc} (${i}/${qtdMeses})`,
+        descOriginal: desc,
+        val: val, // Valor cheio por mês!
+        cat,
+        titular,
+        recorrente: true,
+        parcelado: false,
+        mesNum: i,
+        totalMeses: qtdMeses,
+        data: dt,
+        dataOriginal: dt,
+        pago: isPrimeiro,
+        dataPagto: isPrimeiro ? dt : null,
         adiantada: false
       });
     }
@@ -697,6 +942,7 @@ function addGasto(){
       data,
       titular,
       parcelado: false,
+      recorrente: false,
       pago: true,
       dataPagto: data
     });
@@ -712,6 +958,12 @@ function addGasto(){
   document.getElementById('g-is-parcelado').checked = false;
   document.getElementById('g-bloco-parcelamento').style.display = 'none';
   document.getElementById('g-preview-parcela').textContent = '';
+  if(document.getElementById('g-origem-divida')) document.getElementById('g-origem-divida').value = '';
+  if(document.getElementById('g-is-recorrente')) {
+    document.getElementById('g-is-recorrente').checked = false;
+    document.getElementById('g-bloco-recorrente').style.display = 'none';
+    document.getElementById('g-preview-recorrente').textContent = '';
+  }
 }
 
 function addDivida(){
@@ -840,24 +1092,142 @@ function toggleParcela(dividaId, num){
 }
 
 // CALC
+function investimentosDoMes(ym){
+  const mes = ym || mesAtual;
+  return (S.investimentos || []).filter(inv => (inv.dataInicio || '').slice(0, 7) === mes);
+}
+
+function calcSaldoAcumuladoAnterior(targetYM) {
+  const mesesSet = new Set();
+  (S.receitas || []).forEach(r => { const ym = (r.data||'').slice(0,7); if(ym && ym < targetYM) mesesSet.add(ym); });
+  (S.gastos || []).forEach(g => { const ym = (g.data||'').slice(0,7); if(ym && ym < targetYM) mesesSet.add(ym); });
+  (S.investimentos || []).forEach(i => { const ym = (i.dataInicio||'').slice(0,7); if(ym && ym < targetYM) mesesSet.add(ym); });
+
+  const mesesOrdenados = Array.from(mesesSet).sort();
+  let acumulado = 0;
+  for (const ym of mesesOrdenados) {
+    const rec = (S.receitas || []).filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
+    // Gastos do mês pagos no mês anterior
+    const gasPagos = (S.gastos || []).filter(g => (g.data||'').slice(0,7) === ym && g.pago).reduce((s,g) => s + g.val, 0);
+    const inv = (S.investimentos || []).filter(i => (i.dataInicio||'').slice(0,7) === ym).reduce((s,i) => s + (i.valorInicial || 0), 0);
+    const saldoDoMes = rec - gasPagos - inv;
+    acumulado += saldoDoMes;
+  }
+  return Math.max(0, acumulado); // Sobra positiva acumula para os meses posteriores
+}
+
 function calcTotais(){
-  const rec=receitasDoMes(), gas=gastosDoMes();
-  const totalRec=rec.reduce((s,r)=>s+r.val,0);
-  const totalGas=gas.reduce((s,g)=>s+g.val,0);
-  const gasRec=gas.filter(g=>g.cat==='recorrente').reduce((s,g)=>s+g.val,0);
-  const gasLaz=gas.filter(g=>g.cat==='lazer').reduce((s,g)=>s+g.val,0);
-  const gasNP=gas.filter(g=>g.cat==='nao_planejado').reduce((s,g)=>s+g.val,0);
-  const gasVg=gas.filter(g=>g.cat==='viagem').reduce((s,g)=>s+g.val,0);
-  const abertas=S.dividas.filter(d=>!d.quitada);
-  const totalDiv=abertas.reduce((s,d)=>s+saldoRestante(d),0);
-  const custoJuros=abertas.filter(d=>!d.acordo).reduce((s,d)=>s+(d.saldo*(d.juros/100)),0);
-  const saldoDisp=totalRec-totalGas;
-  return{totalRec,totalGas,gasRec,gasLaz,gasNP,gasVg,totalDiv,custoJuros,saldoDisp};
+  const rec = receitasDoMes(), gas = gastosDoMes();
+  const totalRec = rec.reduce((s,r) => s + r.val, 0);
+  const totalGas = gas.reduce((s,g) => s + g.val, 0);
+  
+  // Aportes de investimentos no mês
+  const invMes = investimentosDoMes(mesAtual);
+  const totalInv = invMes.reduce((s,i) => s + (i.valorInicial || 0), 0);
+  
+  const gasRec = gas.filter(g => g.cat === 'recorrente').reduce((s,g) => s + g.val, 0);
+  const gasLaz = gas.filter(g => g.cat === 'lazer').reduce((s,g) => s + g.val, 0);
+  const gasNP = gas.filter(g => g.cat === 'nao_planejado').reduce((s,g) => s + g.val, 0);
+  const gasVg = gas.filter(g => g.cat === 'viagem').reduce((s,g) => s + g.val, 0);
+  
+  const abertas = S.dividas.filter(d => !d.quitada);
+  const totalDiv = abertas.reduce((s,d) => s + saldoRestante(d), 0);
+  const custoJuros = abertas.filter(d => !d.acordo).reduce((s,d) => s + (d.saldo * (d.juros/100)), 0);
+  
+  // Saldo líquido do mês corrente: Receitas - Gastos - Aportes
+  const saldoMes = totalRec - totalGas - totalInv;
+  
+  // Sobras acumuladas de meses anteriores
+  const saldoAnterior = calcSaldoAcumuladoAnterior(mesAtual);
+  
+  // Saldo total disponível
+  const saldoDisp = saldoMes + saldoAnterior;
+  
+  return {
+    totalRec, totalGas, totalInv,
+    gasRec, gasLaz, gasNP, gasVg,
+    totalDiv, custoJuros,
+    saldoMes, saldoAnterior, saldoDisp
+  };
+}
+
+function calcTotaisAno(anoStr){
+  const ano = String(anoStr || (mesAtual ? mesAtual.slice(0,4) : new Date().getFullYear()));
+  const recAno = (S.receitas || []).filter(r => (r.data||'').slice(0,4) === ano);
+  const gasAno = (S.gastos || []).filter(g => (g.data||'').slice(0,4) === ano);
+  const invAno = (S.investimentos || []).filter(i => (i.dataInicio||'').slice(0,4) === ano);
+
+  const totalRec = recAno.reduce((s,r) => s + r.val, 0);
+  const totalGas = gasAno.reduce((s,g) => s + g.val, 0);
+  const totalInv = invAno.reduce((s,i) => s + (i.valorInicial || 0), 0);
+
+  const gasRec = gasAno.filter(g => g.cat === 'recorrente').reduce((s,g) => s + g.val, 0);
+  const gasLaz = gasAno.filter(g => g.cat === 'lazer').reduce((s,g) => s + g.val, 0);
+  const gasNP = gasAno.filter(g => g.cat === 'nao_planejado').reduce((s,g) => s + g.val, 0);
+  const gasVg = gasAno.filter(g => g.cat === 'viagem').reduce((s,g) => s + g.val, 0);
+
+  const abertas = S.dividas.filter(d => !d.quitada);
+  const totalDiv = abertas.reduce((s,d) => s + saldoRestante(d), 0);
+  const custoJuros = abertas.filter(d => !d.acordo).reduce((s,d) => s + (d.saldo * (d.juros/100)), 0);
+
+  const saldoLiquido = totalRec - totalGas - totalInv;
+
+  return {
+    ano,
+    totalRec,
+    totalGas,
+    totalInv,
+    gasRec,
+    gasLaz,
+    gasNP,
+    gasVg,
+    totalDiv,
+    custoJuros,
+    saldoLiquido
+  };
+}
+
+let modoVisaoResumo = 'mensal'; // 'mensal' | 'anual'
+let anoSelecionado = new Date().getFullYear();
+
+function setModoVisao(modo){
+  modoVisaoResumo = modo;
+  const btnM = document.getElementById('btn-modo-mensal');
+  const btnA = document.getElementById('btn-modo-anual');
+  const swM = document.getElementById('switch-mes');
+  const swA = document.getElementById('switch-ano');
+
+  if(modo === 'mensal'){
+    if(btnM) btnM.classList.add('sel');
+    if(btnA) btnA.classList.remove('sel');
+    if(swM) swM.style.display = 'flex';
+    if(swA) swA.style.display = 'none';
+  } else {
+    if(btnM) btnM.classList.remove('sel');
+    if(btnA) btnA.classList.add('sel');
+    if(swM) swM.style.display = 'none';
+    if(swA) swA.style.display = 'flex';
+  }
+  renderResumo();
+}
+
+function mudarAno(delta){
+  anoSelecionado += delta;
+  const el = document.getElementById('ano-label');
+  if(el) el.textContent = anoSelecionado;
+  renderResumo();
+}
+
+function abrirModalDivida(){
+  atualizarSelectsTipoDivida();
+  openM('m-divida');
 }
 
 // RENDER
 function render(){
   atualizarDatalistTitulares();
+  atualizarSelectsTipoDivida();
+  renderCategoriasModalGasto();
   updateMesLabel();
   renderMetas(); // Atualiza m.atual
   renderResumo();
@@ -868,61 +1238,138 @@ function render(){
 }
 
 function renderResumo(){
-  const t=calcTotais();
   const $=id=>document.getElementById(id);
+  
+  if (modoVisaoResumo === 'anual') {
+    const tAno = calcTotaisAno(anoSelecionado);
+    const anoLbl = $('ano-label');
+    if(anoLbl) anoLbl.textContent = anoSelecionado;
+    
+    const sc = tAno.saldoLiquido < 0 ? 'c-red' : 'c-green';
+    const lblSaldo = $('lbl-saldo-disp');
+    if(lblSaldo) lblSaldo.textContent = `Saldo Líquido Anual (${anoSelecionado})`;
+    $('saldo-disp').textContent = fmt(tAno.saldoLiquido);
+    $('saldo-disp').className = 'big-num ' + sc;
 
-  const sc=t.saldoDisp<0?'c-red':t.saldoDisp<t.totalRec*0.1&&t.totalRec>0?'c-yellow':'c-green';
-  $('saldo-disp').textContent=fmt(t.saldoDisp);
-  $('saldo-disp').className='big-num '+sc;
+    const txtSaldoMes = $('txt-saldo-mes');
+    if(txtSaldoMes) txtSaldoMes.textContent = `Receitas: ${fmt(tAno.totalRec)} • Gastos: ${fmt(tAno.totalGas)} • Aportes: ${fmt(tAno.totalInv)}`;
+    const txtSaldoAnt = $('txt-saldo-anterior');
+    if(txtSaldoAnt) txtSaldoAnt.style.display = 'none';
 
-  const pctUsado=t.totalRec>0?Math.min(100,Math.round((t.totalGas/t.totalRec)*100)):0;
-  const pctLivre=Math.max(0,100-pctUsado);
-  const fc=pctUsado>=100?'var(--red)':pctUsado>70?'var(--yellow)':'var(--green)';
-  $('meter-fill').style.width=pctLivre+'%';
-  $('meter-fill').style.background=fc;
-  if(t.totalRec>0){
-    $('meter-tip').textContent=pctUsado>=100
-      ?`⚠ Salário esgotado — falta ${fmt(Math.abs(t.saldoDisp))} para cobrir os gastos`
-      :`${pctUsado}% comprometido — sobram ${fmt(t.saldoDisp)} (${pctLivre}%)`;
+    const pctUsado = tAno.totalRec > 0 ? Math.min(100, Math.round(((tAno.totalGas + tAno.totalInv) / tAno.totalRec) * 100)) : 0;
+    const pctLivre = Math.max(0, 100 - pctUsado);
+    const fc = pctUsado >= 100 ? 'var(--red)' : pctUsado > 70 ? 'var(--yellow)' : 'var(--green)';
+    $('meter-fill').style.width = pctLivre + '%';
+    $('meter-fill').style.background = fc;
+    $('meter-tip').textContent = tAno.totalRec > 0 
+      ? `${pctUsado}% da receita anual comprometida — saldo líquido de ${fmt(tAno.saldoLiquido)}`
+      : 'Cadastre receitas no ano para acompanhar o progresso.';
+
+    $('r-rec').textContent = fmt(tAno.totalRec);
+    $('r-gas').textContent = fmt(tAno.totalGas);
+    $('r-fix').textContent = fmt(tAno.gasRec);
+    $('r-div').textContent = fmt(tAno.totalDiv);
+    const rInv = $('r-inv');
+    if(rInv) rInv.textContent = fmt(tAno.totalInv);
+    const rLiq = $('r-liq');
+    if(rLiq) {
+      rLiq.textContent = fmt(tAno.saldoLiquido);
+      rLiq.className = 'mc-val ' + (tAno.saldoLiquido < 0 ? 'c-red' : 'c-green');
+    }
+
+    $('alerta-box').innerHTML = tAno.saldoLiquido < 0 
+      ? `<div class="alert alert-r">⚠️ No consolidado de ${anoSelecionado}, os gastos e aportes superam a receita em ${fmt(Math.abs(tAno.saldoLiquido))}.</div>` 
+      : '';
+
+    const cardPrio = $('card-prio-lista');
+    if(cardPrio) cardPrio.style.display = 'none';
+
+  } else {
+    // Modo Mensal
+    const t = calcTotais();
+    const lblSaldo = $('lbl-saldo-disp');
+    if(lblSaldo) lblSaldo.textContent = 'Saldo disponível no mês';
+
+    const sc = t.saldoDisp < 0 ? 'c-red' : (t.saldoDisp < t.totalRec * 0.1 && t.totalRec > 0 ? 'c-yellow' : 'c-green');
+    $('saldo-disp').textContent = fmt(t.saldoDisp);
+    $('saldo-disp').className = 'big-num ' + sc;
+
+    const txtSaldoMes = $('txt-saldo-mes');
+    if(txtSaldoMes) txtSaldoMes.textContent = `Saldo deste mês: ${fmt(t.saldoMes)} (Receita - Gastos - Aportes)`;
+    
+    const txtSaldoAnt = $('txt-saldo-anterior');
+    if(txtSaldoAnt) {
+      if(t.saldoAnterior > 0) {
+        txtSaldoAnt.textContent = `Sobras anteriores: +${fmt(t.saldoAnterior)}`;
+        txtSaldoAnt.style.display = 'inline';
+      } else {
+        txtSaldoAnt.style.display = 'none';
+      }
+    }
+
+    const pctUsado = t.totalRec > 0 ? Math.min(100, Math.round(((t.totalGas + t.totalInv) / t.totalRec) * 100)) : 0;
+    const pctLivre = Math.max(0, 100 - pctUsado);
+    const fc = pctUsado >= 100 ? 'var(--red)' : pctUsado > 70 ? 'var(--yellow)' : 'var(--green)';
+    $('meter-fill').style.width = pctLivre + '%';
+    $('meter-fill').style.background = fc;
+    if(t.totalRec > 0){
+      $('meter-tip').textContent = pctUsado >= 100
+        ? `⚠️ Receita do mês esgotada — faltam ${fmt(Math.abs(t.saldoMes))} para cobrir o mês`
+        : `${pctUsado}% comprometido — sobram ${fmt(t.saldoDisp)} (${pctLivre}%)`;
+    } else {
+      $('meter-tip').textContent = 'Cadastre sua receita para começar';
+    }
+
+    $('r-rec').textContent = fmt(t.totalRec);
+    $('r-gas').textContent = fmt(t.totalGas);
+    $('r-fix').textContent = fmt(t.gasRec);
+    $('r-div').textContent = fmt(t.totalDiv);
+    const rInv = $('r-inv');
+    if(rInv) rInv.textContent = fmt(t.totalInv);
+    const rLiq = $('r-liq');
+    if(rLiq) {
+      rLiq.textContent = fmt(t.saldoMes);
+      rLiq.className = 'mc-val ' + (t.saldoMes < 0 ? 'c-red' : 'c-green');
+    }
+
+    let alertHtml = '';
+    if(t.saldoMes < 0 && t.saldoDisp < 0) alertHtml = `<div class="alert alert-r">⚠️ Gastos e aportes superam a receita em ${fmt(Math.abs(t.saldoDisp))} — veja as prioridades abaixo.</div>`;
+    else if(t.saldoMes < 0 && t.saldoDisp >= 0) alertHtml = `<div class="alert alert-y">💡 Gastos do mês superaram a receita, mas você foi coberto pela sobra de meses anteriores (+${fmt(t.saldoAnterior)}).</div>`;
+    else if(t.saldoDisp < t.totalRec * 0.1 && t.totalRec > 0) alertHtml = `<div class="alert alert-y">Atenção: restam apenas ${fmt(t.saldoDisp)} após os gastos e aportes.</div>`;
+    $('alerta-box').innerHTML = alertHtml;
+
+    // Prioridades
+    const prios = [];
+    const abertas = S.dividas.filter(d => !d.quitada);
+    const cartoes = abertas.filter(d => d.tipo === 'cartao' && !d.acordo).sort((a,b) => b.juros - a.juros);
+    const emps = abertas.filter(d => d.tipo !== 'cartao' && !d.acordo).sort((a,b) => b.juros - a.juros);
+    const acordos = abertas.filter(d => d.acordo);
+    if(t.saldoDisp < 0) prios.push({ c: 'r', tag: '🔴 Urgente', nome: 'Receita insuficiente', det: `Corte ${fmt(Math.abs(t.saldoDisp))} em gastos para equilibrar o mês.` });
+    cartoes.forEach(d => prios.push({ c: 'r', tag: '🔴 Pagar primeiro', nome: d.credor + ' (cartão)', det: `${d.juros}%/mês = ${fmt(d.saldo * (d.juros / 100))} em juros/mês. Use todo saldo livre.` }));
+    emps.forEach((d,i) => prios.push({ c: i === 0 ? 'y' : 'g', tag: i === 0 ? '🟡 Em seguida' : '🟢 Manter parcela', nome: d.credor + (d.tipo === 'emprestimo_pf' ? ' (empréstimo PF)' : ' (empréstimo)'), det: `${d.juros}%/mês${d.parcela ? ' — parcela ' + fmt(d.parcela) : ''}. Mantenha em dia.` }));
+    acordos.forEach(d => {
+      const prox = d.acordo.parcelas.find(p => !p.paga);
+      const pagas = d.acordo.parcelas.filter(p => p.paga).length;
+      prios.push({ c: 'y', tag: '🤝 Acordo em andamento', nome: d.credor, det: prox ? `Parcela ${prox.num}/${d.acordo.numParcelas} de ${fmt(prox.valor)} — pague e marque como paga na aba Dívidas.` : `${pagas}/${d.acordo.numParcelas} parcelas pagas.` });
+    });
+    if(t.gasLaz > t.totalRec * 0.15 && t.totalRec > 0) prios.push({ c: 'y', tag: '🟡 Reduzir', nome: 'Lazer acima do ideal', det: `${fmt(t.gasLaz)} em lazer — limite saudável é ${fmt(t.totalRec * 0.15)} (15% da renda).` });
+    if(t.gasNP > 0) prios.push({ c: 'g', tag: '🟢 Monitorar', nome: 'Gastos imprevistos', det: `${fmt(t.gasNP)} este mês. Analise o que pode evitar.` });
+
+    const classMap = { r: 'prio prio-r', y: 'prio prio-y', g: 'prio prio-g' };
+    $('prio-lista').innerHTML = prios.length
+      ? prios.slice(0,5).map(p => `<div class="${classMap[p.c]}"><p class="prio-tag">${p.tag}</p><p class="prio-name">${p.nome}</p><p class="prio-detail">${p.det}</p></div>`).join('')
+      : '<p style="font-size:13px;color:var(--muted);">Cadastre gastos e dívidas para ver as prioridades.</p>';
+
+    const cardPrio = $('card-prio-lista');
+    if(cardPrio) cardPrio.style.display = 'block';
   }
 
-  $('r-rec').textContent=fmt(t.totalRec);
-  $('r-gas').textContent=fmt(t.totalGas);
-  $('r-fix').textContent=fmt(t.gasRec);
-  $('r-div').textContent=fmt(t.totalDiv);
-
-  let alertHtml='';
-  if(t.saldoDisp<0) alertHtml=`<div class="alert alert-r">⚠ Gastos superam a receita em ${fmt(Math.abs(t.saldoDisp))} — veja as prioridades abaixo.</div>`;
-  else if(t.saldoDisp<t.totalRec*0.1&&t.totalRec>0) alertHtml=`<div class="alert alert-y">Atenção: restam apenas ${fmt(t.saldoDisp)} após os gastos.</div>`;
-  $('alerta-box').innerHTML=alertHtml;
-
-  // Prioridades
-  const prios=[];
-  const abertas=S.dividas.filter(d=>!d.quitada);
-  const cartoes=abertas.filter(d=>d.tipo==='cartao'&&!d.acordo).sort((a,b)=>b.juros-a.juros);
-  const emps=abertas.filter(d=>d.tipo!=='cartao'&&!d.acordo).sort((a,b)=>b.juros-a.juros);
-  const acordos=abertas.filter(d=>d.acordo);
-  if(t.saldoDisp<0) prios.push({c:'r',tag:'🔴 Urgente',nome:'Receita insuficiente',det:`Corte ${fmt(Math.abs(t.saldoDisp))} em gastos para equilibrar o mês.`});
-  cartoes.forEach(d=>prios.push({c:'r',tag:'🔴 Pagar primeiro',nome:d.credor+' (cartão)',det:`${d.juros}%/mês = ${fmt(d.saldo*(d.juros/100))} em juros/mês. Use todo saldo livre.`}));
-  emps.forEach((d,i)=>prios.push({c:i===0?'y':'g',tag:i===0?'🟡 Em seguida':'🟢 Manter parcela',nome:d.credor+(d.tipo==='emprestimo_pf'?' (empréstimo PF)':' (empréstimo)'),det:`${d.juros}%/mês${d.parcela?' — parcela '+fmt(d.parcela):''}. Mantenha em dia.`}));
-  acordos.forEach(d=>{
-    const prox=d.acordo.parcelas.find(p=>!p.paga);
-    const pagas=d.acordo.parcelas.filter(p=>p.paga).length;
-    prios.push({c:'y',tag:'🤝 Acordo em andamento',nome:d.credor,det:prox?`Parcela ${prox.num}/${d.acordo.numParcelas} de ${fmt(prox.valor)} — pague e marque como paga na aba Dívidas.`:`${pagas}/${d.acordo.numParcelas} parcelas pagas.`});
-  });
-  if(t.gasLaz>t.totalRec*0.15&&t.totalRec>0) prios.push({c:'y',tag:'🟡 Reduzir',nome:'Lazer acima do ideal',det:`${fmt(t.gasLaz)} em lazer — limite saudável é ${fmt(t.totalRec*0.15)} (15% da renda).`});
-  if(t.gasNP>0) prios.push({c:'g',tag:'🟢 Monitorar',nome:'Gastos imprevistos',det:`${fmt(t.gasNP)} este mês. Analise o que pode evitar.`});
-
-  const classMap={r:'prio prio-r',y:'prio prio-y',g:'prio prio-g'};
-  $('prio-lista').innerHTML=prios.length
-    ? prios.slice(0,5).map(p=>`<div class="${classMap[p.c]}"><p class="prio-tag">${p.tag}</p><p class="prio-name">${p.nome}</p><p class="prio-detail">${p.det}</p></div>`).join('')
-    : '<p style="font-size:13px;color:var(--muted);">Cadastre gastos e dívidas para ver as prioridades.</p>';
-
+  // Metas
   const metasContainer = $('dashboard-metas');
   if(metasContainer){
     if(S.metas.length > 0) {
       metasContainer.innerHTML = S.metas.map(m => {
-        const pct=Math.min(100,Math.round((m.atual/m.total)*100));
+        const pct = Math.min(100, Math.round((m.atual / m.total) * 100));
         return `<div style="margin-bottom:10px;">
           <div class="prog-row" style="margin-bottom:2px;"><span style="font-weight:600;color:var(--text);">${escapeHtml(m.nome)}</span><span>${pct}%</span></div>
           <div class="prog-row" style="font-size:11px;"><span>${fmt(m.atual)} de ${fmt(m.total)}</span></div>
@@ -948,18 +1395,29 @@ function renderChart() {
   const dadosRec = [];
   const dadosGas = [];
   
-  const [anoAtual, mesAtualNum] = mesAtual.split('-').map(Number);
-  
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(anoAtual, mesAtualNum - 1 - i, 1);
-    const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-    mesesStr.push(mesLabel(ym).substring(0,3) + '/' + String(d.getFullYear()).substring(2,4));
-    
-    const recMes = S.receitas.filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
-    const gasMes = S.gastos.filter(g => (g.dataOriginal||g.data||'').slice(0,7) === ym).reduce((s,g) => s + g.val, 0);
-    
-    dadosRec.push(recMes);
-    dadosGas.push(gasMes);
+  if (modoVisaoResumo === 'anual') {
+    const ano = String(anoSelecionado || new Date().getFullYear());
+    for (let m = 1; m <= 12; m++) {
+      const ym = ano + '-' + String(m).padStart(2, '0');
+      mesesStr.push(mesLabel(ym).substring(0,3));
+      const recMes = (S.receitas || []).filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
+      const gasMes = (S.gastos || []).filter(g => (g.dataOriginal||g.data||'').slice(0,7) === ym).reduce((s,g) => s + g.val, 0);
+      dadosRec.push(recMes);
+      dadosGas.push(gasMes);
+    }
+  } else {
+    const [anoAtual, mesAtualNum] = mesAtual.split('-').map(Number);
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(anoAtual, mesAtualNum - 1 - i, 1);
+      const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      mesesStr.push(mesLabel(ym).substring(0,3) + '/' + String(d.getFullYear()).substring(2,4));
+      
+      const recMes = (S.receitas || []).filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
+      const gasMes = (S.gastos || []).filter(g => (g.dataOriginal||g.data||'').slice(0,7) === ym).reduce((s,g) => s + g.val, 0);
+      
+      dadosRec.push(recMes);
+      dadosGas.push(gasMes);
+    }
   }
 
   if (resumoChart) {
@@ -1023,8 +1481,11 @@ function renderGastos(){
   const bd=document.getElementById('breakdown-gastos');
   const listaMes=gastosDoMes();
   if(listaMes.length){
-    const cats=[{l:'Fixos',v:t.gasRec,c:'c-yellow'},{l:'Lazer',v:t.gasLaz,c:'c-red'},{l:'Imprevistos',v:t.gasNP,c:'c-red'},{l:'Viagem',v:t.gasVg,c:'c-muted'}];
-    bd.innerHTML=`<div class="grid2">${cats.filter(c=>c.v>0).slice(0,4).map(c=>`<div class="mc"><p class="mc-label">${c.l}</p><p class="mc-val ${c.c}">${fmt(c.v)}</p></div>`).join('')}</div>`;
+    const cats = (S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS).map(c => {
+      const v = listaMes.filter(g => g.cat === c.id).reduce((s,g) => s + g.val, 0);
+      return { l: c.nome, v, c: c.cor || 'c-muted' };
+    }).filter(c => c.v > 0);
+    bd.innerHTML = `<div class="grid2">${cats.slice(0, 6).map(c=>`<div class="mc"><p class="mc-label">${escapeHtml(c.l)}</p><p class="mc-val ${c.c}">${fmt(c.v)}</p></div>`).join('')}</div>`;
   } else bd.innerHTML='';
 
   // Inadimplência acumulada de meses anteriores
@@ -1064,7 +1525,6 @@ function renderGastos(){
 
   const el=document.getElementById('lista-gastos');
   const badges={recorrente:'b-rec',nao_planejado:'b-unp',lazer:'b-laz',viagem:'b-vg'};
-  const labels={recorrente:'Fixo',nao_planejado:'Imprevisto',lazer:'Lazer',viagem:'Viagem'};
   
   const previstos = gastosPrevistosDoMes().filter(g => filtroTitularGasto === 'todos' || g.titular === filtroTitularGasto);
 
@@ -1075,7 +1535,9 @@ function renderGastos(){
   
   el.innerHTML=previstos.map(g=>{
     const tipoDivTxt = g.tipoDivida ? (TIPOS_DIVIDA[g.tipoDivida] || g.tipoDivida) : '';
-    const parcBadge = g.parcelado ? `<span class="badge b-parc">${tipoDivTxt ? escapeHtml(tipoDivTxt) + ' ' : ''}${g.parcelaNum}/${g.totalParcelas}</span>` : '';
+    const origemTxt = g.origemDivida ? `${escapeHtml(g.origemDivida)} • ` : '';
+    const parcBadge = g.parcelado ? `<span class="badge b-parc">${origemTxt}${tipoDivTxt ? escapeHtml(tipoDivTxt) + ' ' : ''}${g.parcelaNum}/${g.totalParcelas}</span>` : '';
+    const recBadge = g.recorrente ? `<span class="badge b-rec">Fixo ${g.mesNum}/${g.totalMeses}</span>` : '';
     const titBadge = g.titular ? `<span class="badge b-titular">${escapeHtml(g.titular)}</span>` : '';
     const statusHtml = `<button class="status-btn ${g.pago?'pago':'pendente'}" onclick="togglePagoGasto(${g.id})">${g.pago?'✓ Pago':'⏳ Aberto'}</button>`;
     const adiantarHtml = g.parcelado ? `<button class="btn-adiantar" onclick="abrirModalAdiantar('${escapeHtml(g.grupoId)}')">⏩ Adiantar</button>` : '';
@@ -1083,9 +1545,10 @@ function renderGastos(){
     return `<div class="item-row">
       <div style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
         <span class="item-name">${escapeHtml(g.desc)}</span>
-        <span class="badge ${badges[g.cat]||'b-rec'}">${labels[g.cat]||g.cat}</span>
+        <span class="badge ${badges[g.cat]||'b-rec'}">${escapeHtml(getNomeCategoria(g.cat))}</span>
         ${titBadge}
         ${parcBadge}
+        ${recBadge}
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
         <span class="item-val c-red">${fmt(g.val)}</span>
@@ -1111,7 +1574,7 @@ function renderDividas(){
   let html=sorted.map(d=>{
     const restante=saldoRestante(d);
     const custo=!d.acordo && d.juros ? d.saldo*(d.juros/100) : 0;
-    const tipoLabel = d.tipo==='cartao' ? 'Cartão de crédito' : d.tipo==='emprestimo_pf' ? 'Empréstimo pessoa física' : 'Empréstimo bancário';
+    const tipoLabel = TIPOS_DIVIDA[d.tipo] || d.tipo || 'Outro';
     const titBadge = d.titular ? `<span class="badge b-titular">${escapeHtml(d.titular)}</span>` : '';
     let parcelasHtml='';
     if(d.acordo){

@@ -239,11 +239,20 @@
 
     <!-- RESUMO -->
     <div id="sec-resumo" class="section">
-      <div class="mes-switch"><button onclick="mudarMes(-1)">‹</button><span class="mes-label">Mês/Ano</span><button onclick="mudarMes(1)">›</button></div>
+      <div style="display:flex;justify-content:center;gap:8px;margin-bottom:12px;">
+        <button id="btn-modo-mensal" class="filtro-pill sel" onclick="setModoVisao('mensal')">📅 Mensal</button>
+        <button id="btn-modo-anual" class="filtro-pill" onclick="setModoVisao('anual')">📆 Anual</button>
+      </div>
+      <div id="switch-mes" class="mes-switch"><button onclick="mudarMes(-1)">‹</button><span class="mes-label">Mês/Ano</span><button onclick="mudarMes(1)">›</button></div>
+      <div id="switch-ano" class="mes-switch" style="display:none;"><button onclick="mudarAno(-1)">‹</button><span id="ano-label" class="mes-label">Ano</span><button onclick="mudarAno(1)">›</button></div>
       <div id="alerta-box"></div>
       <div class="card">
-        <p class="card-label">Saldo disponível</p>
+        <p class="card-label" id="lbl-saldo-disp">Saldo disponível</p>
         <p class="big-num" id="saldo-disp">R$ 0,00</p>
+        <div id="sub-saldo-row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px;flex-wrap:wrap;gap:4px;">
+          <span id="txt-saldo-mes"></span>
+          <span id="txt-saldo-anterior" style="display:none;color:var(--green);"></span>
+        </div>
         <div class="meter-wrap">
           <div class="meter-bar"><div class="meter-fill" id="meter-fill" style="width:100%;background:var(--green);"></div></div>
           <p class="meter-tip" id="meter-tip">Cadastre sua receita para começar</p>
@@ -257,7 +266,11 @@
         <div class="mc"><p class="mc-label">Fixos</p><p class="mc-val c-yellow" id="r-fix">R$ 0</p></div>
         <div class="mc"><p class="mc-label">Dívidas</p><p class="mc-val c-red" id="r-div">R$ 0</p></div>
       </div>
-      <div class="card">
+      <div class="grid2" style="margin-bottom:12px;">
+        <div class="mc"><p class="mc-label">Aportes/Investido</p><p class="mc-val c-green" id="r-inv">R$ 0</p></div>
+        <div class="mc"><p class="mc-label">Saldo Líquido</p><p class="mc-val" id="r-liq">R$ 0</p></div>
+      </div>
+      <div class="card" id="card-prio-lista">
         <p class="card-label">O que pagar primeiro</p>
         <div id="prio-lista"><p style="font-size:13px;color:var(--muted);">Cadastre gastos e dívidas para ver as prioridades.</p></div>
       </div>
@@ -303,7 +316,7 @@
         <p style="font-size:12px;color:var(--muted);margin-top:6px;" id="custo-juros-txt"></p>
       </div>
       <div id="lista-dividas"></div>
-      <button class="btn btn-r" onclick="openM('m-divida')">+ Cadastrar dívida</button>
+      <button class="btn btn-r" onclick="abrirModalDivida()">+ Cadastrar dívida</button>
     </div>
 
     <!-- METAS E INVESTIMENTOS -->
@@ -350,6 +363,26 @@
           <button class="btn btn-g" style="width:auto;margin:0;padding:12px 16px;" onclick="addMembroFamilia()">Add</button>
         </div>
         <div id="lista-membros" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <div class="card">
+        <p class="sec-title" style="margin-top:0;">Categorias de Gastos</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Personalize as categorias dos seus gastos.</p>
+        <div class="input-row" style="flex-direction:row;align-items:center;">
+          <input type="text" id="nova-categoria" placeholder="Nova categoria (ex: Educação, Saúde)" style="flex:1;"/>
+          <button class="btn btn-g" style="width:auto;margin:0;padding:12px 16px;" onclick="addCategoriaGasto()">Add</button>
+        </div>
+        <div id="lista-categorias" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <div class="card">
+        <p class="sec-title" style="margin-top:0;">Tipos de Dívida</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Personalize os tipos para compras parceladas e dívidas.</p>
+        <div class="input-row" style="flex-direction:row;align-items:center;">
+          <input type="text" id="novo-tipo-divida" placeholder="Novo tipo (ex: Financiamento Imobiliário)" style="flex:1;"/>
+          <button class="btn btn-g" style="width:auto;margin:0;padding:12px 16px;" onclick="addTipoDivida()">Add</button>
+        </div>
+        <div id="lista-tipos-divida" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
       </div>
 
       <div class="card">
@@ -422,14 +455,43 @@
       <button class="tag" data-cat="viagem" onclick="selTag(this)">Viagem</button>
     </div>
 
+    <!-- RECORRÊNCIA FIXA COM PRAZO -->
+    <div class="input-row" style="margin-top:6px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:14px;">
+        <input type="checkbox" id="g-is-recorrente" onchange="toggleCamposRecorrente()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;"/>
+        <span>Gasto fixo mensal com prazo (ex: escola, plano)</span>
+      </label>
+    </div>
+    <div id="g-bloco-recorrente" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+      <div class="input-row">
+        <label>Duração / Prazo de repetição</label>
+        <select id="g-prazo-recorrente" onchange="atualizarPreviewRecorrente()">
+          <option value="12">12 meses (1 ano - valor mensal)</option>
+          <option value="6">6 meses</option>
+          <option value="24">24 meses (2 anos)</option>
+          <option value="ano_atual">Até o final do ano corrente</option>
+          <option value="personalizado">Personalizado (escolher meses)</option>
+        </select>
+      </div>
+      <div class="input-row" id="g-row-meses-personalizado" style="display:none;">
+        <label>Quantidade de meses</label>
+        <input type="number" id="g-meses-recorrente" placeholder="Ex: 10" min="2" max="72" value="12" inputmode="numeric" oninput="atualizarPreviewRecorrente()"/>
+      </div>
+      <p id="g-preview-recorrente" style="font-size:13px;color:var(--green);font-weight:600;margin-top:2px;"></p>
+    </div>
+
     <!-- PARCELAMENTO / DÍVIDA -->
     <div class="input-row" style="margin-top:6px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:14px;">
         <input type="checkbox" id="g-is-parcelado" onchange="toggleCamposParcelamento()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;"/>
-        <span>Compra parcelada / Dívida</span>
+        <span>Compra parcelada / Dívida (divide o valor total)</span>
       </label>
     </div>
     <div id="g-bloco-parcelamento" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+      <div class="input-row">
+        <label>De onde é a dívida / Loja / Credor</label>
+        <input type="text" id="g-origem-divida" placeholder="Ex: Magazine Luiza, Mercado Livre, Inter..."/>
+      </div>
       <div class="input-row">
         <label>Tipo de dívida</label>
         <select id="g-tipo-divida">
