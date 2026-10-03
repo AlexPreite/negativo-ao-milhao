@@ -66,6 +66,7 @@ function loadState(){
     if(g.parcelado && !g.dataOriginal) g.dataOriginal=g.data;
     if(g.recorrente===undefined) g.recorrente=false;
     if(g.origemDivida===undefined) g.origemDivida='';
+    if(g.negociado===undefined) g.negociado=false;
   });
   (S.dividas||[]).forEach(d=>{
     if(d.titular===undefined) d.titular='';
@@ -532,7 +533,7 @@ function gastosPrevistosDoMes(){
 
 // Contas de meses anteriores que continuam não pagas acumulam no mês vigente
 function gastosInadimplentesDoMes(){
-  return (S.gastos||[]).filter(g => (g.data||'').slice(0,7) < mesAtual && !g.pago);
+  return (S.gastos||[]).filter(g => (g.data||'').slice(0,7) < mesAtual && !g.pago && !g.negociado);
 }
 
 function gastosDoMes(){
@@ -738,6 +739,187 @@ function confirmarAdiantamento(modo){
   closeM('m-adiantar');
   render();
   alert(`✅ Parcela ${alvo.parcelaNum}/${alvo.totalParcelas} adiantada com sucesso para ${mesLabel(mesAtual)}!`);
+}
+
+// NEGOCIAÇÃO DE GASTOS / DÍVIDAS ATRASADAS
+let negociandoGastoId = null;
+
+function abrirModalNegociarGasto(gastoId){
+  negociandoGastoId = gastoId;
+  const g = S.gastos.find(x => x.id === gastoId);
+  if (!g) return;
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const mesOrig = (g.dataOriginal || g.data || '').slice(0, 7);
+  
+  document.getElementById('neg-orig-desc').textContent = g.descOriginal || g.desc;
+  document.getElementById('neg-orig-titular').textContent = g.titular || 'Alex';
+  document.getElementById('neg-orig-data').textContent = mesLabel(mesOrig);
+  document.getElementById('neg-orig-val').textContent = fmt(g.val);
+
+  document.getElementById('neg-entrada').value = '';
+  document.getElementById('neg-data-entrada').value = hoje;
+  document.getElementById('neg-row-data-entrada').style.display = 'none';
+
+  document.getElementById('neg-parcelas').value = '6';
+  
+  // 1º vencimento: próximo mês no mesmo dia ou dia 10
+  const diaBase = (g.dataOriginal || g.data || hoje).slice(8, 10) || '10';
+  const proximoVenc = adicionarMeses(mesAtual + '-' + diaBase, 1);
+  document.getElementById('neg-primeiro-vencimento').value = proximoVenc;
+  
+  // Sugestão inicial: valor total = valor pendente original
+  document.getElementById('neg-valor-total').value = g.val.toFixed(2);
+  document.getElementById('neg-valor-parcela').value = (g.val / 6).toFixed(2);
+  document.getElementById('neg-juros').value = '';
+
+  // Preenche opções de tipo de dívida
+  const selTipo = document.getElementById('neg-tipo-divida');
+  if (selTipo) {
+    const tipos = S.tiposDivida || DEFAULT_TIPOS_DIVIDA;
+    selTipo.innerHTML = tipos.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.nome)}</option>`).join('');
+    if (g.tipoDivida) selTipo.value = g.tipoDivida;
+  }
+
+  atualizarResumoNegociacao('total');
+  openM('m-negociar-gasto');
+}
+
+function atualizarResumoNegociacao(origemMudanca){
+  const g = S.gastos.find(x => x.id === negociandoGastoId);
+  const vOrig = g ? g.val : 0;
+  
+  const entrada = parseFloat(document.getElementById('neg-entrada').value) || 0;
+  const rowDataEntrada = document.getElementById('neg-row-data-entrada');
+  if (rowDataEntrada) rowDataEntrada.style.display = entrada > 0 ? 'block' : 'none';
+
+  const numParc = Math.max(1, parseInt(document.getElementById('neg-parcelas').value) || 1);
+  let vTotal = parseFloat(document.getElementById('neg-valor-total').value) || 0;
+  let vParc = parseFloat(document.getElementById('neg-valor-parcela').value) || 0;
+
+  if (origemMudanca === 'parcela') {
+    vTotal = entrada + (vParc * numParc);
+    document.getElementById('neg-valor-total').value = vTotal > 0 ? vTotal.toFixed(2) : '';
+  } else if (origemMudanca === 'total' || origemMudanca === 'entrada' || origemMudanca === 'parcelas') {
+    const saldoFinanciar = Math.max(0, vTotal - entrada);
+    vParc = saldoFinanciar / numParc;
+    document.getElementById('neg-valor-parcela').value = vParc > 0 ? vParc.toFixed(2) : '';
+  }
+
+  const acrescimo = vTotal - vOrig;
+  
+  document.getElementById('neg-resumo-orig').textContent = fmt(vOrig);
+  document.getElementById('neg-resumo-entrada').textContent = entrada > 0 ? fmt(entrada) : 'R$ 0,00';
+  document.getElementById('neg-resumo-parcelamento').textContent = `${numParc}x de ${fmt(vParc)} (${fmt(vParc * numParc)})`;
+  
+  const acrescimoEl = document.getElementById('neg-resumo-acrescimo');
+  if (acrescimo > 0.01) {
+    acrescimoEl.textContent = `+ ${fmt(acrescimo)} (juros/encargos)`;
+    acrescimoEl.style.color = 'var(--yellow)';
+  } else if (acrescimo < -0.01) {
+    acrescimoEl.textContent = `- ${fmt(Math.abs(acrescimo))} (desconto obtido 🎉)`;
+    acrescimoEl.style.color = 'var(--green)';
+  } else {
+    acrescimoEl.textContent = 'Sem juros adicionais';
+    acrescimoEl.style.color = 'var(--muted)';
+  }
+
+  document.getElementById('neg-resumo-total').textContent = fmt(vTotal);
+}
+
+function salvarNegociacaoGasto(){
+  const g = S.gastos.find(x => x.id === negociandoGastoId);
+  if (!g) return;
+
+  const entrada = parseFloat(document.getElementById('neg-entrada').value) || 0;
+  const dataEntrada = document.getElementById('neg-data-entrada').value || new Date().toISOString().slice(0, 10);
+  const num = Math.max(1, parseInt(document.getElementById('neg-parcelas').value) || 1);
+  const vTotal = parseFloat(document.getElementById('neg-valor-total').value);
+  const primeiroVenc = document.getElementById('neg-primeiro-vencimento').value || adicionarMeses(new Date().toISOString().slice(0,10), 1);
+  const tipoDivida = document.getElementById('neg-tipo-divida').value || g.tipoDivida || 'cartao';
+  const juros = parseFloat(document.getElementById('neg-juros').value) || null;
+
+  if (!vTotal || vTotal <= 0) {
+    alert('Informe o valor total da negociação ou o valor das parcelas.');
+    return;
+  }
+
+  if (entrada >= vTotal) {
+    alert('A entrada não pode ser igual ou maior que o valor total negociado.');
+    return;
+  }
+
+  const valorRestante = Math.round((vTotal - entrada) * 100) / 100;
+  const baseCentavos = Math.floor((valorRestante / num) * 100);
+  const restoCentavos = Math.round(valorRestante * 100) - (baseCentavos * num);
+  const grupoId = 'acordo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  const nomeBase = g.descOriginal || g.desc;
+  const credorOrigem = g.origemDivida || nomeBase;
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  // 1. Marca a dívida/gasto antigo como negociado e pago (sai das cobranças e inadimplência)
+  g.negociado = true;
+  g.pago = true;
+  g.dataPagto = hoje;
+  g.motivoQuitacao = `Negociado em acordo (${num}x)`;
+  g.acordoGeradoId = grupoId;
+
+  // 2. Se houve entrada, gera o gasto da entrada no mês correspondente
+  if (entrada > 0) {
+    S.gastos.push({
+      id: Date.now() + 999,
+      grupoId,
+      desc: `Entrada Acordo: ${nomeBase}`,
+      descOriginal: `Entrada Acordo: ${nomeBase}`,
+      val: entrada,
+      valTotal: entrada,
+      cat: g.cat || 'recorrente',
+      titular: g.titular,
+      tipoDivida,
+      origemDivida: credorOrigem,
+      parcelado: false,
+      recorrente: false,
+      data: dataEntrada,
+      dataOriginal: dataEntrada,
+      pago: true,
+      dataPagto: dataEntrada,
+      adiantada: false
+    });
+  }
+
+  // 3. Gera as novas parcelas conforme vencimento mês a mês (com suporte nativo a amortização/adiantamento)
+  for (let i = 1; i <= num; i++) {
+    const centavosDesta = baseCentavos + (i === num ? restoCentavos : 0);
+    const vParc = centavosDesta / 100;
+    const dt = adicionarMeses(primeiroVenc, i - 1);
+    S.gastos.push({
+      id: Date.now() + i,
+      grupoId,
+      desc: `Acordo: ${nomeBase} (${i}/${num})`,
+      descOriginal: `Acordo: ${nomeBase}`,
+      val: vParc,
+      valTotal: valorRestante,
+      cat: g.cat || 'recorrente',
+      titular: g.titular,
+      tipoDivida,
+      origemDivida: credorOrigem,
+      parcelado: true, // Habilita amortização/adiantamento nativo
+      recorrente: false,
+      parcelaNum: i,
+      totalParcelas: num,
+      data: dt,
+      dataOriginal: dt,
+      pago: false,
+      dataPagto: null,
+      adiantada: false,
+      jurosAcordo: juros
+    });
+  }
+
+  save();
+  closeM('m-negociar-gasto');
+  render();
+  alert(`✅ Negociação confirmada com sucesso!\nO gasto atrasado foi baixado e ${num} nova(s) parcela(s) de ${fmt(baseCentavos/100)} foram geradas.`);
 }
 
 function abrirModalGasto(){
@@ -1107,8 +1289,8 @@ function calcSaldoAcumuladoAnterior(targetYM) {
   let acumulado = 0;
   for (const ym of mesesOrdenados) {
     const rec = (S.receitas || []).filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
-    // Gastos do mês pagos no mês anterior
-    const gasPagos = (S.gastos || []).filter(g => (g.data||'').slice(0,7) === ym && g.pago).reduce((s,g) => s + g.val, 0);
+    // Gastos do mês pagos no mês anterior (gastos negociados não consumiram caixa no mês original)
+    const gasPagos = (S.gastos || []).filter(g => (g.data||'').slice(0,7) === ym && g.pago && !g.negociado).reduce((s,g) => s + g.val, 0);
     const inv = (S.investimentos || []).filter(i => (i.dataInicio||'').slice(0,7) === ym).reduce((s,i) => s + (i.valorInicial || 0), 0);
     const saldoDoMes = rec - gasPagos - inv;
     acumulado += saldoDoMes;
@@ -1117,7 +1299,7 @@ function calcSaldoAcumuladoAnterior(targetYM) {
 }
 
 function calcTotais(){
-  const rec = receitasDoMes(), gas = gastosDoMes();
+  const rec = receitasDoMes(), gas = gastosDoMes().filter(g => !g.negociado);
   const totalRec = rec.reduce((s,r) => s + r.val, 0);
   const totalGas = gas.reduce((s,g) => s + g.val, 0);
   
@@ -1154,7 +1336,7 @@ function calcTotais(){
 function calcTotaisAno(anoStr){
   const ano = String(anoStr || (mesAtual ? mesAtual.slice(0,4) : new Date().getFullYear()));
   const recAno = (S.receitas || []).filter(r => (r.data||'').slice(0,4) === ano);
-  const gasAno = (S.gastos || []).filter(g => (g.data||'').slice(0,4) === ano);
+  const gasAno = (S.gastos || []).filter(g => (g.data||'').slice(0,4) === ano && !g.negociado);
   const invAno = (S.investimentos || []).filter(i => (i.dataInicio||'').slice(0,4) === ano);
 
   const totalRec = recAno.reduce((s,r) => s + r.val, 0);
@@ -1401,7 +1583,7 @@ function renderChart() {
       const ym = ano + '-' + String(m).padStart(2, '0');
       mesesStr.push(mesLabel(ym).substring(0,3));
       const recMes = (S.receitas || []).filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
-      const gasMes = (S.gastos || []).filter(g => (g.dataOriginal||g.data||'').slice(0,7) === ym).reduce((s,g) => s + g.val, 0);
+      const gasMes = (S.gastos || []).filter(g => (g.dataOriginal||g.data||'').slice(0,7) === ym && !g.negociado).reduce((s,g) => s + g.val, 0);
       dadosRec.push(recMes);
       dadosGas.push(gasMes);
     }
@@ -1413,7 +1595,7 @@ function renderChart() {
       mesesStr.push(mesLabel(ym).substring(0,3) + '/' + String(d.getFullYear()).substring(2,4));
       
       const recMes = (S.receitas || []).filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
-      const gasMes = (S.gastos || []).filter(g => (g.dataOriginal||g.data||'').slice(0,7) === ym).reduce((s,g) => s + g.val, 0);
+      const gasMes = (S.gastos || []).filter(g => (g.dataOriginal||g.data||'').slice(0,7) === ym && !g.negociado).reduce((s,g) => s + g.val, 0);
       
       dadosRec.push(recMes);
       dadosGas.push(gasMes);
@@ -1514,6 +1696,7 @@ function renderGastos(){
               <div style="display:flex;align-items:center;gap:6px;">
                 <span style="font-weight:600;color:var(--red);">${fmt(g.val)}</span>
                 <button class="status-btn pendente" onclick="togglePagoGasto(${g.id})">✓ Pagar</button>
+                <button class="btn-negociar" onclick="abrirModalNegociarGasto(${g.id})">🤝 Negociar</button>
               </div>
             </div>
           `).join('')}
@@ -1539,8 +1722,10 @@ function renderGastos(){
     const parcBadge = g.parcelado ? `<span class="badge b-parc">${origemTxt}${tipoDivTxt ? escapeHtml(tipoDivTxt) + ' ' : ''}${g.parcelaNum}/${g.totalParcelas}</span>` : '';
     const recBadge = g.recorrente ? `<span class="badge b-rec">Fixo ${g.mesNum}/${g.totalMeses}</span>` : '';
     const titBadge = g.titular ? `<span class="badge b-titular">${escapeHtml(g.titular)}</span>` : '';
+    const negociadoBadge = g.negociado ? `<span class="badge" style="background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.3);">🤝 Negociado</span>` : '';
     const statusHtml = `<button class="status-btn ${g.pago?'pago':'pendente'}" onclick="togglePagoGasto(${g.id})">${g.pago?'✓ Pago':'⏳ Aberto'}</button>`;
     const adiantarHtml = g.parcelado ? `<button class="btn-adiantar" onclick="abrirModalAdiantar('${escapeHtml(g.grupoId)}')">⏩ Adiantar</button>` : '';
+    const negociarHtml = (!g.pago && !g.negociado) ? `<button class="btn-negociar" onclick="abrirModalNegociarGasto(${g.id})">🤝 Negociar</button>` : '';
 
     return `<div class="item-row">
       <div style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
@@ -1549,11 +1734,13 @@ function renderGastos(){
         ${titBadge}
         ${parcBadge}
         ${recBadge}
+        ${negociadoBadge}
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
         <span class="item-val c-red">${fmt(g.val)}</span>
-        ${statusHtml}
+        ${g.negociado ? '' : statusHtml}
         ${adiantarHtml}
+        ${negociarHtml}
         <span class="item-del" onclick="if(confirm('Excluir este gasto?')){S.gastos=del(S.gastos,${g.id});save();render();}">×</span>
       </div>
     </div>`;
