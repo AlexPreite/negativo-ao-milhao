@@ -789,7 +789,7 @@ function atualizarResumoNegociacao(origemMudanca){
   const g = S.gastos.find(x => x.id === negociandoGastoId);
   const vOrig = g ? g.val : 0;
   
-  const entrada = parseFloat(document.getElementById('neg-entrada').value) || 0;
+  const entrada = Math.max(0, parseFloat(document.getElementById('neg-entrada').value) || 0);
   const rowDataEntrada = document.getElementById('neg-row-data-entrada');
   if (rowDataEntrada) rowDataEntrada.style.display = entrada > 0 ? 'block' : 'none';
 
@@ -831,7 +831,7 @@ function salvarNegociacaoGasto(){
   const g = S.gastos.find(x => x.id === negociandoGastoId);
   if (!g) return;
 
-  const entrada = parseFloat(document.getElementById('neg-entrada').value) || 0;
+  const entrada = Math.max(0, parseFloat(document.getElementById('neg-entrada').value) || 0);
   const dataEntrada = document.getElementById('neg-data-entrada').value || new Date().toISOString().slice(0, 10);
   const num = Math.max(1, parseInt(document.getElementById('neg-parcelas').value) || 1);
   const vTotal = parseFloat(document.getElementById('neg-valor-total').value);
