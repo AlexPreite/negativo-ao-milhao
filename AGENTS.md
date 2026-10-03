@@ -17,15 +17,17 @@ A qualidade do código, estabilidade offline (PWA/Service Worker), cálculo prec
 | `devops` | Build, deploy (GitHub Pages/PWA), observabilidade, backup e configs de ambiente | Sim (infra e scripts) |
 
 ## Regra de ouro
-**Nada vai para a branch principal sem aprovação do `qa-seguranca`.** Reprovação é vinculante.
-Stella não pode sobrepor um veto de segurança do QA — só o humano (Alexsander) pode.
+1. **Governança Obrigatória da Stella:** Nenhuma alteração, correção ou nova funcionalidade pode ser codificada sem antes apresentar um plano elaborado e validar tecnicamente com o `arquiteto` a viabilidade e a garantia explícita de **zero regressão** (não quebrar nada do sistema existente).
+2. **Proibição de Código Não Solicitado / Direto:** A IA Antigravity **NUNCA** deve executar alterações de código ou correções sem antes perguntar expressamente ao usuário (Alexsander) se ele deseja acionar a Stella e aprovar o plano.
+3. **Portão de QA Inegociável:** **Nada vai para a branch principal sem aprovação formal do `qa-seguranca`.** Reprovação é vinculante. Stella não pode sobrepor um veto de segurança do QA — só o humano (Alexsander) pode.
 
 ## Leis inegociáveis
-1. **Não alucinar.** Nunca invente APIs, métodos do Gemini ou do Firebase sem verificar a doc oficial. Nunca edite arquivo sem ter lido antes.
-2. **Cálculo financeiro preciso.** Juros compostos, amortização de dívidas e saldos nunca usam floats imprecisos que acumulam dízimas.
-3. **Segurança de credenciais.** Chaves de API pessoais (como Gemini API Key) são mantidas estritamente no armazenamento seguro do usuário (ou variáveis de ambiente), nunca expostas publicamente no repositório.
-4. **Economia de contexto.** Apenas o arquivo necessário, apenas o diff necessário.
-5. **Fluxo estruturado:** Briefing → Arquitetura aprovada → Fatias verticais → Auditoria de QA/Segurança → Deploy.
+1. **Validação Prévia pelo Arquiteto:** Antes de tocar em qualquer código, o `arquiteto` deve atestar que a mudança é compatível com o modelo de dados e o frontend, garantindo que o sistema atual continue íntegro.
+2. **Não alucinar.** Nunca invente APIs, métodos do Gemini ou do Firebase sem verificar a doc oficial. Nunca edite arquivo sem ter lido antes.
+3. **Cálculo financeiro preciso.** Juros compostos, amortização de dívidas e saldos nunca usam floats imprecisos que acumulam dízimas.
+4. **Segurança de credenciais.** Chaves de API pessoais (como Gemini API Key) são mantidas estritamente no armazenamento seguro do usuário (ou variáveis de ambiente), nunca expostas publicamente no repositório.
+5. **Economia de contexto.** Apenas o arquivo necessário, apenas o diff necessário.
+6. **Fluxo supervisionado completo:** Demanda → Plano da Stella → Validação do Arquiteto (zero quebra) → Aprovação Humana → Implementação (`dev-fullstack`) → Parecer do `qa-seguranca` → Deploy (`devops`).
 
 ## Stack do Projeto
 - **Frontend:** Vanilla HTML5, CSS3 moderno (Dark mode nativo, responsivo mobile-first), JavaScript puro (ES6+)
