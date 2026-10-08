@@ -475,11 +475,13 @@ function go(id){
 }
 
 // MODALS
-function openM(id){ document.getElementById(id).classList.add('open'); }
-function closeM(id){ document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.modal-bg').forEach(m=>{
-  m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); });
-});
+function openM(id){ document.getElementById(id)?.classList.add('open'); }
+function closeM(id){ document.getElementById(id)?.classList.remove('open'); }
+if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+  document.querySelectorAll('.modal-bg').forEach(m=>{
+    m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); });
+  });
+}
 
 function selTag(el){ document.querySelectorAll('#cat-tags .tag').forEach(t=>t.classList.remove('sel')); el.classList.add('sel'); }
 
@@ -1293,6 +1295,372 @@ function excluirCartao(id) {
   return { ok: true, removidoId: id };
 }
 
+let cartaoAtualId = null;
+
+// Retorna resumo financeiro da fatura do cartão em determinada competência YYYY-MM
+function calcularFaturaMes(cartaoId, mesYM) {
+  const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
+  const cartao = (S.cartoes || []).find(c => c.id === cartaoId);
+  if (!cartao) {
+    return {
+      compras: [],
+      valorTotalCompras: 0,
+      anuidadeItem: null,
+      valorAnuidade: 0,
+      valorTotalFatura: 0,
+      cartao: null
+    };
+  }
+
+  // Compras ativas na competência
+  const compras = (S.comprasCartao || []).filter(c => c.cartaoId === cartaoId && c.mesFatura === ym);
+  const centavosCompras = compras.reduce((acc, c) => acc + Math.round((Number(c.val) || 0) * 100), 0);
+  const valorTotalCompras = Math.round(centavosCompras) / 100;
+
+  // Parcela de anuidade automática (se configurada e dentro do período de vigência)
+  let anuidadeItem = null;
+  let valorAnuidade = 0;
+  if (cartao.anuidade && cartao.anuidade.possui && cartao.anuidade.parcelas > 0 && cartao.anuidade.valorParcela > 0) {
+    const mesInicio = (cartao.anuidade.mesInicio || ym).slice(0, 7);
+    const qtd = cartao.anuidade.parcelas;
+    const diff = calcularMesesAtraso(mesInicio, ym);
+    if (diff >= 0 && diff < qtd) {
+      const parcelaNum = diff + 1;
+      anuidadeItem = {
+        desc: 'Anuidade do Cartão',
+        parcelaNum,
+        totalParcelas: qtd,
+        val: Math.round(Number(cartao.anuidade.valorParcela) * 100) / 100,
+        cat: 'recorrente'
+      };
+      valorAnuidade = anuidadeItem.val;
+    }
+  }
+
+  const centavosTotal = centavosCompras + Math.round(valorAnuidade * 100);
+  const valorTotalFatura = Math.round(centavosTotal) / 100;
+
+  return {
+    compras,
+    valorTotalCompras,
+    anuidadeItem,
+    valorAnuidade,
+    valorTotalFatura,
+    cartao
+  };
+}
+
+// Renderiza cards horizontais de cartões de crédito no topo da aba Gastos
+function renderCartoesTopo() {
+  const container = document.getElementById('cartoes-topo-container');
+  if (!container) return;
+
+  const cartoesAtivos = (S.cartoes || []).filter(c => c.ativo !== false);
+  if (!cartoesAtivos.length) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  container.style.display = 'flex';
+  container.innerHTML = cartoesAtivos.map(c => {
+    const fatura = calcularFaturaMes(c.id, mesAtual);
+    const temValor = fatura.valorTotalFatura > 0;
+    const corValor = temValor ? 'var(--red)' : 'var(--green)';
+
+    return `<div class="card" onclick="abrirFaturaCartao(${c.id})" style="min-width:220px;max-width:260px;flex:0 0 auto;cursor:pointer;border:1px solid rgba(139,92,246,0.35);background:linear-gradient(135deg, rgba(139,92,246,0.12), rgba(0,0,0,0.4));border-radius:12px;padding:12px;transition:transform 0.15s, border-color 0.15s;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-weight:700;font-size:14px;color:#c084fc;">💳 ${escapeHtml(c.nome)}</span>
+        <span style="font-size:11px;color:var(--muted);background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;">Venc: ${c.diaVencimento || 10}</span>
+      </div>
+      ${c.titular ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">👤 ${escapeHtml(c.titular)}</div>` : ''}
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Fatura ${mesLabel(mesAtual)}:</div>
+      <div style="font-size:18px;font-weight:700;color:${corValor};margin-top:2px;">
+        ${fmt(fatura.valorTotalFatura)}
+      </div>
+      <div style="font-size:11px;color:#a855f7;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+        <span>👁️ Ver compras</span>
+        <span style="font-size:10px;opacity:0.8;">›</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Abre o modal detalhado da fatura do cartão
+function abrirFaturaCartao(cartaoId, mesYM) {
+  cartaoAtualId = cartaoId;
+  const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
+  const fatura = calcularFaturaMes(cartaoId, ym);
+  if (!fatura.cartao) return;
+
+  const elTitulo = document.getElementById('fatura-titulo');
+  if (elTitulo) elTitulo.textContent = `💳 Fatura ${fatura.cartao.nome} - ${mesLabel(ym)}`;
+
+  const elTotal = document.getElementById('fatura-valor-total');
+  if (elTotal) elTotal.textContent = fmt(fatura.valorTotalFatura);
+
+  const elSub = document.getElementById('fatura-subinfo');
+  if (elSub) {
+    elSub.textContent = `${fatura.cartao.titular ? `Titular: ${fatura.cartao.titular} • ` : ''}Vencimento: dia ${fatura.cartao.diaVencimento || 10} • Rotativo: ${fatura.cartao.taxaRotativo || 0}% a.m.`;
+  }
+
+  const elBtnAdd = document.getElementById('btn-add-compra-fatura');
+  if (elBtnAdd) {
+    elBtnAdd.setAttribute('onclick', `abrirModalCompraCartao(${cartaoId})`);
+  }
+
+  const elLista = document.getElementById('fatura-itens-lista');
+  if (elLista) {
+    let html = '';
+
+    // Item de anuidade
+    if (fatura.anuidadeItem) {
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.25);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <strong>🛡️ ${escapeHtml(fatura.anuidadeItem.desc)}</strong>
+          <span class="badge" style="background:rgba(168,85,247,0.2);color:#c084fc;">Anuidade ${fatura.anuidadeItem.parcelaNum}/${fatura.anuidadeItem.totalParcelas}</span>
+        </div>
+        <div style="font-weight:600;color:var(--red);">${fmt(fatura.anuidadeItem.val)}</div>
+      </div>`;
+    }
+
+    // Compras do cartão
+    if (fatura.compras.length) {
+      html += fatura.compras.map(c => {
+        const parcBadge = c.parcelado ? `<span class="badge b-parc">${c.parcelaNum}/${c.totalParcelas}</span>` : '';
+        const catBadge = `<span class="badge ${c.cat === 'recorrente' ? 'b-rec' : 'b-laz'}">${escapeHtml(getNomeCategoria(c.cat))}</span>`;
+
+        return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <strong>${escapeHtml(c.desc)}</strong>
+            ${catBadge}
+            ${parcBadge}
+            <span style="font-size:11px;color:var(--muted);">${escapeHtml(c.data || '')}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:600;color:var(--red);">${fmt(c.val)}</span>
+            <span class="item-del" style="font-size:16px;cursor:pointer;color:var(--muted);" onclick="excluirCompraCartao(${c.id})" title="Excluir compra">×</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    if (!fatura.compras.length && !fatura.anuidadeItem) {
+      html = '<p style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">Nenhuma compra nesta fatura.</p>';
+    }
+
+    elLista.innerHTML = html;
+  }
+
+  openM('m-fatura-cartao');
+}
+
+// Abre o modal para cadastrar compra no cartão
+function abrirModalCompraCartao(cartaoId) {
+  cartaoAtualId = cartaoId;
+  const elCartaoId = document.getElementById('cc-cartao-id');
+  if (elCartaoId) elCartaoId.value = cartaoId;
+
+  const elDesc = document.getElementById('cc-desc');
+  if (elDesc) elDesc.value = '';
+
+  const elVal = document.getElementById('cc-val');
+  if (elVal) elVal.value = '';
+
+  const elData = document.getElementById('cc-data');
+  if (elData) elData.value = dataDefaultParaModal();
+
+  const elParcChk = document.getElementById('cc-is-parcelado');
+  if (elParcChk) elParcChk.checked = false;
+
+  const blocoParc = document.getElementById('cc-bloco-parcelamento');
+  if (blocoParc) blocoParc.style.display = 'none';
+
+  const elParcNum = document.getElementById('cc-parcelas');
+  if (elParcNum) elParcNum.value = '2';
+
+  const elPrev = document.getElementById('cc-preview-parcela');
+  if (elPrev) elPrev.textContent = '';
+
+  // Popula categorias no select
+  const elCat = document.getElementById('cc-cat');
+  if (elCat) {
+    const cats = S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS;
+    elCat.innerHTML = cats.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.nome)}</option>`).join('');
+  }
+
+  openM('m-compra-cartao');
+}
+
+function toggleCompraParcelada() {
+  const chk = document.getElementById('cc-is-parcelado');
+  const bloco = document.getElementById('cc-bloco-parcelamento');
+  if (bloco) {
+    bloco.style.display = chk && chk.checked ? 'block' : 'none';
+  }
+  atualizarPreviewCompraParcelada();
+}
+
+function atualizarPreviewCompraParcelada() {
+  const chk = document.getElementById('cc-is-parcelado');
+  const elPrev = document.getElementById('cc-preview-parcela');
+  if (!elPrev) return;
+  if (!chk || !chk.checked) {
+    elPrev.textContent = '';
+    return;
+  }
+  const val = parseFloat(String(document.getElementById('cc-val')?.value || '0').replace(',', '.')) || 0;
+  const num = parseInt(document.getElementById('cc-parcelas')?.value || '2', 10) || 2;
+  if (val > 0 && num >= 2) {
+    const baseCentavos = Math.floor(Math.round(val * 100) / num);
+    elPrev.textContent = `${num}x de aproximadamente ${fmt(baseCentavos / 100)} / mês`;
+  } else {
+    elPrev.textContent = '';
+  }
+}
+
+// Salva compra avulsa ou parcelada no cartão
+function salvarCompraCartao(dadosOverride) {
+  const elCartaoId = document.getElementById('cc-cartao-id');
+  const cartaoId = dadosOverride?.cartaoId || (elCartaoId ? parseInt(elCartaoId.value, 10) : cartaoAtualId);
+  const cartao = (S.cartoes || []).find(c => c.id === cartaoId);
+  if (!cartao) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Selecione um cartão válido.');
+    return { ok: false, erro: 'Cartão não encontrado' };
+  }
+
+  const elDesc = document.getElementById('cc-desc');
+  const descRaw = dadosOverride?.desc ?? (elDesc ? elDesc.value : '');
+  const desc = String(descRaw || '').trim();
+  if (!desc) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Informe a descrição da compra.');
+    return { ok: false, erro: 'Descrição obrigatória' };
+  }
+
+  const elVal = document.getElementById('cc-val');
+  const valRaw = dadosOverride?.val ?? (elVal ? elVal.value : '');
+  const val = parseFloat(String(valRaw).replace(',', '.'));
+  if (isNaN(val) || val <= 0) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Informe um valor válido maior que zero.');
+    return { ok: false, erro: 'Valor inválido' };
+  }
+
+  const elData = document.getElementById('cc-data');
+  const dataRaw = dadosOverride?.data ?? (elData ? elData.value : '');
+  const data = (dataRaw || new Date().toISOString().slice(0, 10)).trim();
+
+  const elCat = document.getElementById('cc-cat');
+  const cat = dadosOverride?.cat || (elCat ? elCat.value : 'nao_planejado');
+
+  const elChk = document.getElementById('cc-is-parcelado');
+  const isParcelado = Boolean(dadosOverride?.parcelado ?? (elChk ? elChk.checked : false));
+
+  if (!Array.isArray(S.comprasCartao)) S.comprasCartao = [];
+
+  if (isParcelado) {
+    const elNum = document.getElementById('cc-parcelas');
+    const numRaw = dadosOverride?.parcelas ?? (elNum ? elNum.value : '2');
+    const num = Math.min(48, Math.max(2, parseInt(numRaw, 10) || 2));
+
+    const totalCentavos = Math.round(val * 100);
+    const baseCentavos = Math.floor(totalCentavos / num);
+    const restoCentavos = totalCentavos - (baseCentavos * num);
+    const grupoId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+    for (let i = 1; i <= num; i++) {
+      const centavosDesta = baseCentavos + (i === num ? restoCentavos : 0);
+      const vParc = centavosDesta / 100;
+      const dt = adicionarMeses(data, i - 1);
+      const mesFatura = dt.slice(0, 7);
+
+      S.comprasCartao.push({
+        id: Date.now() + i + Math.floor(Math.random() * 1000),
+        cartaoId,
+        desc: `${escapeHtml(desc)} (${i}/${num})`,
+        descOriginal: escapeHtml(desc),
+        val: vParc,
+        valTotal: Math.round(val * 100) / 100,
+        cat,
+        data: dt,
+        mesFatura,
+        titular: cartao.titular || '',
+        parcelado: true,
+        parcelaNum: i,
+        totalParcelas: num,
+        grupoId
+      });
+    }
+  } else {
+    const mesFatura = data.slice(0, 7);
+    S.comprasCartao.push({
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      cartaoId,
+      desc: escapeHtml(desc),
+      val: Math.round(val * 100) / 100,
+      valTotal: Math.round(val * 100) / 100,
+      cat,
+      data,
+      mesFatura,
+      titular: cartao.titular || '',
+      parcelado: false,
+      parcelaNum: 1,
+      totalParcelas: 1,
+      grupoId: ''
+    });
+  }
+
+  save();
+  closeM('m-compra-cartao');
+  render();
+
+  // Se o modal de fatura estiver visível ou chamado do card, atualiza visualização
+  const modalFatura = document.getElementById('m-fatura-cartao');
+  if (modalFatura && modalFatura.classList.contains('open')) {
+    abrirFaturaCartao(cartaoId, mesAtual);
+  }
+
+  if (typeof alert === 'function' && !dadosOverride) {
+    alert(`🛍️ Compra registrada com sucesso no cartão ${cartao.nome}!`);
+  }
+  return { ok: true };
+}
+
+// Remove compra do cartão
+function excluirCompraCartao(compraId, excluirTodasParam) {
+  if (!Array.isArray(S.comprasCartao)) return { ok: false };
+  const compra = S.comprasCartao.find(x => x.id === compraId);
+  if (!compra) return { ok: false, erro: 'Compra não encontrada' };
+
+  let excluirTodas = false;
+  if (compra.parcelado && compra.grupoId) {
+    if (typeof excluirTodasParam === 'boolean') {
+      excluirTodas = excluirTodasParam;
+    } else {
+      excluirTodas = typeof confirm === 'function'
+        ? confirm(`Esta compra faz parte de um parcelamento (${compra.parcelaNum}/${compra.totalParcelas}).\n\nOK = Excluir TODAS as parcelas deste grupo.\nCancelar = Excluir apenas ESTA parcela.`)
+        : true;
+    }
+  } else {
+    const confirma = typeof confirm === 'function' ? confirm(`Excluir a compra "${compra.desc}"?`) : true;
+    if (!confirma) return { ok: false, cancelado: true };
+  }
+
+  if (excluirTodas && compra.grupoId) {
+    S.comprasCartao = S.comprasCartao.filter(x => x.grupoId !== compra.grupoId);
+  } else {
+    S.comprasCartao = S.comprasCartao.filter(x => x.id !== compraId);
+  }
+
+  save();
+  render();
+
+  const modalFatura = document.getElementById('m-fatura-cartao');
+  if (modalFatura && modalFatura.classList.contains('open') && compra.cartaoId) {
+    abrirFaturaCartao(compra.cartaoId, mesAtual);
+  }
+  return { ok: true, removidoId: compraId };
+}
+
 function abrirModalGasto(){
   document.getElementById('g-data').value = dataDefaultParaModal();
   document.getElementById('g-is-parcelado').checked = false;
@@ -1671,33 +2039,42 @@ function calcSaldoAcumuladoAnterior(targetYM) {
 
 function calcTotais(){
   const rec = receitasDoMes(), gas = gastosDoMes().filter(g => !g.negociado && !g.canceladaNegativacao);
-  const totalRec = rec.reduce((s,r) => s + r.val, 0);
-  const totalGas = gas.reduce((s,g) => s + g.val, 0);
+  const totalRec = Math.round(rec.reduce((s,r) => s + r.val, 0) * 100) / 100;
+  
+  // Total das faturas de cartões de crédito ativas no mês atual (evita poluição da lista avulsa e soma direta)
+  let totalFaturasCartao = 0;
+  (S.cartoes || []).filter(c => c.ativo !== false).forEach(c => {
+    const f = calcularFaturaMes(c.id, mesAtual);
+    totalFaturasCartao += f.valorTotalFatura;
+  });
+  totalFaturasCartao = Math.round(totalFaturasCartao * 100) / 100;
+
+  const totalGas = Math.round((gas.reduce((s,g) => s + g.val, 0) + totalFaturasCartao) * 100) / 100;
   
   // Aportes de investimentos no mês
   const invMes = investimentosDoMes(mesAtual);
-  const totalInv = invMes.reduce((s,i) => s + (i.valorInicial || 0), 0);
+  const totalInv = Math.round(invMes.reduce((s,i) => s + (i.valorInicial || 0), 0) * 100) / 100;
   
-  const gasRec = gas.filter(g => g.cat === 'recorrente').reduce((s,g) => s + g.val, 0);
-  const gasLaz = gas.filter(g => g.cat === 'lazer').reduce((s,g) => s + g.val, 0);
-  const gasNP = gas.filter(g => g.cat === 'nao_planejado').reduce((s,g) => s + g.val, 0);
-  const gasVg = gas.filter(g => g.cat === 'viagem').reduce((s,g) => s + g.val, 0);
+  const gasRec = Math.round(gas.filter(g => g.cat === 'recorrente').reduce((s,g) => s + g.val, 0) * 100) / 100;
+  const gasLaz = Math.round(gas.filter(g => g.cat === 'lazer').reduce((s,g) => s + g.val, 0) * 100) / 100;
+  const gasNP = Math.round(gas.filter(g => g.cat === 'nao_planejado').reduce((s,g) => s + g.val, 0) * 100) / 100;
+  const gasVg = Math.round(gas.filter(g => g.cat === 'viagem').reduce((s,g) => s + g.val, 0) * 100) / 100;
   
   const abertas = S.dividas.filter(d => !d.quitada);
-  const totalDiv = abertas.reduce((s,d) => s + saldoRestante(d), 0);
-  const custoJuros = abertas.filter(d => !d.acordo).reduce((s,d) => s + (d.saldo * (d.juros/100)), 0);
+  const totalDiv = Math.round(abertas.reduce((s,d) => s + saldoRestante(d), 0) * 100) / 100;
+  const custoJuros = Math.round(abertas.filter(d => !d.acordo).reduce((s,d) => s + (d.saldo * (d.juros/100)), 0) * 100) / 100;
   
   // Saldo líquido do mês corrente: Receitas - Gastos - Aportes
-  const saldoMes = totalRec - totalGas - totalInv;
+  const saldoMes = Math.round((totalRec - totalGas - totalInv) * 100) / 100;
   
   // Sobras acumuladas de meses anteriores
   const saldoAnterior = calcSaldoAcumuladoAnterior(mesAtual);
   
   // Saldo total disponível
-  const saldoDisp = saldoMes + saldoAnterior;
+  const saldoDisp = Math.round((saldoMes + saldoAnterior) * 100) / 100;
   
   return {
-    totalRec, totalGas, totalInv,
+    totalRec, totalGas, totalInv, totalFaturasCartao,
     gasRec, gasLaz, gasNP, gasVg,
     totalDiv, custoJuros,
     saldoMes, saldoAnterior, saldoDisp
@@ -1710,26 +2087,40 @@ function calcTotaisAno(anoStr){
   const gasAno = (S.gastos || []).filter(g => (g.data||'').slice(0,4) === ano && !g.negociado && !g.canceladaNegativacao);
   const invAno = (S.investimentos || []).filter(i => (i.dataInicio||'').slice(0,4) === ano);
 
-  const totalRec = recAno.reduce((s,r) => s + r.val, 0);
-  const totalGas = gasAno.reduce((s,g) => s + g.val, 0);
-  const totalInv = invAno.reduce((s,i) => s + (i.valorInicial || 0), 0);
+  const totalRec = Math.round(recAno.reduce((s,r) => s + r.val, 0) * 100) / 100;
 
-  const gasRec = gasAno.filter(g => g.cat === 'recorrente').reduce((s,g) => s + g.val, 0);
-  const gasLaz = gasAno.filter(g => g.cat === 'lazer').reduce((s,g) => s + g.val, 0);
-  const gasNP = gasAno.filter(g => g.cat === 'nao_planejado').reduce((s,g) => s + g.val, 0);
-  const gasVg = gasAno.filter(g => g.cat === 'viagem').reduce((s,g) => s + g.val, 0);
+  // Faturas de cartões de crédito nos 12 meses do ano
+  let totalFaturasAno = 0;
+  const cartoesAtivos = (S.cartoes || []).filter(c => c.ativo !== false);
+  for (let m = 1; m <= 12; m++) {
+    const ym = `${ano}-${String(m).padStart(2, '0')}`;
+    cartoesAtivos.forEach(c => {
+      const f = calcularFaturaMes(c.id, ym);
+      totalFaturasAno += f.valorTotalFatura;
+    });
+  }
+  totalFaturasAno = Math.round(totalFaturasAno * 100) / 100;
+
+  const totalGas = Math.round((gasAno.reduce((s,g) => s + g.val, 0) + totalFaturasAno) * 100) / 100;
+  const totalInv = Math.round(invAno.reduce((s,i) => s + (i.valorInicial || 0), 0) * 100) / 100;
+
+  const gasRec = Math.round(gasAno.filter(g => g.cat === 'recorrente').reduce((s,g) => s + g.val, 0) * 100) / 100;
+  const gasLaz = Math.round(gasAno.filter(g => g.cat === 'lazer').reduce((s,g) => s + g.val, 0) * 100) / 100;
+  const gasNP = Math.round(gasAno.filter(g => g.cat === 'nao_planejado').reduce((s,g) => s + g.val, 0) * 100) / 100;
+  const gasVg = Math.round(gasAno.filter(g => g.cat === 'viagem').reduce((s,g) => s + g.val, 0) * 100) / 100;
 
   const abertas = S.dividas.filter(d => !d.quitada);
-  const totalDiv = abertas.reduce((s,d) => s + saldoRestante(d), 0);
-  const custoJuros = abertas.filter(d => !d.acordo).reduce((s,d) => s + (d.saldo * (d.juros/100)), 0);
+  const totalDiv = Math.round(abertas.reduce((s,d) => s + saldoRestante(d), 0) * 100) / 100;
+  const custoJuros = Math.round(abertas.filter(d => !d.acordo).reduce((s,d) => s + (d.saldo * (d.juros/100)), 0) * 100) / 100;
 
-  const saldoLiquido = totalRec - totalGas - totalInv;
+  const saldoLiquido = Math.round((totalRec - totalGas - totalInv) * 100) / 100;
 
   return {
     ano,
     totalRec,
     totalGas,
     totalInv,
+    totalFaturasAno,
     gasRec,
     gasLaz,
     gasNP,
@@ -1784,6 +2175,7 @@ function render(){
   atualizarSelectsTipoDivida();
   renderCategoriasModalGasto();
   updateMesLabel();
+  renderCartoesTopo();
   renderMetas(); // Atualiza m.atual
   renderResumo();
   renderReceitas();
@@ -2032,16 +2424,46 @@ function renderReceitas(){
 
 function renderGastos(){
   renderFiltroTitulares('filtro-titular-gastos', filtroTitularGasto, 'setFiltroTitularGasto');
+  renderCartoesTopo();
   const t=calcTotais();
   const bd=document.getElementById('breakdown-gastos');
   const listaMes=gastosDoMes();
-  if(listaMes.length){
-    const cats = (S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS).map(c => {
-      const v = listaMes.filter(g => g.cat === c.id).reduce((s,g) => s + g.val, 0);
-      return { l: c.nome, v, c: c.cor || 'c-muted' };
-    }).filter(c => c.v > 0);
-    bd.innerHTML = `<div class="grid2">${cats.slice(0, 6).map(c=>`<div class="mc"><p class="mc-label">${escapeHtml(c.l)}</p><p class="mc-val ${c.c}">${fmt(c.v)}</p></div>`).join('')}</div>`;
-  } else bd.innerHTML='';
+
+  // Coleta compras de cartões ativos na competência do mês para cálculo do breakdown
+  const comprasMes = (S.comprasCartao || []).filter(c => {
+    if (c.mesFatura !== mesAtual) return false;
+    const cartao = (S.cartoes || []).find(x => x.id === c.cartaoId);
+    if (!cartao || cartao.ativo === false) return false;
+    if (filtroTitularGasto !== 'todos' && c.titular !== filtroTitularGasto) return false;
+    return true;
+  });
+
+  // Soma de parcelas de anuidades ativas no mês
+  let totalAnuidadeMes = 0;
+  (S.cartoes || []).filter(c => {
+    if (c.ativo === false) return false;
+    if (filtroTitularGasto !== 'todos' && c.titular !== filtroTitularGasto) return false;
+    return true;
+  }).forEach(c => {
+    const f = calcularFaturaMes(c.id, mesAtual);
+    if (f.anuidadeItem) totalAnuidadeMes += f.valorAnuidade;
+  });
+
+  const temItensBreakdown = listaMes.length > 0 || comprasMes.length > 0 || totalAnuidadeMes > 0;
+  if(bd){
+    if(temItensBreakdown){
+      const cats = (S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS).map(c => {
+        const vGasto = listaMes.filter(g => g.cat === c.id && (filtroTitularGasto === 'todos' || g.titular === filtroTitularGasto)).reduce((s,g) => s + g.val, 0);
+        const vCompras = comprasMes.filter(cp => cp.cat === c.id).reduce((s,cp) => s + (Number(cp.val) || 0), 0);
+        const vAnuidade = (c.id === 'recorrente') ? totalAnuidadeMes : 0;
+        const v = Math.round((vGasto + vCompras + vAnuidade) * 100) / 100;
+        return { l: c.nome, v, c: c.cor || 'c-muted' };
+      }).filter(c => c.v > 0);
+      bd.innerHTML = cats.length ? `<div class="grid2">${cats.slice(0, 6).map(c=>`<div class="mc"><p class="mc-label">${escapeHtml(c.l)}</p><p class="mc-val ${c.c}">${fmt(c.v)}</p></div>`).join('')}</div>` : '';
+    } else {
+      bd.innerHTML = '';
+    }
+  }
 
   // Inadimplência acumulada de meses anteriores
   const inadBox = document.getElementById('inadimplencia-box');
@@ -2084,12 +2506,37 @@ function renderGastos(){
   
   const previstos = gastosPrevistosDoMes().filter(g => filtroTitularGasto === 'todos' || g.titular === filtroTitularGasto);
 
-  if(!previstos.length && !inadFiltrada.length){
+  // Faturas consolidadas de cartões de crédito no mês (compras individuais não poluem a lista)
+  const cartoesComFatura = (S.cartoes || []).filter(c => {
+    if (c.ativo === false) return false;
+    if (filtroTitularGasto !== 'todos' && c.titular !== filtroTitularGasto) return false;
+    const f = calcularFaturaMes(c.id, mesAtual);
+    return f.valorTotalFatura > 0;
+  });
+
+  const faturasHtml = cartoesComFatura.map(c => {
+    const f = calcularFaturaMes(c.id, mesAtual);
+    const titBadge = c.titular ? `<span class="badge b-titular">${escapeHtml(c.titular)}</span>` : '';
+    return `<div class="item-row" style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.3);border-radius:10px;margin-bottom:8px;">
+      <div style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+        <span class="item-name" style="font-weight:700;color:#c084fc;">💳 Fatura ${escapeHtml(c.nome)}</span>
+        <span class="badge" style="background:rgba(139,92,246,0.25);color:#d8b4fe;">Cartão de Crédito</span>
+        ${titBadge}
+        <span style="font-size:11px;color:var(--muted);">Venc: dia ${c.diaVencimento || 10}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="item-val c-red" style="font-weight:700;">${fmt(f.valorTotalFatura)}</span>
+        <button class="btn" style="width:auto;padding:5px 10px;font-size:11px;background:rgba(168,85,247,0.2);color:#c084fc;border:1px solid rgba(168,85,247,0.4);" onclick="abrirFaturaCartao(${c.id})">👁️ Ver Fatura</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  if(!previstos.length && !inadFiltrada.length && !cartoesComFatura.length){
     el.innerHTML='<p style="color:var(--muted);font-size:14px;padding:8px 0;">Nenhum gasto neste mês.</p>';
     return;
   }
   
-  el.innerHTML=previstos.map(g=>{
+  el.innerHTML = faturasHtml + previstos.map(g=>{
     const tipoDivTxt = g.tipoDivida ? (TIPOS_DIVIDA[g.tipoDivida] || g.tipoDivida) : '';
     const origemTxt = g.origemDivida ? `${escapeHtml(g.origemDivida)} • ` : '';
     const parcBadge = g.parcelado ? `<span class="badge b-parc">${origemTxt}${tipoDivTxt ? escapeHtml(tipoDivTxt) + ' ' : ''}${g.parcelaNum}/${g.totalParcelas}</span>` : '';
@@ -2399,6 +2846,14 @@ if (typeof module !== 'undefined' && module.exports) {
     excluirCartao,
     toggleAnuidadeCartao,
     atualizarTotalAnuidade,
+    calcularFaturaMes,
+    renderCartoesTopo,
+    abrirFaturaCartao,
+    abrirModalCompraCartao,
+    salvarCompraCartao,
+    excluirCompraCartao,
+    toggleCompraParcelada,
+    atualizarPreviewCompraParcelada,
     S
   };
 }

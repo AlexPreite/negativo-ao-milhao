@@ -301,6 +301,7 @@
     <!-- GASTOS -->
     <div id="sec-gastos" class="section" style="display:none;">
       <div class="mes-switch"><button onclick="mudarMes(-1)">‹</button><span class="mes-label">Mês/Ano</span><button onclick="mudarMes(1)">›</button></div>
+      <div id="cartoes-topo-container" style="display:flex;gap:10px;overflow-x:auto;padding-bottom:12px;margin-bottom:14px;"></div>
       <div id="filtro-titular-gastos" style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;"></div>
       <div id="inadimplencia-box"></div>
       <p class="sec-title">Gastos registrados</p>
@@ -562,6 +563,60 @@
       </div>
     </div>
     <button class="btn btn-g" style="margin-top:10px;" onclick="salvarCartao()">Salvar Cartão</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-fatura-cartao">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column;">
+    <span class="modal-close" onclick="closeM('m-fatura-cartao')">×</span>
+    <p class="modal-title" id="fatura-titulo">💳 Detalhes da Fatura</p>
+    <div class="card" style="margin-bottom:12px;background:var(--bg3);">
+      <p class="card-label">Total da fatura neste mês</p>
+      <p class="big-num c-red" id="fatura-valor-total">R$ 0,00</p>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px;" id="fatura-subinfo"></p>
+    </div>
+    <button type="button" class="btn btn-g" style="margin-bottom:14px;padding:9px;font-size:13px;" id="btn-add-compra-fatura" onclick="abrirModalCompraCartao(cartaoAtualId)">+ Adicionar compra neste cartão</button>
+    <p class="sec-title" style="font-size:13px;margin:0 0 6px;">Itens da fatura</p>
+    <div id="fatura-itens-lista" style="flex:1;overflow-y:auto;max-height:280px;margin-bottom:12px;"></div>
+    <button class="btn" onclick="closeM('m-fatura-cartao')">Fechar</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-compra-cartao">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-compra-cartao')">×</span>
+    <p class="modal-title">🛍️ Nova Compra no Cartão</p>
+    <input type="hidden" id="cc-cartao-id"/>
+    <div class="input-row">
+      <label>Descrição da compra</label>
+      <input type="text" id="cc-desc" placeholder="Ex: Mercado Pão de Açúcar, Farmácia..."/>
+    </div>
+    <div class="input-row">
+      <label>Valor total da compra (R$)</label>
+      <input type="number" id="cc-val" placeholder="0,00" inputmode="decimal" step="0.01" oninput="atualizarPreviewCompraParcelada()"/>
+    </div>
+    <div class="input-row">
+      <label>Categoria</label>
+      <select id="cc-cat"></select>
+    </div>
+    <div class="input-row">
+      <label>Data da compra</label>
+      <input type="date" id="cc-data"/>
+    </div>
+    <div class="input-row" style="margin-top:6px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:14px;">
+        <input type="checkbox" id="cc-is-parcelado" onchange="toggleCompraParcelada()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;"/>
+        <span>Compra parcelada?</span>
+      </label>
+    </div>
+    <div id="cc-bloco-parcelamento" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+      <div class="input-row">
+        <label>Quantidade de parcelas</label>
+        <input type="number" id="cc-parcelas" min="2" max="48" value="2" inputmode="numeric" oninput="atualizarPreviewCompraParcelada()"/>
+      </div>
+      <p id="cc-preview-parcela" style="font-size:13px;color:var(--yellow);font-weight:600;margin-top:4px;"></p>
+    </div>
+    <button class="btn btn-g" style="margin-top:10px;" onclick="salvarCompraCartao()">Salvar Compra</button>
   </div>
 </div>
 
