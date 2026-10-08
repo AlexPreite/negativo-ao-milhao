@@ -32,6 +32,9 @@ let S = {
   dividas:[],
   metas:[],
   investimentos:[],
+  cartoes:[],
+  comprasCartao:[],
+  faturasCartao:[],
   membrosFamilia:['Alex', 'Gabi'],
   categoriasGastos:[...DEFAULT_CATEGORIAS_GASTOS],
   tiposDivida:[...DEFAULT_TIPOS_DIVIDA],
@@ -238,6 +241,10 @@ function loadState(){
   (S.investimentos||[]).forEach(inv=>{
     if(inv.titular===undefined) inv.titular='';
   });
+
+  if (!Array.isArray(S.cartoes)) S.cartoes = [];
+  if (!Array.isArray(S.comprasCartao)) S.comprasCartao = [];
+  if (!Array.isArray(S.faturasCartao)) S.faturasCartao = [];
 
   // Executa processamento após carga do localStorage
   processarInadimplencia60Dias();
@@ -539,14 +546,17 @@ function obterTitularesUnicos() {
   (S.gastos||[]).forEach(g => { if (g.titular && g.titular.trim()) set.add(g.titular.trim()); });
   (S.dividas||[]).forEach(d => { if (d.titular && d.titular.trim()) set.add(d.titular.trim()); });
   (S.investimentos||[]).forEach(inv => { if (inv.titular && inv.titular.trim()) set.add(inv.titular.trim()); });
+  (S.cartoes||[]).forEach(c => { if (c.titular && c.titular.trim()) set.add(c.titular.trim()); });
   return Array.from(set).sort();
 }
 
 function atualizarDatalistTitulares() {
-  const dl = document.getElementById('titulares-list');
-  if (!dl) return;
   const nomes = obterTitularesUnicos();
-  dl.innerHTML = nomes.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+  const html = nomes.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+  ['titulares-list', 'lista-titulares'].forEach(id => {
+    const dl = document.getElementById(id);
+    if (dl) dl.innerHTML = html;
+  });
 }
 
 function addMembroFamilia(){
@@ -1099,6 +1109,190 @@ function salvarNegociacaoGasto(){
   alert(`✅ Negociação confirmada com sucesso!\nO gasto atrasado foi baixado e ${num} nova(s) parcela(s) de ${fmt(baseCentavos/100)} foram geradas.`);
 }
 
+// CARTÕES DE CRÉDITO (Fatia 2)
+function toggleAnuidadeCartao() {
+  const chk = document.getElementById('cartao-tem-anuidade');
+  const bloco = document.getElementById('bloco-anuidade-cartao');
+  if (bloco) {
+    bloco.style.display = chk && chk.checked ? 'block' : 'none';
+  }
+}
+
+function atualizarTotalAnuidade() {
+  const parcEl = document.getElementById('cartao-anuidade-parcelas');
+  const valParcEl = document.getElementById('cartao-anuidade-valor-parcela');
+  const totalEl = document.getElementById('cartao-anuidade-valor-total');
+  if (!parcEl || !valParcEl || !totalEl) return;
+  const numParc = parseInt(parcEl.value, 10) || 0;
+  const valParc = parseFloat(String(valParcEl.value).replace(',', '.')) || 0;
+  if (numParc > 0 && valParc > 0) {
+    const totalCentavos = Math.round(numParc * Math.round(valParc * 100));
+    totalEl.value = (totalCentavos / 100).toFixed(2);
+  }
+}
+
+function abrirModalCartao() {
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+  setVal('cartao-nome', '');
+  setVal('cartao-titular', '');
+  setVal('cartao-taxa-atraso', '');
+  setVal('cartao-dia-vencimento', '10');
+
+  const chk = document.getElementById('cartao-tem-anuidade');
+  if (chk) chk.checked = false;
+
+  const bloco = document.getElementById('bloco-anuidade-cartao');
+  if (bloco) bloco.style.display = 'none';
+
+  setVal('cartao-anuidade-parcelas', '12');
+  setVal('cartao-anuidade-valor-parcela', '');
+  setVal('cartao-anuidade-valor-total', '');
+
+  const mesAtualHoje = new Date().toISOString().slice(0, 7);
+  setVal('cartao-anuidade-mes-inicio', mesAtualHoje);
+
+  atualizarDatalistTitulares();
+  openM('m-cartao');
+}
+
+function salvarCartao(dadosOverride) {
+  // Coleta dados dos inputs do DOM ou do parâmetro dadosOverride (para testes / chamadas programáticas)
+  const elNome = document.getElementById('cartao-nome');
+  const nomeRaw = dadosOverride?.nome ?? (elNome ? elNome.value : '');
+  const nomeLimpo = String(nomeRaw || '').trim();
+
+  // Validação: nome é obrigatório
+  if (!nomeLimpo) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Informe o nome do cartão de crédito.');
+    return { ok: false, erro: 'Nome obrigatório' };
+  }
+
+  // Sanitização contra injeção de HTML / XSS
+  const nome = escapeHtml(nomeLimpo);
+
+  const elTitular = document.getElementById('cartao-titular');
+  const titularRaw = dadosOverride?.titular ?? (elTitular ? elTitular.value : '');
+  const titular = escapeHtml(String(titularRaw || '').trim());
+
+  // Taxa de rotativo / atraso (% a.m.)
+  const elTaxa = document.getElementById('cartao-taxa-atraso');
+  const taxaRaw = dadosOverride?.taxaRotativo ?? (elTaxa ? elTaxa.value : '');
+  let taxaRotativo = 0;
+  if (taxaRaw !== '' && taxaRaw !== null && taxaRaw !== undefined) {
+    taxaRotativo = parseFloat(String(taxaRaw).replace(',', '.'));
+    if (isNaN(taxaRotativo) || taxaRotativo < 0) {
+      if (typeof alert === 'function' && !dadosOverride) alert('A taxa de atraso / rotativo deve ser maior ou igual a zero.');
+      return { ok: false, erro: 'Taxa inválida' };
+    }
+  }
+  taxaRotativo = Math.round(taxaRotativo * 100) / 100;
+
+  // Dia do vencimento (1 a 31)
+  const elVenc = document.getElementById('cartao-dia-vencimento');
+  const vencRaw = dadosOverride?.diaVencimento ?? (elVenc ? elVenc.value : '10');
+  const diaVencimento = parseInt(vencRaw, 10);
+  if (isNaN(diaVencimento) || diaVencimento < 1 || diaVencimento > 31) {
+    if (typeof alert === 'function' && !dadosOverride) alert('O dia do vencimento deve estar entre 1 e 31.');
+    return { ok: false, erro: 'Dia de vencimento inválido' };
+  }
+
+  // Anuidade
+  const elChk = document.getElementById('cartao-tem-anuidade');
+  const possuiAnuidade = Boolean(dadosOverride?.anuidade?.possui ?? (elChk ? elChk.checked : false));
+  let anuidadeObj = {
+    possui: false,
+    parcelas: 0,
+    valorParcela: 0,
+    valorTotal: 0,
+    mesInicio: ''
+  };
+
+  if (possuiAnuidade) {
+    const elParc = document.getElementById('cartao-anuidade-parcelas');
+    const parcRaw = dadosOverride?.anuidade?.parcelas ?? (elParc ? elParc.value : '12');
+    const parcelas = parseInt(parcRaw, 10);
+    if (isNaN(parcelas) || parcelas < 1 || parcelas > 12) {
+      if (typeof alert === 'function' && !dadosOverride) alert('A quantidade de parcelas da anuidade deve ser entre 1 e 12.');
+      return { ok: false, erro: 'Parcelas da anuidade inválidas' };
+    }
+
+    const elValParc = document.getElementById('cartao-anuidade-valor-parcela');
+    const valParcRaw = dadosOverride?.anuidade?.valorParcela ?? (elValParc ? elValParc.value : '');
+    const valorParcela = parseFloat(String(valParcRaw).replace(',', '.'));
+    if (isNaN(valorParcela) || valorParcela <= 0) {
+      if (typeof alert === 'function' && !dadosOverride) alert('Informe um valor válido para a parcela da anuidade.');
+      return { ok: false, erro: 'Valor de parcela da anuidade inválido' };
+    }
+
+    const elValTotal = document.getElementById('cartao-anuidade-valor-total');
+    let valorTotal = 0;
+    const valTotalRaw = dadosOverride?.anuidade?.valorTotal ?? (elValTotal ? elValTotal.value : '');
+    if (valTotalRaw !== '' && valTotalRaw !== null && valTotalRaw !== undefined) {
+      valorTotal = parseFloat(String(valTotalRaw).replace(',', '.'));
+    }
+    // Se o valor total não foi informado ou for inconsistente, calcula parcelas * valorParcela em centavos inteiros
+    if (isNaN(valorTotal) || valorTotal <= 0) {
+      const centavosTotal = Math.round(parcelas * Math.round(valorParcela * 100));
+      valorTotal = centavosTotal / 100;
+    } else {
+      valorTotal = Math.round(valorTotal * 100) / 100;
+    }
+
+    const elMesInicio = document.getElementById('cartao-anuidade-mes-inicio');
+    const mesInicio = String(dadosOverride?.anuidade?.mesInicio ?? (elMesInicio ? elMesInicio.value : '')).trim() || new Date().toISOString().slice(0, 7);
+
+    anuidadeObj = {
+      possui: true,
+      parcelas,
+      valorParcela: Math.round(valorParcela * 100) / 100,
+      valorTotal,
+      mesInicio
+    };
+  }
+
+  if (!Array.isArray(S.cartoes)) S.cartoes = [];
+
+  const novoCartao = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    nome,
+    titular,
+    taxaRotativo,
+    diaVencimento,
+    anuidade: anuidadeObj,
+    cor: '#8b5cf6',
+    ativo: true
+  };
+
+  S.cartoes.push(novoCartao);
+  save();
+  closeM('m-cartao');
+  render();
+
+  if (typeof alert === 'function' && !dadosOverride) {
+    alert(`💳 Cartão "${nome}" cadastrado com sucesso!`);
+  }
+  return { ok: true, cartao: novoCartao };
+}
+
+function excluirCartao(id) {
+  if (!Array.isArray(S.cartoes)) return { ok: false, erro: 'Sem cartões' };
+  const c = S.cartoes.find(x => x.id === id);
+  if (!c) return { ok: false, erro: 'Cartão não encontrado' };
+  const confirma = typeof confirm === 'function' ? confirm(`Deseja realmente remover o cartão "${c.nome}"?`) : true;
+  if (!confirma) return { ok: false, cancelado: true };
+
+  S.cartoes = S.cartoes.filter(x => x.id !== id);
+  save();
+  render();
+  if (typeof alert === 'function') {
+    alert(`Cartão "${c.nome}" removido com sucesso.`);
+  }
+  return { ok: true, removidoId: id };
+}
+
 function abrirModalGasto(){
   document.getElementById('g-data').value = dataDefaultParaModal();
   document.getElementById('g-is-parcelado').checked = false;
@@ -1585,7 +1779,7 @@ function abrirModalDivida(){
 // RENDER
 function render(){
   processarInadimplencia60Dias();
-  if (typeof document === 'undefined' || !document.getElementById || !document.getElementById('app')) return;
+  if (typeof document === 'undefined' || !document.getElementById || !document.getElementById('app') || typeof document.querySelector !== 'function') return;
   atualizarDatalistTitulares();
   atualizarSelectsTipoDivida();
   renderCategoriasModalGasto();
@@ -2200,6 +2394,11 @@ if (typeof module !== 'undefined' && module.exports) {
     setMes,
     mudarMes,
     loadState,
+    abrirModalCartao,
+    salvarCartao,
+    excluirCartao,
+    toggleAnuidadeCartao,
+    atualizarTotalAnuidade,
     S
   };
 }
