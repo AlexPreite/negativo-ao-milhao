@@ -570,15 +570,59 @@
   <div class="modal" style="max-height:85vh;display:flex;flex-direction:column;">
     <span class="modal-close" onclick="closeM('m-fatura-cartao')">×</span>
     <p class="modal-title" id="fatura-titulo">💳 Detalhes da Fatura</p>
-    <div class="card" style="margin-bottom:12px;background:var(--bg3);">
-      <p class="card-label">Total da fatura neste mês</p>
+    <div class="card" style="margin-bottom:10px;background:var(--bg3);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <p class="card-label" style="margin:0;">Total da fatura neste mês</p>
+        <span id="fatura-status-badge" class="badge" style="background:rgba(148,163,184,0.15);color:var(--text);border:1px solid var(--border);">⏳ Em Aberto</span>
+      </div>
       <p class="big-num c-red" id="fatura-valor-total">R$ 0,00</p>
       <p style="font-size:12px;color:var(--muted);margin-top:4px;" id="fatura-subinfo"></p>
     </div>
-    <button type="button" class="btn btn-g" style="margin-bottom:14px;padding:9px;font-size:13px;" id="btn-add-compra-fatura" onclick="abrirModalCompraCartao(cartaoAtualId)">+ Adicionar compra neste cartão</button>
+
+    <!-- AÇÕES FINANCEIRAS DA FATURA -->
+    <div id="fatura-acoes-financeiras" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+      <button type="button" class="btn btn-g" id="btn-pagar-fatura-total" style="padding:8px 6px;font-size:12px;margin:0;" onclick="pagarFaturaTotal(cartaoAtualId, mesAtual)">✓ Pagar Fatura Total</button>
+      <button type="button" class="btn" id="btn-pagar-fatura-parcial" style="padding:8px 6px;font-size:12px;margin:0;background:rgba(234,179,8,0.15);color:#facc15;border:1px solid rgba(234,179,8,0.35);" onclick="abrirModalPagamentoParcial()">💵 Pagamento Parcial</button>
+      <button type="button" class="btn" id="btn-antecipar-parcelas" style="grid-column:1/-1;padding:8px 6px;font-size:12px;margin:0;background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.35);" onclick="abrirModalAnteciparCartao()">⏩ Antecipar Faturas/Parcelas</button>
+    </div>
+
+    <button type="button" class="btn btn-g" style="margin-bottom:12px;padding:8px;font-size:13px;" id="btn-add-compra-fatura" onclick="abrirModalCompraCartao(cartaoAtualId)">+ Adicionar compra neste cartão</button>
     <p class="sec-title" style="font-size:13px;margin:0 0 6px;">Itens da fatura</p>
-    <div id="fatura-itens-lista" style="flex:1;overflow-y:auto;max-height:280px;margin-bottom:12px;"></div>
+    <div id="fatura-itens-lista" style="flex:1;overflow-y:auto;max-height:260px;margin-bottom:12px;"></div>
     <button class="btn" onclick="closeM('m-fatura-cartao')">Fechar</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-pagto-parcial">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-pagto-parcial')">×</span>
+    <p class="modal-title">💵 Pagamento Parcial da Fatura</p>
+    <div class="card" style="margin-bottom:12px;background:var(--bg3);">
+      <p class="card-label">Valor total da fatura</p>
+      <p class="big-num c-red" id="pp-valor-total">R$ 0,00</p>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px;" id="pp-taxa-rotativo-txt"></p>
+    </div>
+    <div class="input-row">
+      <label>Valor a pagar (R$)</label>
+      <input type="number" id="pp-valor-pago" placeholder="0,00" inputmode="decimal" step="0.01" oninput="atualizarPreviewPagamentoParcial()"/>
+    </div>
+    <div id="pp-bloco-preview" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px;">
+      <p style="font-size:12px;color:var(--muted);margin:0 0 4px;">Simulação do Rotativo para o Mês Seguinte:</p>
+      <p id="pp-preview-txt" style="font-size:13px;color:var(--yellow);font-weight:600;margin:0;">Informe o valor a pagar</p>
+    </div>
+    <button class="btn btn-g" style="margin-top:6px;" onclick="confirmarPagamentoParcial()">Confirmar Pagamento Parcial</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-antecipar-cartao">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column;">
+    <span class="modal-close" onclick="closeM('m-antecipar-cartao')">×</span>
+    <p class="modal-title">⏩ Antecipar Parcelas Futuras</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;" id="antecipar-cartao-subtitulo">
+      Selecione uma compra/parcela futura para puxar para a fatura atual.
+    </p>
+    <div id="lista-parcelas-futuras-cartao" style="flex:1;overflow-y:auto;max-height:320px;margin-bottom:12px;"></div>
+    <button class="btn" onclick="closeM('m-antecipar-cartao')">Fechar</button>
   </div>
 </div>
 

@@ -62,20 +62,38 @@ function calcularMesesAtraso(mesOrigem, mesReferencia) {
   }
 }
 
-// Processa inadimplência de contas com atraso >= 2 meses em relação à data civil REAL de hoje
-// Migra gastos vencidos para dívidas negativadas e invalida parcelas futuras
+// Desloca competência 'YYYY-MM' por N meses mantendo precisão de calendário
+function adicionarMesesYM(ym, qtdMeses) {
+  if (!ym) return new Date().toISOString().slice(0, 7);
+  try {
+    const [y, m] = String(ym).slice(0, 7).split('-').map(Number);
+    const d = new Date(y, (m - 1) + qtdMeses, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  } catch (err) {
+    console.error('Erro em adicionarMesesYM:', err);
+    return String(ym).slice(0, 7);
+  }
+}
+
+// Processa inadimplência de contas e faturas com atraso >= 2 meses em relação à data civil REAL de hoje (mesRealHoje)
+// Migra gastos vencidos e faturas de cartão para dívidas negativadas e invalida cobranças/parcelas futuras
 // Importante: Nunca usar mesAtual (cursor da UI) aqui, para não negativar despesas quando o usuário navegar para o futuro
-function processarInadimplencia60Dias() {
-  if (!S || !Array.isArray(S.gastos)) return;
+function processarInadimplencia60Dias(mesReferenciaOverride) {
+  if (!S) return;
+  if (!Array.isArray(S.gastos)) S.gastos = [];
   if (!Array.isArray(S.dividas)) S.dividas = [];
+  if (!Array.isArray(S.cartoes)) S.cartoes = [];
+  if (!Array.isArray(S.comprasCartao)) S.comprasCartao = [];
+  if (!Array.isArray(S.faturasCartao)) S.faturasCartao = [];
 
   const hoje = new Date().toISOString().slice(0, 10);
-  const mesRealHoje = hoje.slice(0, 7);
+  const mesRealHoje = (mesReferenciaOverride && String(mesReferenciaOverride).slice(0, 7)) || hoje.slice(0, 7);
   const gruposProcessados = new Set();
   let houveMudanca = false;
 
   const listaGastos = [...S.gastos];
 
+  // 1. Processa Gastos Regulares e Parcelamentos em S.gastos (Fatia 1)
   for (const g of listaGastos) {
     // Filtro de elegibilidade: não pago, não negociado e ainda não migrado
     if (!g || g.pago || g.negociado || g.migradoDivida) continue;
@@ -166,6 +184,175 @@ function processarInadimplencia60Dias() {
     }
   }
 
+  // 2. Regra de 60 Dias para Faturas de Cartão de Crédito (Fatia 4)
+  for (const c of S.cartoes) {
+    if (!c || c.ativo === false) continue;
+
+    // Coleta todos os meses com compras ou faturas registradas neste cartão
+    const mesesFaturaSet = new Set();
+    (S.comprasCartao || []).forEach(cp => {
+      if (cp.cartaoId === c.id && cp.mesFatura) mesesFaturaSet.add(cp.mesFatura);
+    });
+    (S.faturasCartao || []).forEach(f => {
+      if (f.cartaoId === c.id && f.mes) mesesFaturaSet.add(f.mes);
+    });
+
+    const mesesOrdenados = Array.from(mesesFaturaSet).sort();
+    let cartaoTemInadimplencia60Dias = false;
+    let saldoVencidoTotalCentavos = 0;
+
+    for (const mesFatura of mesesOrdenados) {
+      const mesesAtraso = calcularMesesAtraso(mesFatura, mesRealHoje);
+      if (mesesAtraso >= 2) {
+        let fatReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesFatura);
+        const fatInfo = calcularFaturaMes(c.id, mesFatura);
+
+        // B1: Verifica se a fatura teve saldo rolado para a próxima competência
+        const mesSeguinte = adicionarMesesYM(mesFatura, 1);
+        const fatSeguinte = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesSeguinte);
+        const foiRolada = Boolean((fatReg && fatReg.roladoParaProxima) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
+
+        // Na regra de 60 dias, faturas roladas contam saldo 0 (a dívida foi transferida para a fatura seguinte)
+        if (foiRolada) {
+          if (fatReg && (fatReg.negativada || fatReg.migradoDivida)) {
+            fatReg.negativada = false;
+            fatReg.migradoDivida = false;
+            houveMudanca = true;
+          }
+          continue;
+        }
+
+        const estaPaga = fatReg && fatReg.pago;
+        if (estaPaga) {
+          if (fatReg && (fatReg.negativada || fatReg.migradoDivida)) {
+            fatReg.negativada = false;
+            fatReg.migradoDivida = false;
+            houveMudanca = true;
+          }
+          continue;
+        }
+
+        if (fatInfo.valorTotalFatura > 0) {
+          let saldoNaoPagoCentavos = 0;
+          if (fatReg && fatReg.pagoParcial) {
+            saldoNaoPagoCentavos = Math.round((Number(fatReg.saldoRestante) || 0) * 100);
+          } else {
+            const valFat = (fatReg && (fatReg.saldoRestante || fatReg.valorTotal)) || fatInfo.valorTotalFatura;
+            saldoNaoPagoCentavos = Math.round((Number(valFat) || 0) * 100);
+          }
+
+          if (saldoNaoPagoCentavos > 0) {
+            cartaoTemInadimplencia60Dias = true;
+            saldoVencidoTotalCentavos += saldoNaoPagoCentavos;
+
+            if (!fatReg) {
+              fatReg = {
+                id: `${c.id}_${mesFatura}`,
+                cartaoId: c.id,
+                mes: mesFatura,
+                valorTotal: fatInfo.valorTotalFatura,
+                valorPago: 0,
+                pago: false,
+                pagoParcial: false,
+                saldoRestante: fatInfo.valorTotalFatura,
+                rotativoRolado: 0,
+                negativada: true,
+                migradoDivida: true
+              };
+              S.faturasCartao.push(fatReg);
+            } else {
+              fatReg.negativada = true;
+              fatReg.migradoDivida = true;
+            }
+            houveMudanca = true;
+          }
+        }
+      }
+    }
+
+    if (cartaoTemInadimplencia60Dias) {
+      // B4: Marcar o cartão como negativado e registrar data da negativação
+      const dataNegativacaoHoje = c.dataNegativacao || hoje;
+      const mesCancelamento = (c.dataNegativacao || '').slice(0, 7) || mesRealHoje;
+      if (!c.negativado) {
+        c.negativado = true;
+        c.dataNegativacao = dataNegativacaoHoje;
+        houveMudanca = true;
+      }
+
+      // Cancela compras parceladas futuras do cartão (que venceriam no mês de referência ou no futuro)
+      let centavosFuturos = 0;
+      (S.comprasCartao || []).forEach(cp => {
+        if (cp.cartaoId === c.id) {
+          const atrasoCp = calcularMesesAtraso(cp.mesFatura, mesRealHoje);
+          // Parcelas futuras ou vigentes que não entraram nas faturas já vencidas >= 2 meses
+          if (atrasoCp < 2) {
+            if (!cp.canceladaNegativacao) {
+              cp.canceladaNegativacao = true;
+              houveMudanca = true;
+            }
+            centavosFuturos += Math.round((Number(cp.val) || 0) * 100);
+          }
+        }
+      });
+
+      // B4: Soma as parcelas de anuidade restantes (meses >= mês de cancelamento) no saldo consolidado
+      let centavosAnuidadeRestante = 0;
+      if (c.anuidade && c.anuidade.possui && c.anuidade.parcelas > 0 && c.anuidade.valorParcela > 0) {
+        const mesInicio = (c.anuidade.mesInicio || mesCancelamento).slice(0, 7);
+        const qtd = c.anuidade.parcelas;
+        const vParcCentavos = Math.round(Number(c.anuidade.valorParcela) * 100);
+        for (let k = 0; k < qtd; k++) {
+          const mesParc = adicionarMesesYM(mesInicio, k);
+          if (mesParc >= mesCancelamento) {
+            centavosAnuidadeRestante += vParcCentavos;
+          }
+        }
+      }
+
+      // Consolida saldo devedor total em centavos: vencidas + futuras canceladas + anuidade restante
+      const saldoTotalDevedor = Math.round(saldoVencidoTotalCentavos + centavosFuturos + centavosAnuidadeRestante) / 100;
+
+      // Idempotência estrita: busca dívida pelo origemCartaoId
+      const dividaExistente = S.dividas.find(d => d.origemCartaoId === c.id);
+      if (dividaExistente) {
+        if (!dividaExistente.quitada && dividaExistente.saldo !== saldoTotalDevedor) {
+          dividaExistente.saldo = saldoTotalDevedor;
+          dividaExistente.negativada = true;
+          houveMudanca = true;
+        }
+      } else {
+        const novaDivida = {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          credor: c.nome,
+          saldo: saldoTotalDevedor,
+          juros: c.taxaRotativo || 0,
+          parcela: 0,
+          tipo: 'cartao',
+          titular: c.titular || '',
+          quitada: false,
+          negativada: true,
+          origemCartaoId: c.id,
+          dataNegativacao: dataNegativacaoHoje
+        };
+        S.dividas.push(novaDivida);
+        houveMudanca = true;
+      }
+    } else {
+      // Se o cartão não possui inadimplência (todas faturas pagas ou roladas)
+      const idx = S.dividas.findIndex(d => d.origemCartaoId === c.id && d.negativada && !d.quitada);
+      if (idx !== -1) {
+        S.dividas.splice(idx, 1);
+        houveMudanca = true;
+      }
+      if (c.negativado) {
+        c.negativado = false;
+        c.dataNegativacao = null;
+        houveMudanca = true;
+      }
+    }
+  }
+
   // Persiste no storage apenas se houver alterações
   if (houveMudanca && typeof save === 'function') {
     try {
@@ -177,8 +364,6 @@ function processarInadimplencia60Dias() {
 }
 
 function loadState(){
-  // Chama no início do carregamento conforme especificado no contrato técnico
-  processarInadimplencia60Dias();
   try {
     if (typeof localStorage !== 'undefined') {
       const d = localStorage.getItem('dnm_data');
@@ -1307,13 +1492,16 @@ function calcularFaturaMes(cartaoId, mesYM) {
       valorTotalCompras: 0,
       anuidadeItem: null,
       valorAnuidade: 0,
+      rotativoItem: null,
+      valorRotativo: 0,
       valorTotalFatura: 0,
-      cartao: null
+      cartao: null,
+      registroFatura: null
     };
   }
 
-  // Compras ativas na competência
-  const compras = (S.comprasCartao || []).filter(c => c.cartaoId === cartaoId && c.mesFatura === ym);
+  // Compras ativas na competência (não canceladas por negativação)
+  const compras = (S.comprasCartao || []).filter(c => c.cartaoId === cartaoId && c.mesFatura === ym && !c.canceladaNegativacao);
   const centavosCompras = compras.reduce((acc, c) => acc + Math.round((Number(c.val) || 0) * 100), 0);
   const valorTotalCompras = Math.round(centavosCompras) / 100;
 
@@ -1321,23 +1509,44 @@ function calcularFaturaMes(cartaoId, mesYM) {
   let anuidadeItem = null;
   let valorAnuidade = 0;
   if (cartao.anuidade && cartao.anuidade.possui && cartao.anuidade.parcelas > 0 && cartao.anuidade.valorParcela > 0) {
-    const mesInicio = (cartao.anuidade.mesInicio || ym).slice(0, 7);
-    const qtd = cartao.anuidade.parcelas;
-    const diff = calcularMesesAtraso(mesInicio, ym);
-    if (diff >= 0 && diff < qtd) {
-      const parcelaNum = diff + 1;
-      anuidadeItem = {
-        desc: 'Anuidade do Cartão',
-        parcelaNum,
-        totalParcelas: qtd,
-        val: Math.round(Number(cartao.anuidade.valorParcela) * 100) / 100,
-        cat: 'recorrente'
-      };
-      valorAnuidade = anuidadeItem.val;
+    // B4: Não gera anuidade para competências >= mês de negativação de cartão negativado
+    const mesNeg = (cartao.dataNegativacao || '').slice(0, 7) || cartao.mesNegativacao;
+    const bloqueadaPorNegativacao = cartao.negativado && mesNeg && ym >= mesNeg;
+
+    if (!bloqueadaPorNegativacao) {
+      const mesInicio = (cartao.anuidade.mesInicio || ym).slice(0, 7);
+      const qtd = cartao.anuidade.parcelas;
+      const diff = calcularMesesAtraso(mesInicio, ym);
+      if (diff >= 0 && diff < qtd) {
+        const parcelaNum = diff + 1;
+        anuidadeItem = {
+          desc: 'Anuidade do Cartão',
+          parcelaNum,
+          totalParcelas: qtd,
+          val: Math.round(Number(cartao.anuidade.valorParcela) * 100) / 100,
+          cat: 'recorrente'
+        };
+        valorAnuidade = anuidadeItem.val;
+      }
     }
   }
 
-  const centavosTotal = centavosCompras + Math.round(valorAnuidade * 100);
+  // Item de rotativo rolado do mês anterior (se houver registro com rotativoRolado)
+  const idFat = `${cartaoId}_${ym}`;
+  const fatReg = (S.faturasCartao || []).find(f => f.id === idFat || (f.cartaoId === cartaoId && f.mes === ym));
+  let rotativoItem = null;
+  let valorRotativo = 0;
+  if (fatReg && fatReg.rotativoRolado > 0) {
+    valorRotativo = Math.round(Number(fatReg.rotativoRolado) * 100) / 100;
+    rotativoItem = {
+      desc: 'Rotativo Fatura Anterior (Saldo + Juros)',
+      val: valorRotativo,
+      cat: 'recorrente',
+      detalhe: fatReg.rotativoDetalhe || null
+    };
+  }
+
+  const centavosTotal = centavosCompras + Math.round(valorAnuidade * 100) + Math.round(valorRotativo * 100);
   const valorTotalFatura = Math.round(centavosTotal) / 100;
 
   return {
@@ -1345,8 +1554,11 @@ function calcularFaturaMes(cartaoId, mesYM) {
     valorTotalCompras,
     anuidadeItem,
     valorAnuidade,
+    rotativoItem,
+    valorRotativo,
     valorTotalFatura,
-    cartao
+    cartao,
+    registroFatura: fatReg || null
   };
 }
 
@@ -1365,21 +1577,44 @@ function renderCartoesTopo() {
   container.style.display = 'flex';
   container.innerHTML = cartoesAtivos.map(c => {
     const fatura = calcularFaturaMes(c.id, mesAtual);
-    const temValor = fatura.valorTotalFatura > 0;
-    const corValor = temValor ? 'var(--red)' : 'var(--green)';
+    const fatReg = fatura.registroFatura;
+    const estaPaga = fatReg && fatReg.pago;
+    const estaParcial = fatReg && fatReg.pagoParcial;
+    const estaNegativada = fatReg && (fatReg.negativada || fatReg.migradoDivida);
 
-    return `<div class="card" onclick="abrirFaturaCartao(${c.id})" style="min-width:220px;max-width:260px;flex:0 0 auto;cursor:pointer;border:1px solid rgba(139,92,246,0.35);background:linear-gradient(135deg, rgba(139,92,246,0.12), rgba(0,0,0,0.4));border-radius:12px;padding:12px;transition:transform 0.15s, border-color 0.15s;">
+    let statusBadge = '';
+    let corValor = 'var(--red)';
+    let textoValor = fmt(fatura.valorTotalFatura);
+
+    if (estaNegativada) {
+      statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.25);color:#f87171;font-size:10px;padding:2px 6px;">🔴 Negativada</span>';
+      corValor = '#f87171';
+    } else if (estaPaga) {
+      statusBadge = '<span class="badge" style="background:rgba(34,197,94,0.25);color:#4ade80;font-size:10px;padding:2px 6px;">✓ Paga</span>';
+      corValor = 'var(--green)';
+      textoValor = fmt(fatReg.valorPago);
+    } else if (estaParcial) {
+      statusBadge = `<span class="badge" style="background:rgba(234,179,8,0.25);color:#facc15;font-size:10px;padding:2px 6px;">⚠️ Parcial (${fmt(fatReg.saldoRestante)} pendente)</span>`;
+      corValor = 'var(--yellow)';
+    } else {
+      corValor = fatura.valorTotalFatura > 0 ? 'var(--red)' : 'var(--green)';
+    }
+
+    return `<div class="card" onclick="abrirFaturaCartao(${c.id})" style="min-width:230px;max-width:270px;flex:0 0 auto;cursor:pointer;border:1px solid rgba(139,92,246,0.35);background:linear-gradient(135deg, rgba(139,92,246,0.12), rgba(0,0,0,0.4));border-radius:12px;padding:12px;transition:transform 0.15s, border-color 0.15s;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <span style="font-weight:700;font-size:14px;color:#c084fc;">💳 ${escapeHtml(c.nome)}</span>
         <span style="font-size:11px;color:var(--muted);background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;">Venc: ${c.diaVencimento || 10}</span>
       </div>
-      ${c.titular ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">👤 ${escapeHtml(c.titular)}</div>` : ''}
-      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Fatura ${mesLabel(mesAtual)}:</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        ${c.titular ? `<span style="font-size:11px;color:var(--muted);">👤 ${escapeHtml(c.titular)}</span>` : '<span></span>'}
+        ${statusBadge}
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">Fatura ${mesLabel(mesAtual)}:</div>
       <div style="font-size:18px;font-weight:700;color:${corValor};margin-top:2px;">
-        ${fmt(fatura.valorTotalFatura)}
+        ${textoValor}
       </div>
       <div style="font-size:11px;color:#a855f7;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
-        <span>👁️ Ver compras</span>
+        <span>👁️ Ver compras e ações</span>
         <span style="font-size:10px;opacity:0.8;">›</span>
       </div>
     </div>`;
@@ -1396,22 +1631,123 @@ function abrirFaturaCartao(cartaoId, mesYM) {
   const elTitulo = document.getElementById('fatura-titulo');
   if (elTitulo) elTitulo.textContent = `💳 Fatura ${fatura.cartao.nome} - ${mesLabel(ym)}`;
 
+  const fatReg = fatura.registroFatura;
+  const estaNegativada = fatReg && (fatReg.negativada || fatReg.migradoDivida);
+  const valorJaPago = (fatReg && Number(fatReg.valorPago)) || 0;
+  const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
+
+  // Status visual no badge do modal
+  const elStatusBadge = document.getElementById('fatura-status-badge');
+  if (elStatusBadge) {
+    if (estaNegativada) {
+      elStatusBadge.className = 'badge';
+      elStatusBadge.style.background = 'rgba(239,68,68,0.2)';
+      elStatusBadge.style.color = '#f87171';
+      elStatusBadge.style.border = '1px solid rgba(239,68,68,0.4)';
+      elStatusBadge.textContent = '🔴 Negativada (60+ dias)';
+    } else if (fatReg && fatReg.pago && saldoPendente <= 0) {
+      elStatusBadge.className = 'badge';
+      elStatusBadge.style.background = 'rgba(34,197,94,0.2)';
+      elStatusBadge.style.color = '#4ade80';
+      elStatusBadge.style.border = '1px solid rgba(34,197,94,0.4)';
+      elStatusBadge.textContent = '✓ Paga';
+    } else if (valorJaPago > 0 && saldoPendente > 0) {
+      // B2: Badge "Pago parcial / saldo pendente"
+      elStatusBadge.className = 'badge';
+      elStatusBadge.style.background = 'rgba(234,179,8,0.2)';
+      elStatusBadge.style.color = '#facc15';
+      elStatusBadge.style.border = '1px solid rgba(234,179,8,0.4)';
+      elStatusBadge.textContent = `⚠️ Pago parcial / saldo pendente (${fmt(saldoPendente)})`;
+    } else if (fatReg && fatReg.pagoParcial && fatReg.roladoParaProxima) {
+      elStatusBadge.className = 'badge';
+      elStatusBadge.style.background = 'rgba(234,179,8,0.2)';
+      elStatusBadge.style.color = '#facc15';
+      elStatusBadge.style.border = '1px solid rgba(234,179,8,0.4)';
+      elStatusBadge.textContent = `⚠️ Pagamento Parcial (Rolado p/ próx. mês)`;
+    } else {
+      elStatusBadge.className = 'badge';
+      elStatusBadge.style.background = 'rgba(148,163,184,0.15)';
+      elStatusBadge.style.color = 'var(--text)';
+      elStatusBadge.style.border = '1px solid var(--border)';
+      elStatusBadge.textContent = '⏳ Em Aberto';
+    }
+  }
+
+  // Valor total exibido
   const elTotal = document.getElementById('fatura-valor-total');
-  if (elTotal) elTotal.textContent = fmt(fatura.valorTotalFatura);
+  if (elTotal) {
+    if (estaNegativada) {
+      elTotal.textContent = `${fmt(fatura.valorTotalFatura)} (Negativada)`;
+      elTotal.className = 'big-num c-red';
+    } else if (fatReg && fatReg.pago && saldoPendente <= 0) {
+      elTotal.textContent = `${fmt(fatReg.valorPago)} (Quitada)`;
+      elTotal.className = 'big-num c-green';
+    } else if (valorJaPago > 0 && saldoPendente > 0) {
+      elTotal.textContent = `${fmt(saldoPendente)} pendente (${fmt(fatura.valorTotalFatura)} total)`;
+      elTotal.className = 'big-num c-yellow';
+    } else {
+      elTotal.textContent = fmt(fatura.valorTotalFatura);
+      elTotal.className = 'big-num c-red';
+    }
+  }
 
   const elSub = document.getElementById('fatura-subinfo');
   if (elSub) {
     elSub.textContent = `${fatura.cartao.titular ? `Titular: ${fatura.cartao.titular} • ` : ''}Vencimento: dia ${fatura.cartao.diaVencimento || 10} • Rotativo: ${fatura.cartao.taxaRotativo || 0}% a.m.`;
   }
 
+  // Botões de ações financeiras da fatura
+  const btnPagarTot = document.getElementById('btn-pagar-fatura-total');
+  const btnPagarParc = document.getElementById('btn-pagar-fatura-parcial');
+  const btnAntecipar = document.getElementById('btn-antecipar-parcelas');
+  // B2: Botões Pagar Total/Parcial devem reaparecer cobrando apenas o saldo pendente
+  const podePagar = !estaNegativada && saldoPendente > 0;
+
+  if (btnPagarTot) {
+    btnPagarTot.style.display = podePagar ? 'block' : 'none';
+    if (valorJaPago > 0 && saldoPendente > 0) {
+      btnPagarTot.textContent = `💳 Pagar Complemento (${fmt(saldoPendente)})`;
+    } else {
+      btnPagarTot.textContent = '💳 Pagar Fatura Total';
+    }
+    btnPagarTot.setAttribute('onclick', `pagarFaturaTotal(${cartaoId}, '${ym}')`);
+  }
+  if (btnPagarParc) {
+    btnPagarParc.style.display = podePagar ? 'block' : 'none';
+    btnPagarParc.setAttribute('onclick', `abrirModalPagamentoParcial(${cartaoId}, '${ym}')`);
+  }
+
+  // B3: Destino da antecipação = max(ym, mesRealHoje); botão oculto se destino estiver negativada
+  const mesRealHoje = new Date().toISOString().slice(0, 7);
+  const destinoMes = ym < mesRealHoje ? mesRealHoje : ym;
+  const fatDestino = (S.faturasCartao || []).find(f => f.cartaoId === cartaoId && f.mes === destinoMes);
+  const destinoNegativada = fatDestino && (fatDestino.negativada || fatDestino.migradoDivida);
+
+  if (btnAntecipar) {
+    btnAntecipar.style.display = (estaNegativada || destinoNegativada) ? 'none' : 'block';
+    btnAntecipar.setAttribute('onclick', `abrirModalAnteciparCartao(${cartaoId})`);
+  }
+
   const elBtnAdd = document.getElementById('btn-add-compra-fatura');
   if (elBtnAdd) {
+    elBtnAdd.style.display = estaNegativada ? 'none' : 'block';
     elBtnAdd.setAttribute('onclick', `abrirModalCompraCartao(${cartaoId})`);
   }
 
   const elLista = document.getElementById('fatura-itens-lista');
   if (elLista) {
     let html = '';
+
+    // Item de rotativo rolado do mês anterior
+    if (fatura.rotativoItem) {
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.35);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <strong>🔄 ${escapeHtml(fatura.rotativoItem.desc)}</strong>
+          <span class="badge" style="background:rgba(234,179,8,0.25);color:#facc15;">Rolagem do Mês Anterior</span>
+        </div>
+        <div style="font-weight:700;color:var(--yellow);">${fmt(fatura.rotativoItem.val)}</div>
+      </div>`;
+    }
 
     // Item de anuidade
     if (fatura.anuidadeItem) {
@@ -1429,12 +1765,14 @@ function abrirFaturaCartao(cartaoId, mesYM) {
       html += fatura.compras.map(c => {
         const parcBadge = c.parcelado ? `<span class="badge b-parc">${c.parcelaNum}/${c.totalParcelas}</span>` : '';
         const catBadge = `<span class="badge ${c.cat === 'recorrente' ? 'b-rec' : 'b-laz'}">${escapeHtml(getNomeCategoria(c.cat))}</span>`;
+        const adiantadaBadge = c.adiantada ? `<span class="badge" style="background:rgba(59,130,246,0.2);color:#60a5fa;">⏩ Antecipada</span>` : '';
 
         return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             <strong>${escapeHtml(c.desc)}</strong>
             ${catBadge}
             ${parcBadge}
+            ${adiantadaBadge}
             <span style="font-size:11px;color:var(--muted);">${escapeHtml(c.data || '')}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
@@ -1445,7 +1783,7 @@ function abrirFaturaCartao(cartaoId, mesYM) {
       }).join('');
     }
 
-    if (!fatura.compras.length && !fatura.anuidadeItem) {
+    if (!fatura.compras.length && !fatura.anuidadeItem && !fatura.rotativoItem) {
       html = '<p style="color:var(--muted);font-size:13px;padding:12px 0;text-align:center;">Nenhuma compra nesta fatura.</p>';
     }
 
@@ -1519,6 +1857,26 @@ function atualizarPreviewCompraParcelada() {
   }
 }
 
+// B2: Se a fatura daquele mês já estiver paga ou com pagamento parcial, reabre com saldo pendente
+function verificarEReabrirFatura(cartaoId, mesYM) {
+  if (!Array.isArray(S.faturasCartao)) return;
+  const ym = String(mesYM || '').slice(0, 7);
+  const fatReg = S.faturasCartao.find(f => f.cartaoId === cartaoId && f.mes === ym);
+  if (!fatReg) return;
+
+  const fatInfo = calcularFaturaMes(cartaoId, ym);
+  const novoTotal = fatInfo.valorTotalFatura;
+  const vPago = Number(fatReg.valorPago) || 0;
+  const saldoPendente = Math.max(0, Math.round((novoTotal - vPago) * 100) / 100);
+
+  if (saldoPendente > 0) {
+    fatReg.pago = false;
+    fatReg.pagoParcial = vPago > 0;
+    fatReg.saldoRestante = saldoPendente;
+    fatReg.valorTotal = novoTotal;
+  }
+}
+
 // Salva compra avulsa ou parcelada no cartão
 function salvarCompraCartao(dadosOverride) {
   const elCartaoId = document.getElementById('cc-cartao-id');
@@ -1589,6 +1947,8 @@ function salvarCompraCartao(dadosOverride) {
         totalParcelas: num,
         grupoId
       });
+      // B2: Reabre fatura correspondente caso já tenha tido pagamento
+      verificarEReabrirFatura(cartaoId, mesFatura);
     }
   } else {
     const mesFatura = data.slice(0, 7);
@@ -1607,6 +1967,8 @@ function salvarCompraCartao(dadosOverride) {
       totalParcelas: 1,
       grupoId: ''
     });
+    // B2: Reabre fatura correspondente caso já tenha tido pagamento
+    verificarEReabrirFatura(cartaoId, mesFatura);
   }
 
   save();
@@ -1659,6 +2021,356 @@ function excluirCompraCartao(compraId, excluirTodasParam) {
     abrirFaturaCartao(compra.cartaoId, mesAtual);
   }
   return { ok: true, removidoId: compraId };
+}
+
+// OPERAÇÕES FINANCEIRAS DA FATURA (Fatia 4)
+
+// 1. Quitação integral da fatura
+function pagarFaturaTotal(cartaoId, mesYM) {
+  const cid = cartaoId || cartaoAtualId;
+  const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
+  const fatura = calcularFaturaMes(cid, ym);
+  if (!fatura.cartao) return { ok: false, erro: 'Cartão não encontrado' };
+
+  if (fatura.valorTotalFatura <= 0) {
+    if (typeof alert === 'function') alert('Esta fatura não possui valor a pagar.');
+    return { ok: false, erro: 'Fatura sem valor' };
+  }
+
+  if (!Array.isArray(S.faturasCartao)) S.faturasCartao = [];
+  const idFat = `${cid}_${ym}`;
+  let fat = S.faturasCartao.find(f => f.id === idFat || (f.cartaoId === cid && f.mes === ym));
+
+  const valorJaPago = (fat && Number(fat.valorPago)) || 0;
+  const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
+
+  if (saldoPendente <= 0 && fat && fat.pago) {
+    if (typeof alert === 'function') alert('Esta fatura já está quitada.');
+    return { ok: false, erro: 'Fatura já quitada' };
+  }
+
+  if (!fat) {
+    fat = {
+      id: idFat,
+      cartaoId: cid,
+      mes: ym,
+      valorTotal: fatura.valorTotalFatura,
+      valorPago: 0,
+      pago: false,
+      pagoParcial: false,
+      saldoRestante: fatura.valorTotalFatura,
+      rotativoRolado: 0,
+      negativada: false,
+      migradoDivida: false
+    };
+    S.faturasCartao.push(fat);
+  }
+
+  // B2: soma o complemento ao valor já pago acumulado
+  fat.valorTotal = fatura.valorTotalFatura;
+  fat.valorPago = Math.round((valorJaPago + saldoPendente) * 100) / 100;
+  fat.pago = true;
+  fat.pagoParcial = false;
+  fat.saldoRestante = 0;
+  fat.negativada = false;
+  fat.migradoDivida = false;
+  fat.dataPagamento = new Date().toISOString().slice(0, 10);
+
+  save();
+  render();
+
+  if (typeof alert === 'function') {
+    alert(`✅ Fatura de ${mesLabel(ym)} do cartão ${fatura.cartao.nome} marcada como Paga (${fmt(fat.valorPago)})!`);
+  }
+
+  const modalFatura = document.getElementById('m-fatura-cartao');
+  if (modalFatura && modalFatura.classList.contains('open')) {
+    abrirFaturaCartao(cid, ym);
+  }
+
+  return { ok: true, fatura: fat };
+}
+
+// 2. Abertura do modal de pagamento parcial
+function abrirModalPagamentoParcial(cartaoId, mesYM) {
+  const cid = cartaoId || cartaoAtualId;
+  const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
+  cartaoAtualId = cid;
+  const fatura = calcularFaturaMes(cid, ym);
+  if (!fatura.cartao) return;
+
+  const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === ym);
+  const valorJaPago = (fatReg && Number(fatReg.valorPago)) || 0;
+  const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
+
+  const elTot = document.getElementById('pp-valor-total');
+  if (elTot) elTot.textContent = fmt(saldoPendente > 0 ? saldoPendente : fatura.valorTotalFatura);
+
+  const elTaxa = document.getElementById('pp-taxa-rotativo-txt');
+  if (elTaxa) {
+    elTaxa.textContent = `Taxa de rotativo: ${fatura.cartao.taxaRotativo || 0}% a.m.`;
+  }
+
+  const elPago = document.getElementById('pp-valor-pago');
+  if (elPago) elPago.value = '';
+
+  const elPrev = document.getElementById('pp-preview-txt');
+  if (elPrev) {
+    elPrev.textContent = 'Informe o valor a pagar';
+    elPrev.style.color = 'var(--yellow)';
+  }
+
+  openM('m-pagto-parcial');
+}
+
+// 3. Simulação dinâmica do rotativo
+function atualizarPreviewPagamentoParcial() {
+  const elPago = document.getElementById('pp-valor-pago');
+  const elPrev = document.getElementById('pp-preview-txt');
+  if (!elPago || !elPrev || !cartaoAtualId) return;
+
+  const fatura = calcularFaturaMes(cartaoAtualId, mesAtual);
+  const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === cartaoAtualId && f.mes === mesAtual);
+  const valorJaPago = (fatReg && Number(fatReg.valorPago)) || 0;
+  const saldoBase = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
+
+  const valPago = parseFloat(String(elPago.value).replace(',', '.')) || 0;
+
+  if (valPago <= 0) {
+    elPrev.textContent = 'Informe um valor maior que zero.';
+    elPrev.style.color = 'var(--muted)';
+    return;
+  }
+  if (valPago >= saldoBase) {
+    elPrev.textContent = 'O valor deve ser menor que o saldo pendente. Para pagar tudo, use "Pagar Fatura Total".';
+    elPrev.style.color = 'var(--red)';
+    return;
+  }
+
+  const saldoRestante = Math.round((saldoBase - valPago) * 100) / 100;
+  const taxa = fatura.cartao.taxaRotativo || 0;
+  const encargos = Math.round((saldoRestante * (taxa / 100)) * 100) / 100;
+  const totalRolagem = Math.round((saldoRestante + encargos) * 100) / 100;
+
+  elPrev.innerHTML = `Saldo restante: <strong>${fmt(saldoRestante)}</strong> + Juros (${taxa}%): <strong>${fmt(encargos)}</strong> = <strong>${fmt(totalRolagem)}</strong> na próxima fatura.`;
+  elPrev.style.color = 'var(--yellow)';
+}
+
+// 4. Confirmação do pagamento parcial e rolagem do rotativo
+function confirmarPagamentoParcial(dadosOverride) {
+  const cid = dadosOverride?.cartaoId || cartaoAtualId;
+  const ym = dadosOverride?.mes ? String(dadosOverride.mes).slice(0, 7) : mesAtual;
+  const fatura = calcularFaturaMes(cid, ym);
+  if (!fatura.cartao) return { ok: false, erro: 'Cartão não encontrado' };
+
+  if (!Array.isArray(S.faturasCartao)) S.faturasCartao = [];
+  const idFat = `${cid}_${ym}`;
+  let fat = S.faturasCartao.find(f => f.id === idFat || (f.cartaoId === cid && f.mes === ym));
+
+  const valorJaPago = (fat && Number(fat.valorPago)) || 0;
+  const saldoBase = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
+
+  const elPago = document.getElementById('pp-valor-pago');
+  const valPagoRaw = dadosOverride?.valorPago ?? (elPago ? elPago.value : 0);
+  const valorPago = parseFloat(String(valPagoRaw).replace(',', '.'));
+
+  if (isNaN(valorPago) || valorPago <= 0) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Informe um valor a pagar válido maior que zero.');
+    return { ok: false, erro: 'Valor inválido' };
+  }
+
+  if (valorPago >= saldoBase) {
+    if (typeof alert === 'function' && !dadosOverride) alert('O pagamento parcial deve ser menor que o saldo pendente. Para quitar tudo, use "Pagar Fatura Total".');
+    return { ok: false, erro: 'Valor deve ser menor que saldo pendente' };
+  }
+
+  if (!fat) {
+    fat = {
+      id: idFat,
+      cartaoId: cid,
+      mes: ym,
+      valorTotal: fatura.valorTotalFatura,
+      valorPago: 0,
+      pago: false,
+      pagoParcial: false,
+      saldoRestante: fatura.valorTotalFatura,
+      rotativoRolado: 0,
+      negativada: false,
+      migradoDivida: false
+    };
+    S.faturasCartao.push(fat);
+  }
+
+  fat.valorTotal = fatura.valorTotalFatura;
+  fat.valorPago = Math.round((valorJaPago + valorPago) * 100) / 100;
+  fat.pago = false;
+  fat.pagoParcial = true;
+  fat.roladoParaProxima = true; // B1: marcação explícita de rolagem
+  fat.saldoRestante = Math.round((saldoBase - valorPago) * 100) / 100;
+  fat.negativada = false;
+  fat.migradoDivida = false;
+  fat.dataPagamento = new Date().toISOString().slice(0, 10);
+
+  // Calcula encargos e rolagem para o mês seguinte
+  const taxaRotativo = fatura.cartao.taxaRotativo || 0;
+  const encargos = Math.round((fat.saldoRestante * (taxaRotativo / 100)) * 100) / 100;
+  const rolagemTotal = Math.round((fat.saldoRestante + encargos) * 100) / 100;
+
+  const mesSeguinte = adicionarMesesYM(ym, 1);
+  const idProx = `${cid}_${mesSeguinte}`;
+  let fatProx = S.faturasCartao.find(f => f.id === idProx || (f.cartaoId === cid && f.mes === mesSeguinte));
+  if (!fatProx) {
+    fatProx = {
+      id: idProx,
+      cartaoId: cid,
+      mes: mesSeguinte,
+      valorTotal: 0,
+      valorPago: 0,
+      pago: false,
+      pagoParcial: false,
+      saldoRestante: 0,
+      rotativoRolado: 0,
+      negativada: false,
+      migradoDivida: false
+    };
+    S.faturasCartao.push(fatProx);
+  }
+
+  fatProx.rotativoRolado = rolagemTotal;
+  fatProx.rotativoDetalhe = {
+    saldoAnterior: fat.saldoRestante,
+    taxa: taxaRotativo,
+    encargos,
+    total: rolagemTotal,
+    origemMes: ym
+  };
+
+  save();
+  closeM('m-pagto-parcial');
+  render();
+
+  if (typeof alert === 'function' && !dadosOverride) {
+    alert(`💵 Pagamento parcial de ${fmt(valorPago)} confirmado!\nSaldo restante de ${fmt(fat.saldoRestante)} com ${taxaRotativo}% de juros (${fmt(encargos)}) rolado para a fatura de ${mesLabel(mesSeguinte)} (Total: ${fmt(rolagemTotal)}).`);
+  }
+
+  const modalFatura = document.getElementById('m-fatura-cartao');
+  if (modalFatura && modalFatura.classList.contains('open')) {
+    abrirFaturaCartao(cid, ym);
+  }
+
+  return {
+    ok: true,
+    faturaAtual: fat,
+    faturaSeguinte: fatProx,
+    encargos,
+    rolagemTotal
+  };
+}
+
+// 5. Abertura do modal de antecipação de compras
+function abrirModalAnteciparCartao(cartaoId) {
+  const cid = cartaoId || cartaoAtualId;
+  cartaoAtualId = cid;
+  const cartao = (S.cartoes || []).find(c => c.id === cid);
+  if (!cartao) return;
+
+  // B3: O destino da antecipação deve ser max(mesAtual, mesRealHoje) — nunca para o passado real
+  const mesRealHoje = new Date().toISOString().slice(0, 7);
+  const destinoMes = mesAtual < mesRealHoje ? mesRealHoje : mesAtual;
+
+  // B3: Bloqueie se a fatura de destino estiver negativada/migrada
+  const fatDestino = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === destinoMes);
+  const destinoNegativada = fatDestino && (fatDestino.negativada || fatDestino.migradoDivida);
+
+  const elSub = document.getElementById('antecipar-cartao-subtitulo');
+  if (elSub) {
+    elSub.textContent = `Cartão: ${cartao.nome} • Puxar compras e parcelas futuras para a fatura de ${mesLabel(destinoMes)}`;
+  }
+
+  const elLista = document.getElementById('lista-parcelas-futuras-cartao');
+  if (elLista) {
+    if (destinoNegativada) {
+      elLista.innerHTML = `<p style="color:var(--red);font-size:13px;padding:16px 0;text-align:center;">⚠️ A fatura de destino (${mesLabel(destinoMes)}) está negativada. Antecipação bloqueada.</p>`;
+      openM('m-antecipar-cartao');
+      return;
+    }
+
+    // B3: Só liste compras com mesFatura > destino e não canceladaNegativacao
+    const comprasFuturas = (S.comprasCartao || []).filter(c => c.cartaoId === cid && c.mesFatura > destinoMes && !c.canceladaNegativacao);
+    comprasFuturas.sort((a, b) => (a.mesFatura || '').localeCompare(b.mesFatura || ''));
+
+    if (!comprasFuturas.length) {
+      elLista.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:16px 0;text-align:center;">Nenhuma compra ou parcela futura encontrada para antecipação neste cartão.</p>';
+    } else {
+      elLista.innerHTML = comprasFuturas.map(c => {
+        const parcBadge = c.parcelado ? `<span class="badge b-parc">${c.parcelaNum}/${c.totalParcelas}</span>` : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
+          <div style="flex:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <strong>${escapeHtml(c.desc)}</strong>
+            <span class="badge" style="background:rgba(59,130,246,0.2);color:#60a5fa;">Fatura ${mesLabel(c.mesFatura)}</span>
+            ${parcBadge}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:600;color:var(--red);">${fmt(c.val)}</span>
+            <button type="button" class="btn" style="width:auto;padding:5px 8px;font-size:11px;background:rgba(59,130,246,0.2);color:#60a5fa;border:1px solid rgba(59,130,246,0.4);" onclick="anteciparCompraCartao(${c.id})">⏩ Antecipar p/ ${mesLabel(destinoMes)}</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  openM('m-antecipar-cartao');
+}
+
+// 6. Antecipação de compra ou parcela futura
+function anteciparCompraCartao(compraId) {
+  if (!Array.isArray(S.comprasCartao)) return { ok: false };
+  const compra = S.comprasCartao.find(c => c.id === compraId);
+  if (!compra) return { ok: false, erro: 'Compra não encontrada' };
+
+  // B3: O destino da antecipação deve ser max(mesAtual, mesRealHoje) — nunca para o passado real
+  const mesRealHoje = new Date().toISOString().slice(0, 7);
+  const destinoMes = mesAtual < mesRealHoje ? mesRealHoje : mesAtual;
+
+  // B3: Bloqueie (guarda na função) se a fatura de destino estiver negativada/migrada
+  const fatDestino = (S.faturasCartao || []).find(f => f.cartaoId === compra.cartaoId && f.mes === destinoMes);
+  if (fatDestino && (fatDestino.negativada || fatDestino.migradoDivida)) {
+    if (typeof alert === 'function') alert('Não é possível antecipar para uma fatura negativada.');
+    return { ok: false, erro: 'Fatura destino negativada' };
+  }
+
+  // B3: Guarda - só permite se compra.mesFatura > destinoMes
+  if (compra.mesFatura <= destinoMes) {
+    if (typeof alert === 'function') alert('Esta compra já pertence a uma fatura presente ou passada.');
+    return { ok: false, erro: 'Compra não é posterior ao destino' };
+  }
+
+  const mesOrig = compra.mesFatura;
+  compra.mesFaturaOriginal = compra.mesFaturaOriginal || mesOrig;
+  compra.mesFatura = destinoMes;
+  compra.adiantada = true;
+
+  // B3: Se a fatura destino já estiver paga, aplique a mesma reabertura de B2 (fica saldo pendente)
+  verificarEReabrirFatura(compra.cartaoId, destinoMes);
+
+  save();
+  render();
+
+  if (typeof alert === 'function') {
+    alert(`⏩ Parcela "${compra.desc}" antecipada com sucesso de ${mesLabel(mesOrig)} para a fatura de ${mesLabel(destinoMes)}!`);
+  }
+
+  const modalAntecipar = document.getElementById('m-antecipar-cartao');
+  if (modalAntecipar && modalAntecipar.classList.contains('open') && compra.cartaoId) {
+    abrirModalAnteciparCartao(compra.cartaoId);
+  }
+
+  const modalFatura = document.getElementById('m-fatura-cartao');
+  if (modalFatura && modalFatura.classList.contains('open') && compra.cartaoId) {
+    abrirFaturaCartao(compra.cartaoId, mesAtual);
+  }
+
+  return { ok: true, compra, destinoMes };
 }
 
 function abrirModalGasto(){
@@ -2044,8 +2756,26 @@ function calcTotais(){
   // Total das faturas de cartões de crédito ativas no mês atual (evita poluição da lista avulsa e soma direta)
   let totalFaturasCartao = 0;
   (S.cartoes || []).filter(c => c.ativo !== false).forEach(c => {
+    const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesAtual);
+    // Faturas negativadas saem dos gastos operacionais e compõem o saldo na aba Dívidas
+    if (fatReg && (fatReg.negativada || fatReg.migradoDivida)) {
+      return;
+    }
+
     const f = calcularFaturaMes(c.id, mesAtual);
-    totalFaturasCartao += f.valorTotalFatura;
+    const mesSeguinte = adicionarMesesYM(mesAtual, 1);
+    const fatSeguinte = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesSeguinte);
+    const foiRolada = Boolean((fatReg && fatReg.roladoParaProxima) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
+
+    if (foiRolada) {
+      // Se rolada: o gasto do mês = valorTotalFatura MENOS o saldo que foi rolado para o mês seguinte (ou seja: valorPago)
+      const saldoRolado = (fatSeguinte && fatSeguinte.rotativoDetalhe?.saldoAnterior) || Number(fatReg?.saldoRestante) || 0;
+      const gastoMes = Math.max(0, Math.round((f.valorTotalFatura - saldoRolado) * 100) / 100);
+      totalFaturasCartao += gastoMes;
+    } else {
+      // Caso contrário (não rolada): valorTotalFatura
+      totalFaturasCartao += f.valorTotalFatura;
+    }
   });
   totalFaturasCartao = Math.round(totalFaturasCartao * 100) / 100;
 
@@ -2095,8 +2825,22 @@ function calcTotaisAno(anoStr){
   for (let m = 1; m <= 12; m++) {
     const ym = `${ano}-${String(m).padStart(2, '0')}`;
     cartoesAtivos.forEach(c => {
+      const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === ym);
+      if (fatReg && (fatReg.negativada || fatReg.migradoDivida)) {
+        return;
+      }
       const f = calcularFaturaMes(c.id, ym);
-      totalFaturasAno += f.valorTotalFatura;
+      const mesSeguinte = adicionarMesesYM(ym, 1);
+      const fatSeguinte = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesSeguinte);
+      const foiRolada = Boolean((fatReg && fatReg.roladoParaProxima) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
+
+      if (foiRolada) {
+        const saldoRolado = (fatSeguinte && fatSeguinte.rotativoDetalhe?.saldoAnterior) || Number(fatReg?.saldoRestante) || 0;
+        const gastoMes = Math.max(0, Math.round((f.valorTotalFatura - saldoRolado) * 100) / 100);
+        totalFaturasAno += gastoMes;
+      } else {
+        totalFaturasAno += f.valorTotalFatura;
+      }
     });
   }
   totalFaturasAno = Math.round(totalFaturasAno * 100) / 100;
@@ -2510,22 +3254,41 @@ function renderGastos(){
   const cartoesComFatura = (S.cartoes || []).filter(c => {
     if (c.ativo === false) return false;
     if (filtroTitularGasto !== 'todos' && c.titular !== filtroTitularGasto) return false;
+    const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesAtual);
+    // Se a fatura foi negativada (atraso >= 60 dias), sai de gastos e vai para a aba Dívidas
+    if (fatReg && (fatReg.negativada || fatReg.migradoDivida)) return false;
+
     const f = calcularFaturaMes(c.id, mesAtual);
-    return f.valorTotalFatura > 0;
+    return f.valorTotalFatura > 0 || (fatReg && fatReg.pago);
   });
 
   const faturasHtml = cartoesComFatura.map(c => {
     const f = calcularFaturaMes(c.id, mesAtual);
+    const fatReg = (S.faturasCartao || []).find(x => x.cartaoId === c.id && x.mes === mesAtual);
     const titBadge = c.titular ? `<span class="badge b-titular">${escapeHtml(c.titular)}</span>` : '';
+    let statusFatBadge = '';
+    let corVal = 'c-red';
+    let valExibir = f.valorTotalFatura;
+
+    if (fatReg && fatReg.pago) {
+      statusFatBadge = `<span class="badge" style="background:rgba(34,197,94,0.2);color:#4ade80;">✓ Paga</span>`;
+      corVal = 'c-green';
+      valExibir = fatReg.valorPago;
+    } else if (fatReg && fatReg.pagoParcial) {
+      statusFatBadge = `<span class="badge" style="background:rgba(234,179,8,0.2);color:#facc15;">⚠️ Parcial (${fmt(fatReg.saldoRestante)} pendente)</span>`;
+      corVal = 'c-yellow';
+    }
+
     return `<div class="item-row" style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.3);border-radius:10px;margin-bottom:8px;">
       <div style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
         <span class="item-name" style="font-weight:700;color:#c084fc;">💳 Fatura ${escapeHtml(c.nome)}</span>
         <span class="badge" style="background:rgba(139,92,246,0.25);color:#d8b4fe;">Cartão de Crédito</span>
         ${titBadge}
+        ${statusFatBadge}
         <span style="font-size:11px;color:var(--muted);">Venc: dia ${c.diaVencimento || 10}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <span class="item-val c-red" style="font-weight:700;">${fmt(f.valorTotalFatura)}</span>
+        <span class="item-val ${corVal}" style="font-weight:700;">${fmt(valExibir)}</span>
         <button class="btn" style="width:auto;padding:5px 10px;font-size:11px;background:rgba(168,85,247,0.2);color:#c084fc;border:1px solid rgba(168,85,247,0.4);" onclick="abrirFaturaCartao(${c.id})">👁️ Ver Fatura</button>
       </div>
     </div>`;
@@ -2832,6 +3595,7 @@ if(typeof navigator !== 'undefined' && 'serviceWorker' in navigator){
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     calcularMesesAtraso,
+    adicionarMesesYM,
     processarInadimplencia60Dias,
     gastosInadimplentesDoMes,
     gastosPrevistosDoMes,
@@ -2854,6 +3618,13 @@ if (typeof module !== 'undefined' && module.exports) {
     excluirCompraCartao,
     toggleCompraParcelada,
     atualizarPreviewCompraParcelada,
+    pagarFaturaTotal,
+    abrirModalPagamentoParcial,
+    atualizarPreviewPagamentoParcial,
+    confirmarPagamentoParcial,
+    abrirModalAnteciparCartao,
+    anteciparCompraCartao,
+    verificarEReabrirFatura,
     S
   };
 }
