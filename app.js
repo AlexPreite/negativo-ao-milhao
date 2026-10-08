@@ -40,19 +40,175 @@ let S = {
   onboardingDone:false
 };
 let apiKey = '';
+let mesAtual = new Date().toISOString().slice(0,7); // "YYYY-MM"
+
+// REGRA DE 60 DIAS & INADIMPLÊNCIA CRÍTICA (Fatia 1)
+// Calcula a diferença em meses entre duas competências 'YYYY-MM'
+function calcularMesesAtraso(mesOrigem, mesReferencia) {
+  if (!mesOrigem || !mesReferencia) return 0;
+  try {
+    const mo = String(mesOrigem).slice(0, 7);
+    const mr = String(mesReferencia).slice(0, 7);
+    const [yo, moNum] = mo.split('-').map(Number);
+    const [yr, mrNum] = mr.split('-').map(Number);
+    if (isNaN(yo) || isNaN(moNum) || isNaN(yr) || isNaN(mrNum)) return 0;
+    return (yr * 12 + mrNum) - (yo * 12 + moNum);
+  } catch (err) {
+    console.error('Erro em calcularMesesAtraso:', err);
+    return 0;
+  }
+}
+
+// Processa inadimplência de contas com atraso >= 2 meses em relação à data civil REAL de hoje
+// Migra gastos vencidos para dívidas negativadas e invalida parcelas futuras
+// Importante: Nunca usar mesAtual (cursor da UI) aqui, para não negativar despesas quando o usuário navegar para o futuro
+function processarInadimplencia60Dias() {
+  if (!S || !Array.isArray(S.gastos)) return;
+  if (!Array.isArray(S.dividas)) S.dividas = [];
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const mesRealHoje = hoje.slice(0, 7);
+  const gruposProcessados = new Set();
+  let houveMudanca = false;
+
+  const listaGastos = [...S.gastos];
+
+  for (const g of listaGastos) {
+    // Filtro de elegibilidade: não pago, não negociado e ainda não migrado
+    if (!g || g.pago || g.negociado || g.migradoDivida) continue;
+
+    const mesGasto = (g.data || '').slice(0, 7);
+    const mesesAtraso = calcularMesesAtraso(mesGasto, mesRealHoje);
+
+    if (mesesAtraso >= 2) {
+      if ((g.parcelado || g.recorrente) && g.grupoId) {
+        if (gruposProcessados.has(g.grupoId)) continue;
+        gruposProcessados.add(g.grupoId);
+
+        // Encontra todas as parcelas não pagas do mesmo grupo (vencidas e futuras)
+        const parcelasNaoPagas = S.gastos.filter(x => x.grupoId === g.grupoId && !x.pago);
+
+        for (const x of parcelasNaoPagas) {
+          const mesX = (x.data || '').slice(0, 7);
+          const dataX = (x.data || '').slice(0, 10);
+          const isFutura = (mesX > mesRealHoje) || (dataX > hoje);
+
+          if (isFutura) {
+            x.canceladaNegativacao = true;
+          }
+          x.migradoDivida = true;
+          houveMudanca = true;
+        }
+
+        // Consolida saldo devedor exato em centavos para precisão monetária estrita
+        const totalCentavos = parcelasNaoPagas.reduce((acc, p) => acc + Math.round((Number(p.val) || 0) * 100), 0);
+        const saldoTotal = Math.round(totalCentavos) / 100;
+
+        // Vínculo idempotente por origemGrupoId: não duplica registros
+        const dividaExistente = S.dividas.find(d => d.origemGrupoId === g.grupoId);
+        if (dividaExistente) {
+          if (!dividaExistente.quitada && dividaExistente.saldo !== saldoTotal) {
+            dividaExistente.saldo = saldoTotal;
+            houveMudanca = true;
+          }
+        } else {
+          const credorNome = g.credor || (g.descOriginal || g.desc || '').split('(')[0].trim() || 'Dívida Parcelada';
+          const novaDivida = {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            credor: credorNome,
+            saldo: saldoTotal,
+            juros: 0,
+            parcela: 0,
+            tipo: g.tipoDivida || 'cartao',
+            titular: g.titular || '',
+            quitada: false,
+            negativada: true,
+            origemGrupoId: g.grupoId,
+            dataNegativacao: hoje
+          };
+          S.dividas.push(novaDivida);
+          houveMudanca = true;
+        }
+      } else {
+        // Gasto comum avulso
+        g.migradoDivida = true;
+        houveMudanca = true;
+
+        const saldoGasto = Math.round((Number(g.val) || 0) * 100) / 100;
+        const dividaExistente = S.dividas.find(d => d.origemGastoId === g.id);
+        if (dividaExistente) {
+          if (!dividaExistente.quitada && dividaExistente.saldo !== saldoGasto) {
+            dividaExistente.saldo = saldoGasto;
+            houveMudanca = true;
+          }
+        } else {
+          const credorNome = g.credor || (g.desc || '').trim() || 'Gasto Inadimplente';
+          const novaDivida = {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            credor: credorNome,
+            saldo: saldoGasto,
+            juros: 0,
+            parcela: 0,
+            tipo: g.tipoDivida || 'outro',
+            titular: g.titular || '',
+            quitada: false,
+            negativada: true,
+            origemGastoId: g.id,
+            dataNegativacao: hoje
+          };
+          S.dividas.push(novaDivida);
+          houveMudanca = true;
+        }
+      }
+    }
+  }
+
+  // Persiste no storage apenas se houver alterações
+  if (houveMudanca && typeof save === 'function') {
+    try {
+      save();
+    } catch (err) {
+      console.error('Erro ao salvar estado após processar inadimplência de 60 dias:', err);
+    }
+  }
+}
 
 function loadState(){
-  try { const d=localStorage.getItem('dnm_data'); if(d) S={...S,...JSON.parse(d)}; } catch(e){}
+  // Chama no início do carregamento conforme especificado no contrato técnico
+  processarInadimplencia60Dias();
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const d = localStorage.getItem('dnm_data');
+      if (d) S = { ...S, ...JSON.parse(d) };
+    }
+  } catch(e){
+    console.error('Erro ao ler dnm_data do localStorage:', e);
+  }
   if(!S.membrosFamilia) S.membrosFamilia = ['Alex', 'Gabi'];
   if(!S.categoriasGastos || !S.categoriasGastos.length) S.categoriasGastos = [...DEFAULT_CATEGORIAS_GASTOS];
   if(!S.tiposDivida || !S.tiposDivida.length) S.tiposDivida = [...DEFAULT_TIPOS_DIVIDA];
   sincronizarTiposDividaMap();
 
-  try { familiaId=localStorage.getItem('dnm_familia_id')||''; } catch(e){}
+  try {
+    if (typeof localStorage !== 'undefined') {
+      familiaId = localStorage.getItem('dnm_familia_id') || '';
+    }
+  } catch(e){
+    console.error('Erro ao ler dnm_familia_id:', e);
+  }
   if(S.apiKey) apiKey=S.apiKey;
-  if(!S.apiKey){ try{ const legado=localStorage.getItem('dnm_key'); if(legado){ S.apiKey=legado; apiKey=legado; } }catch(e){} }
-  if(!S.onboardingDone && (S.apiKey || localStorage.getItem('dnm_skip'))) S.onboardingDone=true;
-  // Migração: garante que registros antigos (sem mês/status/titular/recorrência) continuem funcionando
+  if(!S.apiKey){
+    try{
+      if (typeof localStorage !== 'undefined') {
+        const legado = localStorage.getItem('dnm_key');
+        if(legado){ S.apiKey=legado; apiKey=legado; }
+      }
+    }catch(e){
+      console.error('Erro ao ler dnm_key legada:', e);
+    }
+  }
+  if(!S.onboardingDone && (S.apiKey || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_skip')))) S.onboardingDone=true;
+  // Migração: garante que registros antigos (sem mês/status/titular/recorrência/flags 60 dias) continuem funcionando
   const hoje=new Date().toISOString().slice(0,10);
   (S.receitas||[]).forEach(r=>{
     if(!r.data) r.data=hoje;
@@ -67,6 +223,8 @@ function loadState(){
     if(g.recorrente===undefined) g.recorrente=false;
     if(g.origemDivida===undefined) g.origemDivida='';
     if(g.negociado===undefined) g.negociado=false;
+    if(g.migradoDivida===undefined) g.migradoDivida=false;
+    if(g.canceladaNegativacao===undefined) g.canceladaNegativacao=false;
   });
   (S.dividas||[]).forEach(d=>{
     if(d.titular===undefined) d.titular='';
@@ -74,11 +232,15 @@ function loadState(){
     if(d.valorQuitado===undefined) d.valorQuitado=null;
     if(d.dataQuitacao===undefined) d.dataQuitacao=null;
     if(d.acordo===undefined) d.acordo=null;
+    if(d.negativada===undefined) d.negativada=false;
   });
   if(!S.investimentos) S.investimentos=[];
   (S.investimentos||[]).forEach(inv=>{
     if(inv.titular===undefined) inv.titular='';
   });
+
+  // Executa processamento após carga do localStorage
+  processarInadimplencia60Dias();
 }
 
 const fmt = v => 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -104,6 +266,7 @@ let saveTimer = null;
 let familiaId = '';
 
 function initFirebase(){
+  if (typeof firebase === 'undefined') return;
   try {
     firebase.initializeApp(firebaseConfig);
     fbDb = firebase.firestore();
@@ -237,7 +400,11 @@ function updateFamiliaStatus(){
 // Salva local sempre; se logado, sincroniza na nuvem com debounce (evita gravar a cada tecla)
 function save(){
   S.apiKey = apiKey;
-  try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){}
+  try{
+    if(typeof localStorage !== 'undefined') localStorage.setItem('dnm_data',JSON.stringify(S));
+  }catch(e){
+    console.error('Erro ao salvar no localStorage em save():', e);
+  }
   const id=docId();
   if(fbUser && fbDb && id){
     clearTimeout(saveTimer);
@@ -250,11 +417,13 @@ function save(){
 }
 
 // ONBOARDING / AUTENTICAÇÃO
-loadState();
-if(document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
+if(typeof localStorage !== 'undefined') loadState();
+if(typeof document !== 'undefined') {
+  if(document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 }
 
 function init(){ initFirebase(); }
@@ -308,7 +477,7 @@ document.querySelectorAll('.modal-bg').forEach(m=>{
 function selTag(el){ document.querySelectorAll('#cat-tags .tag').forEach(t=>t.classList.remove('sel')); el.classList.add('sel'); }
 
 // VISÃO MENSAL & GESTÃO FAMILIAR
-let mesAtual = new Date().toISOString().slice(0,7); // "YYYY-MM"
+// mesAtual é declarado no topo do arquivo para uso prévio em loadState()
 let filtroTitularGasto = 'todos';
 let filtroTitularReceita = 'todos';
 
@@ -329,11 +498,18 @@ function mesLabel(ym){
   return `${nomes[m-1]}/${y}`;
 }
 
+// Altera o mês ativo, processa inadimplência de 60 dias para o novo contexto e renderiza
+function setMes(novoMes){
+  if(novoMes) mesAtual = String(novoMes).slice(0, 7);
+  processarInadimplencia60Dias();
+  render();
+}
+
 function mudarMes(delta){
   const [y,m]=mesAtual.split('-').map(Number);
   const d=new Date(y, (m-1)+delta, 1);
-  mesAtual = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-  render();
+  const novoMes = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  setMes(novoMes);
 }
 
 function adicionarMeses(isoDateStr, qtdMeses) {
@@ -528,12 +704,13 @@ function renderFiltroTitulares(containerId, titularSelecionado, onClickFnName) {
 
 // REGRAS DE INADIMPLÊNCIA & GASTOS DO MÊS
 function gastosPrevistosDoMes(){
-  return (S.gastos||[]).filter(g => (g.data||'').slice(0,7) === mesAtual);
+  return (S.gastos||[]).filter(g => (g.data||'').slice(0,7) === mesAtual && !g.canceladaNegativacao);
 }
 
 // Contas de meses anteriores que continuam não pagas acumulam no mês vigente
+// Contas com atraso >= 60 dias (migradas para S.dividas) deixam de acumular aqui
 function gastosInadimplentesDoMes(){
-  return (S.gastos||[]).filter(g => (g.data||'').slice(0,7) < mesAtual && !g.pago && !g.negociado);
+  return (S.gastos||[]).filter(g => (g.data||'').slice(0,7) < mesAtual && !g.pago && !g.negociado && !g.migradoDivida);
 }
 
 function gastosDoMes(){
@@ -1299,7 +1476,7 @@ function calcSaldoAcumuladoAnterior(targetYM) {
 }
 
 function calcTotais(){
-  const rec = receitasDoMes(), gas = gastosDoMes().filter(g => !g.negociado);
+  const rec = receitasDoMes(), gas = gastosDoMes().filter(g => !g.negociado && !g.canceladaNegativacao);
   const totalRec = rec.reduce((s,r) => s + r.val, 0);
   const totalGas = gas.reduce((s,g) => s + g.val, 0);
   
@@ -1336,7 +1513,7 @@ function calcTotais(){
 function calcTotaisAno(anoStr){
   const ano = String(anoStr || (mesAtual ? mesAtual.slice(0,4) : new Date().getFullYear()));
   const recAno = (S.receitas || []).filter(r => (r.data||'').slice(0,4) === ano);
-  const gasAno = (S.gastos || []).filter(g => (g.data||'').slice(0,4) === ano && !g.negociado);
+  const gasAno = (S.gastos || []).filter(g => (g.data||'').slice(0,4) === ano && !g.negociado && !g.canceladaNegativacao);
   const invAno = (S.investimentos || []).filter(i => (i.dataInicio||'').slice(0,4) === ano);
 
   const totalRec = recAno.reduce((s,r) => s + r.val, 0);
@@ -1407,6 +1584,8 @@ function abrirModalDivida(){
 
 // RENDER
 function render(){
+  processarInadimplencia60Dias();
+  if (typeof document === 'undefined' || !document.getElementById || !document.getElementById('app')) return;
   atualizarDatalistTitulares();
   atualizarSelectsTipoDivida();
   renderCategoriasModalGasto();
@@ -1723,9 +1902,12 @@ function renderGastos(){
     const recBadge = g.recorrente ? `<span class="badge b-rec">Fixo ${g.mesNum}/${g.totalMeses}</span>` : '';
     const titBadge = g.titular ? `<span class="badge b-titular">${escapeHtml(g.titular)}</span>` : '';
     const negociadoBadge = g.negociado ? `<span class="badge" style="background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.3);">🤝 Negociado</span>` : '';
-    const statusHtml = `<button class="status-btn ${g.pago?'pago':'pendente'}" onclick="togglePagoGasto(${g.id})">${g.pago?'✓ Pago':'⏳ Aberto'}</button>`;
-    const adiantarHtml = g.parcelado ? `<button class="btn-adiantar" onclick="abrirModalAdiantar('${escapeHtml(g.grupoId)}')">⏩ Adiantar</button>` : '';
-    const negociarHtml = (!g.pago && !g.negociado) ? `<button class="btn-negociar" onclick="abrirModalNegociarGasto(${g.id})">🤝 Negociar</button>` : '';
+    const migradoBadge = g.migradoDivida ? `<span class="badge" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);">🔴 Migrado p/ Dívidas</span>` : '';
+
+    // Gastos já migrados para a aba de dívidas não exibem botões de pagar ou negociar para garantir integridade
+    const statusHtml = (g.negociado || g.migradoDivida) ? '' : `<button class="status-btn ${g.pago?'pago':'pendente'}" onclick="togglePagoGasto(${g.id})">${g.pago?'✓ Pago':'⏳ Aberto'}</button>`;
+    const adiantarHtml = (g.parcelado && !g.migradoDivida) ? `<button class="btn-adiantar" onclick="abrirModalAdiantar('${escapeHtml(g.grupoId)}')">⏩ Adiantar</button>` : '';
+    const negociarHtml = (!g.pago && !g.negociado && !g.migradoDivida) ? `<button class="btn-negociar" onclick="abrirModalNegociarGasto(${g.id})">🤝 Negociar</button>` : '';
 
     return `<div class="item-row">
       <div style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
@@ -1735,10 +1917,11 @@ function renderGastos(){
         ${parcBadge}
         ${recBadge}
         ${negociadoBadge}
+        ${migradoBadge}
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
         <span class="item-val c-red">${fmt(g.val)}</span>
-        ${g.negociado ? '' : statusHtml}
+        ${statusHtml}
         ${adiantarHtml}
         ${negociarHtml}
         <span class="item-del" onclick="if(confirm('Excluir este gasto?')){S.gastos=del(S.gastos,${g.id});save();render();}">×</span>
@@ -1763,6 +1946,7 @@ function renderDividas(){
     const custo=!d.acordo && d.juros ? d.saldo*(d.juros/100) : 0;
     const tipoLabel = TIPOS_DIVIDA[d.tipo] || d.tipo || 'Outro';
     const titBadge = d.titular ? `<span class="badge b-titular">${escapeHtml(d.titular)}</span>` : '';
+    const negativadaBadge = d.negativada ? ` <span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);">🔴 Negativada (60+ dias)</span>` : '';
     let parcelasHtml='';
     if(d.acordo){
       const pagas=d.acordo.parcelas.filter(p=>p.paga).length;
@@ -1774,7 +1958,7 @@ function renderDividas(){
     }
     return `<div class="div-row">
       <div class="div-header">
-        <span class="div-name">${escapeHtml(d.credor)}${titBadge}${d.acordo?' <span class="badge b-rec">Acordo</span>':''}</span>
+        <span class="div-name">${escapeHtml(d.credor)}${titBadge}${negativadaBadge}${d.acordo?' <span class="badge b-rec">Acordo</span>':''}</span>
         <span class="item-del" onclick="if(confirm('Excluir esta dívida?')){S.dividas=del(S.dividas,${d.id});save();render();}">×</span>
       </div>
       <div class="div-line"><span style="color:var(--muted);">Saldo restante</span><span class="c-red" style="font-weight:600;">${fmt(restante)}</span></div>
@@ -1791,14 +1975,18 @@ function renderDividas(){
 
   if(quitadas.length){
     html+=`<p class="sec-title" style="margin-top:20px;font-size:14px;">✅ Dívidas quitadas</p>`;
-    html+=quitadas.map(d=>`<div class="div-row" style="opacity:0.65;">
-      <div class="div-header">
-        <span class="div-name">${escapeHtml(d.credor)}</span>
-        <span class="item-del" onclick="if(confirm('Excluir este registro?')){S.dividas=del(S.dividas,${d.id});save();render();}">×</span>
-      </div>
-      <div class="div-line"><span style="color:var(--muted);">Valor quitado</span><span class="c-green" style="font-weight:600;">${fmt(d.valorQuitado||0)}</span></div>
-      <div class="div-line"><span style="color:var(--muted);">Data</span><span>${escapeHtml(d.dataQuitacao||'-')}</span></div>
-    </div>`).join('');
+    html+=quitadas.map(d=>{
+      const titBadgeQ = d.titular ? `<span class="badge b-titular">${escapeHtml(d.titular)}</span>` : '';
+      const negativadaBadgeQ = d.negativada ? ` <span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);">🔴 Negativada (60+ dias)</span>` : '';
+      return `<div class="div-row" style="opacity:0.65;">
+        <div class="div-header">
+          <span class="div-name">${escapeHtml(d.credor)}${titBadgeQ}${negativadaBadgeQ}</span>
+          <span class="item-del" onclick="if(confirm('Excluir este registro?')){S.dividas=del(S.dividas,${d.id});save();render();}">×</span>
+        </div>
+        <div class="div-line"><span style="color:var(--muted);">Valor quitado</span><span class="c-green" style="font-weight:600;">${fmt(d.valorQuitado||0)}</span></div>
+        <div class="div-line"><span style="color:var(--muted);">Data</span><span>${escapeHtml(d.dataQuitacao||'-')}</span></div>
+      </div>`;
+    }).join('');
   }
 
   el.innerHTML=html || '<p style="color:var(--muted);font-size:14px;padding:8px 0;">Nenhuma dívida em aberto. 🎉</p>';
@@ -1993,6 +2181,25 @@ function renderChat(){
 }
 
 // SERVICE WORKER
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+if(typeof navigator !== 'undefined' && 'serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(err => {
+    console.error('Erro ao registrar Service Worker:', err);
+  });
+}
+
+// EXPORTAÇÃO PARA TESTES / NODE.JS
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    calcularMesesAtraso,
+    processarInadimplencia60Dias,
+    gastosInadimplentesDoMes,
+    gastosPrevistosDoMes,
+    gastosDoMes,
+    calcTotais,
+    calcTotaisAno,
+    setMes,
+    mudarMes,
+    loadState,
+    S
+  };
 }
