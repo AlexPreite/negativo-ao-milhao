@@ -607,10 +607,11 @@
       <p style="font-size:12px;color:var(--muted);margin-top:4px;" id="fatura-subinfo"></p>
     </div>
 
-    <!-- AÇÕES FINANCEIRAS DA FATURA -->
-    <div id="fatura-acoes-financeiras" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
-      <button type="button" class="btn btn-g" id="btn-pagar-fatura-total" style="padding:8px 6px;font-size:12px;margin:0;" onclick="pagarFaturaTotal(cartaoAtualId, mesAtual)">✓ Pagar Fatura Total</button>
-      <button type="button" class="btn" id="btn-pagar-fatura-parcial" style="padding:8px 6px;font-size:12px;margin:0;background:rgba(234,179,8,0.15);color:#facc15;border:1px solid rgba(234,179,8,0.35);" onclick="abrirModalPagamentoParcial()">💵 Pagamento Parcial</button>
+    <!-- AÇÕES FINANCEIRAS DA FATURA (Fatia 4) -->
+    <div id="fatura-acoes-financeiras" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+      <button type="button" class="btn btn-g" id="btn-pagar-fatura-total" style="padding:8px 6px;font-size:12px;margin:0;" onclick="pagarFaturaTotal(cartaoAtualId, mesAtual)">✓ Pagar Total</button>
+      <button type="button" class="btn" id="btn-pagar-fatura-parcial" style="padding:8px 6px;font-size:12px;margin:0;background:rgba(234,179,8,0.15);color:#facc15;border:1px solid rgba(234,179,8,0.35);" onclick="abrirModalPagamentoParcial()">💵 Parcial</button>
+      <button type="button" class="btn" id="btn-abater-fatura" style="padding:8px 6px;font-size:12px;margin:0;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.35);" onclick="abrirModalAbaterCartao()">💵 Abater Valor</button>
       <button type="button" class="btn" id="btn-antecipar-parcelas" style="grid-column:1/-1;padding:8px 6px;font-size:12px;margin:0;background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.35);" onclick="abrirModalAnteciparCartao()">⏩ Antecipar Faturas/Parcelas</button>
     </div>
 
@@ -618,6 +619,30 @@
     <p class="sec-title" style="font-size:13px;margin:0 0 6px;">Itens da fatura</p>
     <div id="fatura-itens-lista" style="flex:1;overflow-y:auto;max-height:260px;margin-bottom:12px;"></div>
     <button class="btn" onclick="closeM('m-fatura-cartao')">Fechar</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="m-abater-cartao">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-abater-cartao')">×</span>
+    <p class="modal-title">💵 Abater / Pagar Valor Avulso</p>
+    <div class="card" style="margin-bottom:12px;background:var(--bg3);">
+      <p style="font-size:12px;color:var(--muted);margin:0 0 4px;" id="abater-subtitulo">Cartão Selecionado</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="card-label" style="margin:0;">Saldo pendente atual:</span>
+        <span class="big-num c-red" id="abater-saldo-txt" style="font-size:18px;">R$ 0,00</span>
+      </div>
+    </div>
+    <div class="input-row">
+      <label>Valor a abater (R$)</label>
+      <input type="number" id="abater-valor" step="0.01" min="0.01" placeholder="Ex: 300.00" inputmode="decimal"/>
+    </div>
+    <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px;">
+      <p style="font-size:12px;color:var(--green);margin:0;line-height:1.4;">
+        💡 <strong>Impacto Imediato:</strong> Este pagamento avulso reduz a dívida da fatura, libera o limite do cartão na hora e é descontado do Caixa Real (Painel Verdinho). Não aciona juros de rotativo.
+      </p>
+    </div>
+    <button type="button" class="btn btn-g" style="margin-top:6px;" onclick="confirmarAbatimentoCartao()">Confirmar Abatimento</button>
   </div>
 </div>
 

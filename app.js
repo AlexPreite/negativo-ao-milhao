@@ -721,8 +721,8 @@ function go(id){
 }
 
 // MODALS
-function openM(id){ document.getElementById(id)?.classList.add('open'); }
-function closeM(id){ document.getElementById(id)?.classList.remove('open'); }
+function openM(id){ if (typeof document !== 'undefined') document.getElementById(id)?.classList.add('open'); }
+function closeM(id){ if (typeof document !== 'undefined') document.getElementById(id)?.classList.remove('open'); }
 if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
   document.querySelectorAll('.modal-bg').forEach(m=>{
     m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); });
@@ -2067,8 +2067,9 @@ function abrirFaturaCartao(cartaoId, mesYM) {
   // Botões de ações financeiras da fatura
   const btnPagarTot = document.getElementById('btn-pagar-fatura-total');
   const btnPagarParc = document.getElementById('btn-pagar-fatura-parcial');
+  const btnAbater = document.getElementById('btn-abater-fatura');
   const btnAntecipar = document.getElementById('btn-antecipar-parcelas');
-  // B2: Botões Pagar Total/Parcial devem reaparecer cobrando apenas o saldo pendente
+  // B2: Botões Pagar Total/Parcial/Abater devem reaparecer cobrando apenas o saldo pendente
   const podePagar = !estaNegativada && saldoPendente > 0;
 
   if (btnPagarTot) {
@@ -2083,6 +2084,10 @@ function abrirFaturaCartao(cartaoId, mesYM) {
   if (btnPagarParc) {
     btnPagarParc.style.display = podePagar ? 'block' : 'none';
     btnPagarParc.setAttribute('onclick', `abrirModalPagamentoParcial(${cartaoId}, '${ym}')`);
+  }
+  if (btnAbater) {
+    btnAbater.style.display = podePagar ? 'block' : 'none';
+    btnAbater.setAttribute('onclick', `abrirModalAbaterCartao(${cartaoId}, '${ym}')`);
   }
 
   // B3: Destino da antecipação = max(ym, mesRealHoje); botão oculto se destino estiver negativada
@@ -2957,6 +2962,204 @@ function confirmarPagamentoParcial(dadosOverride) {
     faturaSeguinte: fatProx,
     encargos,
     rolagemTotal
+  };
+}
+
+// 4.1 Abertura do modal de abatimento / pagamento avulso da fatura (Fatia 4 - ADR-004)
+/**
+ * Abre o modal de abatimento / pagamento avulso da fatura para o cartão e mês especificados.
+ * Exibe o saldo pendente em aberto e configura o campo de valor para digitação.
+ *
+ * @param {number|string|null} cartaoId - ID do cartão de crédito
+ * @param {string|null} mesYM - Competência no formato YYYY-MM
+ */
+function abrirModalAbaterCartao(cartaoId, mesYM) {
+  const cid = cartaoId || cartaoAtualId;
+  const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
+  cartaoAtualId = cid;
+  const fatura = calcularFaturaMes(cid, ym);
+  if (!fatura.cartao) return;
+
+  const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === ym);
+  const valorJaPago = (fatReg && Number(fatReg.valorPago)) || 0;
+  const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
+
+  const elSub = document.getElementById('abater-subtitulo');
+  if (elSub) {
+    elSub.textContent = `Cartão ${fatura.cartao.nome} • Fatura ${mesLabel(ym)}`;
+  }
+
+  const elSaldoTxt = document.getElementById('abater-saldo-txt');
+  if (elSaldoTxt) {
+    elSaldoTxt.textContent = fmt(saldoPendente);
+  }
+
+  const elVal = document.getElementById('abater-valor');
+  if (elVal) {
+    elVal.value = '';
+    elVal.max = saldoPendente > 0 ? String(saldoPendente) : '';
+  }
+
+  openM('m-abater-cartao');
+}
+
+// 4.2 Confirmação de abatimento / pagamento avulso da fatura (Fatia 4 - ADR-004)
+/**
+ * Executa o abatimento avulso da fatura amortizando diretamente o saldo devedor.
+ * - Amortização direta: incrementa valorPago e reduz saldoRestante.
+ * - Liberação de limite imediata: calcularLimiteCartao lê valorPago da fatura do mês atual.
+ * - Débito em tempo real do Caixa Real (Painel Verdinho): calcTotais soma faturas pagas/parciais.
+ * - Não aciona rolagem nem encargos de rotativo para o mês seguinte (roladoParaProxima permanece falso).
+ *
+ * @param {Object|null} dadosOverride - Parâmetros opcionais para automação e testes { cartaoId, mes, valor }
+ * @returns {Object} Resultado contendo { ok: boolean, fatura: Object, ... }
+ */
+function confirmarAbatimentoCartao(dadosOverride) {
+  const cid = dadosOverride?.cartaoId || cartaoAtualId;
+  const ym = dadosOverride?.mes ? String(dadosOverride.mes).slice(0, 7) : (dadosOverride?.mesYM ? String(dadosOverride.mesYM).slice(0, 7) : mesAtual);
+  const fatura = calcularFaturaMes(cid, ym);
+  if (!fatura.cartao) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Cartão de crédito não encontrado.');
+    return { ok: false, erro: 'Cartão não encontrado' };
+  }
+
+  if (!Array.isArray(S.faturasCartao)) S.faturasCartao = [];
+  const idFat = `${cid}_${ym}`;
+  let fat = S.faturasCartao.find(f => f.id === idFat || (f.cartaoId === cid && f.mes === ym));
+
+  const valorJaPago = (fat && Number(fat.valorPago)) || 0;
+  const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
+
+  if (saldoPendente <= 0 && fat && fat.pago) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Esta fatura já está integralmente quitada.');
+    return { ok: false, erro: 'Fatura já quitada' };
+  }
+
+  if (saldoPendente <= 0) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Esta fatura não possui saldo pendente para abatimento.');
+    return { ok: false, erro: 'Sem saldo pendente' };
+  }
+
+  const elVal = document.getElementById('abater-valor');
+  const valRaw = dadosOverride?.valor ?? dadosOverride?.valorAbater ?? dadosOverride?.valorPago ?? (elVal ? elVal.value : 0);
+  const valorAbater = parseFloat(String(valRaw).replace(',', '.'));
+
+  if (isNaN(valorAbater) || valorAbater <= 0) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Informe um valor a abater válido maior que zero.');
+    return { ok: false, erro: 'Valor inválido' };
+  }
+
+  // Compara em centavos inteiros para evitar imprecisões de ponto flutuante (ex: 0.1 + 0.2 !== 0.3)
+  const centavosAbater = Math.round(valorAbater * 100);
+  const centavosPendente = Math.round(saldoPendente * 100);
+
+  if (centavosAbater > centavosPendente) {
+    if (typeof alert === 'function' && !dadosOverride) {
+      alert(`O valor a abater (${fmt(valorAbater)}) não pode ser superior ao saldo pendente da fatura (${fmt(saldoPendente)}).`);
+    }
+    return { ok: false, erro: 'Valor excede saldo pendente' };
+  }
+
+  if (!fat) {
+    fat = {
+      id: idFat,
+      cartaoId: cid,
+      mes: ym,
+      valorTotal: fatura.valorTotalFatura,
+      valorPago: 0,
+      pago: false,
+      pagoParcial: false,
+      saldoRestante: fatura.valorTotalFatura,
+      rotativoRolado: 0,
+      negativada: false,
+      migradoDivida: false
+    };
+    S.faturasCartao.push(fat);
+  }
+
+  const novoValorPago = Math.round((valorJaPago + valorAbater) * 100) / 100;
+  const novoSaldoRestante = Math.max(0, Math.round((saldoPendente - valorAbater) * 100) / 100);
+
+  fat.valorTotal = fatura.valorTotalFatura;
+  fat.valorPago = novoValorPago;
+  fat.saldoRestante = novoSaldoRestante;
+  fat.negativada = false;
+  fat.migradoDivida = false;
+  fat.dataPagamento = new Date().toISOString().slice(0, 10);
+
+  if (novoSaldoRestante <= 0) {
+    // Quitação total da fatura por abatimento
+    fat.pago = true;
+    fat.pagoParcial = false;
+    fat.saldoRestante = 0;
+
+    // Se quitou totalmente e havia rolagem automática absorvida da fatura anterior, liquida o registro anterior
+    if (fatura.rotativoItem && fatura.rotativoItem.automatico) {
+      const mesOrig = fatura.rotativoItem.detalhe?.mesOrigem || adicionarMesesYM(ym, -1);
+      let fatAnt = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === mesOrig);
+      if (!fatAnt) {
+        const idAnt = `${cid}_${mesOrig}`;
+        const fatAntInfo = calcularFaturaMes(cid, mesOrig, true);
+        fatAnt = {
+          id: idAnt,
+          cartaoId: cid,
+          mes: mesOrig,
+          valorTotal: fatAntInfo.valorTotalFatura,
+          valorPago: 0,
+          pago: true,
+          pagoParcial: false,
+          saldoRestante: 0,
+          rotativoRolado: 0,
+          roladoParaProxima: true,
+          liquidadaPorRolagem: true,
+          negativada: false,
+          migradoDivida: false
+        };
+        S.faturasCartao.push(fatAnt);
+      } else {
+        fatAnt.pago = true;
+        fatAnt.roladoParaProxima = true;
+        fatAnt.liquidadaPorRolagem = true;
+        fatAnt.saldoRestante = 0;
+        fatAnt.negativada = false;
+        fatAnt.migradoDivida = false;
+      }
+      fat.rotativoRolado = fatura.rotativoItem.val;
+      fat.rotativoDetalhe = fatura.rotativoItem.detalhe;
+    }
+  } else {
+    // Abatimento parcial: a fatura permanece em aberto aguardando vencimento pelo saldo restante.
+    // Decisão ADR-004: Não aciona rotativo nem define roladoParaProxima = true.
+    // Marca pagoParcial = true para que calcTotais considere o valor desembolsado nas saídas do Caixa Real.
+    fat.pago = false;
+    fat.pagoParcial = true;
+  }
+
+  save();
+  closeM('m-abater-cartao');
+  render();
+
+  if (typeof alert === 'function' && !dadosOverride) {
+    if (fat.pago) {
+      alert(`✅ Abatimento de ${fmt(valorAbater)} confirmado! Fatura quitada integralmente!`);
+    } else {
+      alert(`💵 Abatimento de ${fmt(valorAbater)} confirmado com sucesso! Saldo pendente restante: ${fmt(fat.saldoRestante)}. Limite liberado imediatamente!`);
+    }
+  }
+
+  const modalFatura = document.getElementById('m-fatura-cartao');
+  if (modalFatura && modalFatura.classList.contains('open')) {
+    abrirFaturaCartao(cid, ym);
+  }
+
+  return {
+    ok: true,
+    fatura: fat,
+    valorAbatido: valorAbater,
+    saldoRestante: fat.saldoRestante,
+    valorPago: fat.valorPago,
+    pago: fat.pago,
+    pagoParcial: fat.pagoParcial
   };
 }
 
@@ -4473,6 +4676,8 @@ if (typeof module !== 'undefined' && module.exports) {
     abrirModalPagamentoParcial,
     atualizarPreviewPagamentoParcial,
     confirmarPagamentoParcial,
+    abrirModalAbaterCartao,
+    confirmarAbatimentoCartao,
     abrirModalAnteciparCartao,
     anteciparCompraCartao,
     verificarEReabrirFatura,
