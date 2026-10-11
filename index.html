@@ -662,8 +662,8 @@
       <input type="text" id="cc-desc" placeholder="Ex: Mercado Pão de Açúcar, Farmácia..."/>
     </div>
     <div class="input-row">
-      <label>Valor total da compra (R$)</label>
-      <input type="number" id="cc-val" placeholder="0,00" inputmode="decimal" step="0.01" oninput="atualizarPreviewCompraParcelada()"/>
+      <label>Valor da compra (R$)</label>
+      <input type="number" id="cc-val" placeholder="0,00" inputmode="decimal" step="0.01" oninput="atualizarPreviewCompraModal()"/>
     </div>
     <div class="input-row">
       <label>Categoria</label>
@@ -671,8 +671,15 @@
     </div>
     <div class="input-row">
       <label>Data da compra</label>
-      <input type="date" id="cc-data"/>
+      <input type="date" id="cc-data" onchange="atualizarPreviewCompraModal()"/>
     </div>
+
+    <!-- PREVIEW DINÂMICO DA FATURA DE DESTINO (Fatia 2) -->
+    <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 10px;margin:8px 0 10px;">
+      <p id="cc-preview-fatura" style="font-size:12px;color:#c084fc;font-weight:600;margin:0;">📅 Fatura de destino: calculando...</p>
+    </div>
+
+    <!-- OPÇÃO 1: COMPRA PARCELADA -->
     <div class="input-row" style="margin-top:6px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:14px;">
         <input type="checkbox" id="cc-is-parcelado" onchange="toggleCompraParcelada()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;"/>
@@ -682,10 +689,34 @@
     <div id="cc-bloco-parcelamento" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
       <div class="input-row">
         <label>Quantidade de parcelas</label>
-        <input type="number" id="cc-parcelas" min="2" max="48" value="2" inputmode="numeric" oninput="atualizarPreviewCompraParcelada()"/>
+        <input type="number" id="cc-parcelas" min="2" max="48" value="2" inputmode="numeric" oninput="atualizarPreviewCompraModal()"/>
       </div>
       <p id="cc-preview-parcela" style="font-size:13px;color:var(--yellow);font-weight:600;margin-top:4px;"></p>
     </div>
+
+    <!-- OPÇÃO 2: ASSINATURA / GASTO FIXO RECORRENTE (Fatia 2) -->
+    <div class="input-row" style="margin-top:6px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:14px;">
+        <input type="checkbox" id="cc-is-recorrente" onchange="toggleCompraRecorrente()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;"/>
+        <span>🔁 Assinatura / Gasto Fixo no Cartão (Ex: Netflix, Streaming, Curso)</span>
+      </label>
+    </div>
+    <div id="cc-bloco-recorrente" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+      <div class="input-row">
+        <label>Duração / Prazo de cobrança</label>
+        <select id="cc-prazo-recorrente" onchange="togglePrazoRecorrenteCartao()">
+          <option value="24">Padrão: 24 meses (2 anos)</option>
+          <option value="12">12 meses</option>
+          <option value="personalizado">Personalizado (escolher meses)</option>
+        </select>
+      </div>
+      <div class="input-row" id="cc-row-meses-personalizado" style="display:none;">
+        <label>Quantidade de meses</label>
+        <input type="number" id="cc-meses-recorrente" placeholder="Ex: 36" min="2" max="72" value="24" inputmode="numeric" oninput="atualizarPreviewCompraModal()"/>
+      </div>
+      <p id="cc-preview-recorrente" style="font-size:13px;color:var(--yellow);font-weight:600;margin-top:4px;"></p>
+    </div>
+
     <button class="btn btn-g" style="margin-top:10px;" onclick="salvarCompraCartao()">Salvar Compra</button>
   </div>
 </div>

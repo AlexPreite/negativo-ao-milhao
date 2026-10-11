@@ -75,6 +75,54 @@ function adicionarMesesYM(ym, qtdMeses) {
   }
 }
 
+/**
+ * Fatia 2 (ADR-003 / ADR-005): Determina a competência (mês da fatura 'YYYY-MM')
+ * em que uma compra será cobrada com base no ciclo de fechamento e dia de vencimento.
+ *
+ * Algoritmo determinístico:
+ * 1. Extrai ano, mês Mc (1 a 12) e dia Dc (1 a 31) de dataCompraISO.
+ * 2. Se Dc >= diaFechamento: fecha no mês seguinte (deslocamento +1).
+ *    Se Dc < diaFechamento: fecha no mês corrente (deslocamento +0).
+ * 3. Se diaVencimento <= diaFechamento: vence 1 mês após o fechamento (+1 mês).
+ *    Se diaVencimento > diaFechamento: vence no mesmo mês do fechamento (+0 mês).
+ * 4. Deslocamento total = deslocamentoFechamento + deslocamentoVencimento.
+ * 5. Retorna adicionarMesesYM(`${ano}-${mes}`, deslocamentoTotal).
+ */
+function calcularMesFaturaCompra(dataCompraISO, diaFechamento, diaVencimento) {
+  try {
+    const dataStr = String(dataCompraISO || new Date().toISOString().slice(0, 10)).trim();
+    const partes = dataStr.slice(0, 10).split('-');
+    const ano = parseInt(partes[0], 10);
+    const mes = parseInt(partes[1], 10);
+    const diaCompra = parseInt(partes[2], 10);
+
+    if (isNaN(ano) || isNaN(mes) || isNaN(diaCompra)) {
+      return new Date().toISOString().slice(0, 7);
+    }
+
+    const dVenc = parseInt(diaVencimento, 10) || 10;
+    const dFech = parseInt(diaFechamento, 10) || Math.max(1, dVenc - 7);
+
+    // 1. Ciclo de fechamento:
+    // Se diaCompra >= diaFechamento: entra no ciclo de fechamento do mês seguinte (+1)
+    // Se diaCompra < diaFechamento: entra no ciclo de fechamento do mês corrente (+0)
+    const deslocamentoFechamento = diaCompra >= dFech ? 1 : 0;
+
+    // 2. Relação vencimento vs fechamento:
+    // Se diaVencimento <= diaFechamento: fatura vence 1 mês após o fechamento (+1)
+    // Se diaVencimento > diaFechamento: fatura vence no mesmo mês do fechamento (+0)
+    const deslocamentoVencimento = dVenc <= dFech ? 1 : 0;
+
+    const deslocamentoTotal = deslocamentoFechamento + deslocamentoVencimento;
+    const mesCompraYM = `${ano}-${String(mes).padStart(2, '0')}`;
+
+    return adicionarMesesYM(mesCompraYM, deslocamentoTotal);
+  } catch (err) {
+    console.error('Erro em calcularMesFaturaCompra:', err);
+    return String(dataCompraISO || '').slice(0, 7) || new Date().toISOString().slice(0, 7);
+  }
+}
+
 // Processa inadimplência de contas e faturas com atraso >= 2 meses em relação à data civil REAL de hoje (mesRealHoje)
 // Migra gastos vencidos e faturas de cartão para dívidas negativadas e invalida cobranças/parcelas futuras
 // Importante: Nunca usar mesAtual (cursor da UI) aqui, para não negativar despesas quando o usuário navegar para o futuro
@@ -1618,8 +1666,8 @@ function calcularFaturaMes(cartaoId, mesYM, _jaAcumulando = false) {
     };
   }
 
-  // Compras ativas na competência (não canceladas por negativação)
-  const compras = (S.comprasCartao || []).filter(c => c.cartaoId === cartaoId && c.mesFatura === ym && !c.canceladaNegativacao);
+  // Compras ativas na competência (não canceladas por negativação e não canceladas por cancelamento de assinatura)
+  const compras = (S.comprasCartao || []).filter(c => c.cartaoId === cartaoId && c.mesFatura === ym && !c.canceladaNegativacao && !c.canceladaAssinatura);
   const centavosCompras = compras.reduce((acc, c) => acc + Math.round((Number(c.val) || 0) * 100), 0);
   const valorTotalCompras = Math.round(centavosCompras) / 100;
 
@@ -1938,19 +1986,23 @@ function abrirFaturaCartao(cartaoId, mesYM) {
     if (fatura.compras.length) {
       html += fatura.compras.map(c => {
         const parcBadge = c.parcelado ? `<span class="badge b-parc">${c.parcelaNum}/${c.totalParcelas}</span>` : '';
+        const assBadge = c.assinatura ? `<span class="badge" style="background:rgba(168,85,247,0.2);color:#c084fc;">🔁 Assinatura ${c.mesNum}/${c.totalMeses}</span>` : '';
         const catBadge = `<span class="badge ${c.cat === 'recorrente' ? 'b-rec' : 'b-laz'}">${escapeHtml(getNomeCategoria(c.cat))}</span>`;
         const adiantadaBadge = c.adiantada ? `<span class="badge" style="background:rgba(59,130,246,0.2);color:#60a5fa;">⏩ Antecipada</span>` : '';
+        const cancelAssBtn = c.assinatura ? `<button type="button" class="btn" style="width:auto;margin:0;padding:2px 7px;font-size:11px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);cursor:pointer;" onclick="cancelarAssinaturaCartao(${c.id})" title="Cancelar Assinatura">🚫 Cancelar Assinatura</button>` : '';
 
         return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             <strong>${escapeHtml(c.desc)}</strong>
             ${catBadge}
             ${parcBadge}
+            ${assBadge}
             ${adiantadaBadge}
             <span style="font-size:11px;color:var(--muted);">${escapeHtml(c.data || '')}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-weight:600;color:var(--red);">${fmt(c.val)}</span>
+            ${cancelAssBtn}
             <span class="item-del" style="font-size:16px;cursor:pointer;color:var(--muted);" onclick="excluirCompraCartao(${c.id})" title="Excluir compra">×</span>
           </div>
         </div>`;
@@ -1991,8 +2043,27 @@ function abrirModalCompraCartao(cartaoId) {
   const elParcNum = document.getElementById('cc-parcelas');
   if (elParcNum) elParcNum.value = '2';
 
-  const elPrev = document.getElementById('cc-preview-parcela');
-  if (elPrev) elPrev.textContent = '';
+  const elPrevParc = document.getElementById('cc-preview-parcela');
+  if (elPrevParc) elPrevParc.textContent = '';
+
+  // Fatia 2: Reseta bloco de assinatura recorrente
+  const elRecChk = document.getElementById('cc-is-recorrente');
+  if (elRecChk) elRecChk.checked = false;
+
+  const blocoRec = document.getElementById('cc-bloco-recorrente');
+  if (blocoRec) blocoRec.style.display = 'none';
+
+  const elPrazoRec = document.getElementById('cc-prazo-recorrente');
+  if (elPrazoRec) elPrazoRec.value = '24';
+
+  const rowMesesPers = document.getElementById('cc-row-meses-personalizado');
+  if (rowMesesPers) rowMesesPers.style.display = 'none';
+
+  const elMesesRec = document.getElementById('cc-meses-recorrente');
+  if (elMesesRec) elMesesRec.value = '24';
+
+  const elPrevRec = document.getElementById('cc-preview-recorrente');
+  if (elPrevRec) elPrevRec.textContent = '';
 
   // Popula categorias no select
   const elCat = document.getElementById('cc-cat');
@@ -2001,34 +2072,127 @@ function abrirModalCompraCartao(cartaoId) {
     elCat.innerHTML = cats.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.nome)}</option>`).join('');
   }
 
+  atualizarPreviewCompraModal();
   openM('m-compra-cartao');
 }
 
 function toggleCompraParcelada() {
-  const chk = document.getElementById('cc-is-parcelado');
-  const bloco = document.getElementById('cc-bloco-parcelamento');
-  if (bloco) {
-    bloco.style.display = chk && chk.checked ? 'block' : 'none';
+  const chkParc = document.getElementById('cc-is-parcelado');
+  const blocoParc = document.getElementById('cc-bloco-parcelamento');
+  const chkRec = document.getElementById('cc-is-recorrente');
+  const blocoRec = document.getElementById('cc-bloco-recorrente');
+
+  if (chkParc && chkParc.checked) {
+    // Exclusividade mútua: ao marcar parcelado, desmarca recorrente
+    if (chkRec) chkRec.checked = false;
+    if (blocoRec) blocoRec.style.display = 'none';
+    if (blocoParc) blocoParc.style.display = 'block';
+  } else {
+    if (blocoParc) blocoParc.style.display = 'none';
   }
-  atualizarPreviewCompraParcelada();
+  atualizarPreviewCompraModal();
+}
+
+function toggleCompraRecorrente() {
+  const chkParc = document.getElementById('cc-is-parcelado');
+  const blocoParc = document.getElementById('cc-bloco-parcelamento');
+  const chkRec = document.getElementById('cc-is-recorrente');
+  const blocoRec = document.getElementById('cc-bloco-recorrente');
+
+  if (chkRec && chkRec.checked) {
+    // Exclusividade mútua: ao marcar recorrente, desmarca parcelado
+    if (chkParc) chkParc.checked = false;
+    if (blocoParc) blocoParc.style.display = 'none';
+    if (blocoRec) blocoRec.style.display = 'block';
+  } else {
+    if (blocoRec) blocoRec.style.display = 'none';
+  }
+  atualizarPreviewCompraModal();
+}
+
+function togglePrazoRecorrenteCartao() {
+  const selPrazo = document.getElementById('cc-prazo-recorrente');
+  const rowPers = document.getElementById('cc-row-meses-personalizado');
+  if (rowPers) {
+    rowPers.style.display = selPrazo && selPrazo.value === 'personalizado' ? 'block' : 'none';
+  }
+  atualizarPreviewCompraModal();
+}
+
+function atualizarPreviewCompraModal() {
+  const elCartaoId = document.getElementById('cc-cartao-id');
+  const cid = elCartaoId && elCartaoId.value ? parseInt(elCartaoId.value, 10) : cartaoAtualId;
+  const cartao = (S.cartoes || []).find(c => c.id === cid);
+
+  const elData = document.getElementById('cc-data');
+  const data = (elData && elData.value) ? elData.value : new Date().toISOString().slice(0, 10);
+
+  const dVenc = cartao?.diaVencimento || 10;
+  const dFech = cartao?.diaFechamento || Math.max(1, dVenc - 7);
+
+  const mesFaturaBase = calcularMesFaturaCompra(data, dFech, dVenc);
+
+  const elVal = document.getElementById('cc-val');
+  const val = parseFloat(String(elVal?.value || '0').replace(',', '.')) || 0;
+
+  const chkParc = document.getElementById('cc-is-parcelado');
+  const isParc = Boolean(chkParc && chkParc.checked);
+
+  const chkRec = document.getElementById('cc-is-recorrente');
+  const isRec = Boolean(chkRec && chkRec.checked);
+
+  const elPrevFatura = document.getElementById('cc-preview-fatura');
+  const elPrevParc = document.getElementById('cc-preview-parcela');
+  const elPrevRec = document.getElementById('cc-preview-recorrente');
+
+  if (isRec) {
+    const selPrazo = document.getElementById('cc-prazo-recorrente');
+    let qtdMeses = 24;
+    if (selPrazo) {
+      if (selPrazo.value === 'personalizado') {
+        const elMeses = document.getElementById('cc-meses-recorrente');
+        qtdMeses = Math.min(72, Math.max(2, parseInt(elMeses?.value || '24', 10) || 24));
+      } else {
+        qtdMeses = parseInt(selPrazo.value, 10) || 24;
+      }
+    }
+    const mesFim = adicionarMesesYM(mesFaturaBase, qtdMeses - 1);
+    if (elPrevFatura) {
+      elPrevFatura.textContent = `📅 1ª cobrança na fatura de ${mesLabel(mesFaturaBase)} até ${mesLabel(mesFim)} (${qtdMeses} meses)`;
+    }
+    if (elPrevRec) {
+      elPrevRec.textContent = val > 0
+        ? `${fmt(val)} cobrado todo mês por ${qtdMeses} meses (cancela quando quiser)`
+        : `Assinatura por ${qtdMeses} meses`;
+    }
+    if (elPrevParc) elPrevParc.textContent = '';
+  } else if (isParc) {
+    const elNum = document.getElementById('cc-parcelas');
+    const num = Math.min(48, Math.max(2, parseInt(elNum?.value || '2', 10) || 2));
+    const mesFim = adicionarMesesYM(mesFaturaBase, num - 1);
+    if (elPrevFatura) {
+      elPrevFatura.textContent = `📅 1ª parcela na fatura de ${mesLabel(mesFaturaBase)} até ${mesLabel(mesFim)} (${num}x)`;
+    }
+    if (elPrevParc) {
+      if (val > 0) {
+        const baseCentavos = Math.floor(Math.round(val * 100) / num);
+        elPrevParc.textContent = `${num}x de aproximadamente ${fmt(baseCentavos / 100)} / mês`;
+      } else {
+        elPrevParc.textContent = '';
+      }
+    }
+    if (elPrevRec) elPrevRec.textContent = '';
+  } else {
+    if (elPrevFatura) {
+      elPrevFatura.textContent = `📅 Compra entrará na fatura de ${mesLabel(mesFaturaBase)} (Fechamento dia ${dFech}, Vencimento dia ${dVenc})`;
+    }
+    if (elPrevParc) elPrevParc.textContent = '';
+    if (elPrevRec) elPrevRec.textContent = '';
+  }
 }
 
 function atualizarPreviewCompraParcelada() {
-  const chk = document.getElementById('cc-is-parcelado');
-  const elPrev = document.getElementById('cc-preview-parcela');
-  if (!elPrev) return;
-  if (!chk || !chk.checked) {
-    elPrev.textContent = '';
-    return;
-  }
-  const val = parseFloat(String(document.getElementById('cc-val')?.value || '0').replace(',', '.')) || 0;
-  const num = parseInt(document.getElementById('cc-parcelas')?.value || '2', 10) || 2;
-  if (val > 0 && num >= 2) {
-    const baseCentavos = Math.floor(Math.round(val * 100) / num);
-    elPrev.textContent = `${num}x de aproximadamente ${fmt(baseCentavos / 100)} / mês`;
-  } else {
-    elPrev.textContent = '';
-  }
+  atualizarPreviewCompraModal();
 }
 
 // B2: Se a fatura daquele mês já estiver paga ou com pagamento parcial, reabre com saldo pendente
@@ -2051,61 +2215,131 @@ function verificarEReabrirFatura(cartaoId, mesYM) {
   }
 }
 
-// Salva compra avulsa ou parcelada no cartão
+// Salva compra avulsa, parcelada ou assinatura recorrente no cartão
 function salvarCompraCartao(dadosOverride) {
-  const elCartaoId = document.getElementById('cc-cartao-id');
-  const cartaoId = dadosOverride?.cartaoId || (elCartaoId ? parseInt(elCartaoId.value, 10) : cartaoAtualId);
+  const getElVal = (id) => (typeof document !== 'undefined' ? document.getElementById(id)?.value : '') || '';
+  const elCartaoId = typeof document !== 'undefined' ? document.getElementById('cc-cartao-id') : null;
+  const cartaoId = dadosOverride?.cartaoId || (elCartaoId && elCartaoId.value ? parseInt(elCartaoId.value, 10) : cartaoAtualId);
   const cartao = (S.cartoes || []).find(c => c.id === cartaoId);
   if (!cartao) {
     if (typeof alert === 'function' && !dadosOverride) alert('Selecione um cartão válido.');
     return { ok: false, erro: 'Cartão não encontrado' };
   }
 
-  const elDesc = document.getElementById('cc-desc');
-  const descRaw = dadosOverride?.desc ?? (elDesc ? elDesc.value : '');
+  const descRaw = dadosOverride?.desc ?? getElVal('cc-desc');
   const desc = String(descRaw || '').trim();
   if (!desc) {
     if (typeof alert === 'function' && !dadosOverride) alert('Informe a descrição da compra.');
     return { ok: false, erro: 'Descrição obrigatória' };
   }
 
-  const elVal = document.getElementById('cc-val');
-  const valRaw = dadosOverride?.val ?? (elVal ? elVal.value : '');
+  const valRaw = dadosOverride?.val ?? getElVal('cc-val');
   const val = parseFloat(String(valRaw).replace(',', '.'));
   if (isNaN(val) || val <= 0) {
     if (typeof alert === 'function' && !dadosOverride) alert('Informe um valor válido maior que zero.');
     return { ok: false, erro: 'Valor inválido' };
   }
 
-  const elData = document.getElementById('cc-data');
-  const dataRaw = dadosOverride?.data ?? (elData ? elData.value : '');
+  const dataRaw = dadosOverride?.data ?? getElVal('cc-data');
   const data = (dataRaw || new Date().toISOString().slice(0, 10)).trim();
 
-  const elCat = document.getElementById('cc-cat');
-  const cat = dadosOverride?.cat || (elCat ? elCat.value : 'nao_planejado');
+  const catRaw = dadosOverride?.cat ?? getElVal('cc-cat');
+  const cat = catRaw || 'nao_planejado';
 
-  const elChk = document.getElementById('cc-is-parcelado');
-  const isParcelado = Boolean(dadosOverride?.parcelado ?? (elChk ? elChk.checked : false));
+  const elRecChk = typeof document !== 'undefined' ? document.getElementById('cc-is-recorrente') : null;
+  const isRecorrente = Boolean(dadosOverride?.recorrente || dadosOverride?.assinatura || (elRecChk && elRecChk.checked));
+
+  const elParcChk = typeof document !== 'undefined' ? document.getElementById('cc-is-parcelado') : null;
+  const isParcelado = !isRecorrente && Boolean(dadosOverride?.parcelado || (elParcChk && elParcChk.checked));
 
   if (!Array.isArray(S.comprasCartao)) S.comprasCartao = [];
 
-  if (isParcelado) {
-    const elNum = document.getElementById('cc-parcelas');
-    const numRaw = dadosOverride?.parcelas ?? (elNum ? elNum.value : '2');
-    const num = Math.min(48, Math.max(2, parseInt(numRaw, 10) || 2));
+  // Fatia 2 (ADR-003): Determina competência inicial com base no ciclo de fechamento e vencimento
+  const diaVencimento = cartao.diaVencimento || 10;
+  const diaFechamento = cartao.diaFechamento || Math.max(1, diaVencimento - 7);
+  const mesFaturaBase = calcularMesFaturaCompra(data, diaFechamento, diaVencimento);
+
+  if (isRecorrente) {
+    // Fatia 2 (ADR-005): Assinatura / Gasto Fixo no Cartão (default: 24 meses)
+    let qtdMeses = 24;
+    if (dadosOverride?.mesesRecorrente || dadosOverride?.totalMeses) {
+      qtdMeses = Math.min(72, Math.max(2, parseInt(dadosOverride.mesesRecorrente || dadosOverride.totalMeses, 10) || 24));
+    } else if (typeof document !== 'undefined') {
+      const selPrazo = document.getElementById('cc-prazo-recorrente');
+      if (selPrazo && selPrazo.value === 'personalizado') {
+        const elMeses = document.getElementById('cc-meses-recorrente');
+        qtdMeses = Math.min(72, Math.max(2, parseInt(elMeses?.value || '24', 10) || 24));
+      } else if (selPrazo) {
+        qtdMeses = parseInt(selPrazo.value, 10) || 24;
+      }
+    }
+
+    const valCheio = Math.round(val * 100) / 100;
+    const grupoId = 'crec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const comprasCriadas = [];
+
+    for (let i = 1; i <= qtdMeses; i++) {
+      const mesFatura = adicionarMesesYM(mesFaturaBase, i - 1);
+      const dt = adicionarMeses(data, i - 1);
+      const novaCompra = {
+        id: Date.now() + i + Math.floor(Math.random() * 1000),
+        cartaoId,
+        desc: `${escapeHtml(desc)} (${i}/${qtdMeses})`,
+        descOriginal: escapeHtml(desc),
+        val: valCheio,
+        valTotal: valCheio,
+        cat,
+        data: dt,
+        mesFatura,
+        titular: cartao.titular || '',
+        recorrente: true,
+        assinatura: true,
+        parcelado: false,
+        mesNum: i,
+        totalMeses: qtdMeses,
+        canceladaAssinatura: false,
+        canceladaNegativacao: false,
+        grupoId
+      };
+
+      S.comprasCartao.push(novaCompra);
+      comprasCriadas.push(novaCompra);
+      verificarEReabrirFatura(cartaoId, mesFatura);
+    }
+
+    save();
+    if (typeof document !== 'undefined') {
+      closeM('m-compra-cartao');
+      render();
+      const modalFatura = document.getElementById('m-fatura-cartao');
+      if (modalFatura && modalFatura.classList.contains('open')) {
+        abrirFaturaCartao(cartaoId, mesAtual);
+      }
+    }
+
+    if (typeof alert === 'function' && !dadosOverride) {
+      alert(`🔁 Assinatura registrada por ${qtdMeses} meses no cartão ${cartao.nome}!`);
+    }
+
+    return { ok: true, comprasCriadas, totalMeses: qtdMeses, grupoId, assinatura: true };
+
+  } else if (isParcelado) {
+    const numRaw = dadosOverride?.parcelas ?? getElVal('cc-parcelas');
+    const num = Math.min(48, Math.max(2, parseInt(numRaw || '2', 10) || 2));
 
     const totalCentavos = Math.round(val * 100);
     const baseCentavos = Math.floor(totalCentavos / num);
     const restoCentavos = totalCentavos - (baseCentavos * num);
     const grupoId = 'cc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const comprasCriadas = [];
 
     for (let i = 1; i <= num; i++) {
       const centavosDesta = baseCentavos + (i === num ? restoCentavos : 0);
       const vParc = centavosDesta / 100;
       const dt = adicionarMeses(data, i - 1);
-      const mesFatura = dt.slice(0, 7);
+      const mesFatura = adicionarMesesYM(mesFaturaBase, i - 1);
 
-      S.comprasCartao.push({
+      const novaCompra = {
         id: Date.now() + i + Math.floor(Math.random() * 1000),
         cartaoId,
         desc: `${escapeHtml(desc)} (${i}/${num})`,
@@ -2119,14 +2353,36 @@ function salvarCompraCartao(dadosOverride) {
         parcelado: true,
         parcelaNum: i,
         totalParcelas: num,
+        canceladaAssinatura: false,
+        canceladaNegativacao: false,
         grupoId
-      });
-      // B2: Reabre fatura correspondente caso já tenha tido pagamento
+      };
+
+      S.comprasCartao.push(novaCompra);
+      comprasCriadas.push(novaCompra);
       verificarEReabrirFatura(cartaoId, mesFatura);
     }
+
+    save();
+    if (typeof document !== 'undefined') {
+      closeM('m-compra-cartao');
+      render();
+      const modalFatura = document.getElementById('m-fatura-cartao');
+      if (modalFatura && modalFatura.classList.contains('open')) {
+        abrirFaturaCartao(cartaoId, mesAtual);
+      }
+    }
+
+    if (typeof alert === 'function' && !dadosOverride) {
+      alert(`🛍️ Compra parcelada (${num}x) registrada no cartão ${cartao.nome}!`);
+    }
+
+    return { ok: true, comprasCriadas, parcelas: num, grupoId, parcelado: true };
+
   } else {
-    const mesFatura = data.slice(0, 7);
-    S.comprasCartao.push({
+    // Compra à vista
+    const mesFatura = mesFaturaBase;
+    const novaCompra = {
       id: Date.now() + Math.floor(Math.random() * 1000),
       cartaoId,
       desc: escapeHtml(desc),
@@ -2139,26 +2395,70 @@ function salvarCompraCartao(dadosOverride) {
       parcelado: false,
       parcelaNum: 1,
       totalParcelas: 1,
+      canceladaAssinatura: false,
+      canceladaNegativacao: false,
       grupoId: ''
-    });
-    // B2: Reabre fatura correspondente caso já tenha tido pagamento
+    };
+
+    S.comprasCartao.push(novaCompra);
     verificarEReabrirFatura(cartaoId, mesFatura);
+
+    save();
+    if (typeof document !== 'undefined') {
+      closeM('m-compra-cartao');
+      render();
+      const modalFatura = document.getElementById('m-fatura-cartao');
+      if (modalFatura && modalFatura.classList.contains('open')) {
+        abrirFaturaCartao(cartaoId, mesAtual);
+      }
+    }
+
+    if (typeof alert === 'function' && !dadosOverride) {
+      alert(`🛍️ Compra registrada com sucesso no cartão ${cartao.nome}!`);
+    }
+
+    return { ok: true, compra: novaCompra, parcelado: false, mesFatura };
   }
+}
+
+// Fatia 2 (ADR-005): Cancela assinatura recorrente a partir das faturas futuras (> mesAtual)
+function cancelarAssinaturaCartao(compraId) {
+  if (!Array.isArray(S.comprasCartao)) return { ok: false, erro: 'Sem compras registradas' };
+  const compra = S.comprasCartao.find(c => c.id === compraId);
+  if (!compra) return { ok: false, erro: 'Compra não encontrada' };
+  if (!compra.assinatura && !compra.recorrente) return { ok: false, erro: 'Item não é uma assinatura recorrente' };
+  if (!compra.grupoId) return { ok: false, erro: 'Assinatura sem grupoId associado' };
+
+  const descAssinatura = compra.descOriginal || compra.desc || 'Assinatura';
+  const confirma = typeof confirm === 'function'
+    ? confirm(`Deseja cancelar a assinatura "${descAssinatura}" a partir da próxima fatura?\n\nAs cobranças passadas e da fatura atual serão preservadas no histórico.`)
+    : true;
+
+  if (!confirma) return { ok: false, cancelado: true };
+
+  let canceladas = 0;
+  S.comprasCartao.forEach(c => {
+    if (c.grupoId === compra.grupoId && c.mesFatura > mesAtual) {
+      c.canceladaAssinatura = true;
+      canceladas++;
+    }
+  });
 
   save();
-  closeM('m-compra-cartao');
-  render();
+  if (typeof render === 'function') render();
 
-  // Se o modal de fatura estiver visível ou chamado do card, atualiza visualização
-  const modalFatura = document.getElementById('m-fatura-cartao');
-  if (modalFatura && modalFatura.classList.contains('open')) {
-    abrirFaturaCartao(cartaoId, mesAtual);
+  if (typeof document !== 'undefined') {
+    const modalFatura = document.getElementById('m-fatura-cartao');
+    if (modalFatura && modalFatura.classList.contains('open') && compra.cartaoId) {
+      abrirFaturaCartao(compra.cartaoId, mesAtual);
+    }
   }
 
-  if (typeof alert === 'function' && !dadosOverride) {
-    alert(`🛍️ Compra registrada com sucesso no cartão ${cartao.nome}!`);
+  if (typeof alert === 'function') {
+    alert(`🚫 Assinatura "${descAssinatura}" cancelada com sucesso!\n${canceladas} cobrança(s) futura(s) cancelada(s). A fatura atual e as anteriores foram preservadas.`);
   }
-  return { ok: true };
+
+  return { ok: true, canceladas, grupoId: compra.grupoId };
 }
 
 // Remove compra do cartão
@@ -4030,6 +4330,11 @@ if (typeof module !== 'undefined' && module.exports) {
     abrirModalAnteciparCartao,
     anteciparCompraCartao,
     verificarEReabrirFatura,
+    calcularMesFaturaCompra,
+    cancelarAssinaturaCartao,
+    toggleCompraRecorrente,
+    togglePrazoRecorrenteCartao,
+    atualizarPreviewCompraModal,
     calcSaldoAcumuladoAnterior,
     togglePagoGasto,
     getState: () => S,
