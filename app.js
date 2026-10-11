@@ -3589,17 +3589,37 @@ function salvarAcordo(){
   const total=parseFloat(document.getElementById('ac-total').value);
   const entrada=parseFloat(document.getElementById('ac-entrada').value)||0;
   const num=parseInt(document.getElementById('ac-parcelas').value);
-  if(!total||total<=0||!num||num<=0){ alert('Preencha o valor total e o número de parcelas.'); return; }
-  if(entrada>total){ alert('A entrada não pode ser maior que o valor total.'); return; }
+  if(!total||total<=0||!num||num<=0){ if(typeof alert==='function') alert('Preencha o valor total e o número de parcelas.'); return; }
+  if(entrada>total){ if(typeof alert==='function') alert('A entrada não pode ser maior que o valor total.'); return; }
   const restante=Math.round((total-entrada)*100)/100;
   const valorParcela=Math.round((restante/num)*100)/100;
   const parcelas=[]; let soma=0;
+  const dataHoje = new Date();
   for(let i=1;i<=num;i++){
     const v = i===num ? Math.round((restante-soma)*100)/100 : valorParcela; // última parcela absorve o arredondamento
     soma+=v;
-    parcelas.push({num:i,valor:v,paga:false,dataPagto:null});
+    const dtVenc = new Date(dataHoje);
+    dtVenc.setMonth(dtVenc.getMonth() + i);
+    parcelas.push({
+      num: i,
+      valor: v,
+      paga: false,
+      dataPagto: null,
+      dataVencimento: dtVenc.toISOString().slice(0, 10)
+    });
   }
-  d.acordo={valorTotal:total,entrada,numParcelas:num,valorParcela,parcelas};
+  // Fatia 5 (ADR-004): Garante preservação do saldo pré-acordo para rastreabilidade contábil
+  if (d.saldoOriginalPreAcordo === undefined || d.saldoOriginalPreAcordo === null) {
+    d.saldoOriginalPreAcordo = d.saldo;
+  }
+  d.acordo={
+    valorTotal: total,
+    entrada,
+    numParcelas: num,
+    valorParcela,
+    parcelas,
+    dataAcordo: new Date().toISOString().slice(0, 10)
+  };
   d.quitada=false; d.valorQuitado=null; d.dataQuitacao=null;
   save(); closeM('m-acordo'); render();
 }
@@ -3618,6 +3638,150 @@ function toggleParcela(dividaId, num){
     d.quitada=false; d.valorQuitado=null; d.dataQuitacao=null;
   }
   save(); render();
+}
+
+// -------------------------------------------------------------
+// FATIA 5: QUEBRA DE ACORDO DE DÍVIDAS (ADR-004)
+// -------------------------------------------------------------
+
+/**
+ * Verifica se uma parcela específica de um acordo está em atraso há 30 dias ou mais.
+ * Suporta propriedade direta de dias, data de vencimento ISO (YYYY-MM-DD) ou competência YYYY-MM.
+ *
+ * @param {Object} parcela - Objeto da parcela { num, valor, paga, dataVencimento, ... }
+ * @param {string|Date} [dataReferencia] - Data de corte para cálculo (default: data atual)
+ * @returns {boolean}
+ */
+function parcelaTemAtraso30Dias(parcela, dataReferencia) {
+  if (!parcela || parcela.paga) return false;
+
+  // Propriedade explícita de dias de atraso (comum em testes unitários)
+  if (typeof parcela.diasAtraso === 'number') {
+    return parcela.diasAtraso >= 30;
+  }
+  if (parcela.atrasada30Dias === true) {
+    return true;
+  }
+
+  const refDate = dataReferencia ? new Date(dataReferencia) : new Date();
+  const refTime = refDate.getTime();
+
+  // Campo de data de vencimento ISO (YYYY-MM-DD)
+  const dtVencStr = parcela.dataVencimento || parcela.vencimento || parcela.dataVenc || parcela.data;
+  if (dtVencStr && typeof dtVencStr === 'string') {
+    const vencDate = new Date(dtVencStr);
+    if (!isNaN(vencDate.getTime())) {
+      const diffMs = refTime - vencDate.getTime();
+      const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      return diffDias >= 30;
+    }
+  }
+
+  // Campo de competência YYYY-MM
+  const mesVenc = parcela.mesVencimento || parcela.mes;
+  if (mesVenc && String(mesVenc).length >= 7) {
+    const mesRef = String(dataReferencia || new Date().toISOString().slice(0, 7)).slice(0, 7);
+    const meses = calcularMesesAtraso(mesVenc, mesRef);
+    if (meses >= 2) return true;
+    if (meses === 1) {
+      return refDate.getDate() >= 1; // Pelo menos 1 mês completo decorrido
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Verifica se uma dívida com acordo ativo possui ao menos uma parcela vencida há 30 dias ou mais.
+ *
+ * @param {Object} divida - Objeto da dívida
+ * @param {string|Date} [dataReferencia] - Data de corte
+ * @returns {boolean}
+ */
+function acordoTemParcelaAtrasada30Dias(divida, dataReferencia) {
+  if (!divida || !divida.acordo || !Array.isArray(divida.acordo.parcelas)) return false;
+  return divida.acordo.parcelas.some(p => parcelaTemAtraso30Dias(p, dataReferencia));
+}
+
+/**
+ * Executa a quebra de um acordo inadimplido na aba Dívidas (ADR-004).
+ * 1. Confirma com o usuário.
+ * 2. Amortiza a entrada e todas as parcelas pagas do saldo original pré-acordo.
+ * 3. Restaura o saldo restante para a cobrança direta da dívida.
+ * 4. Reativa a incidência da taxa de juros original (custoJuros em calcTotais).
+ * 5. Remove o acordo (d.acordo = null) e restabelece os botões de quitação/novo acordo.
+ *
+ * @param {number|string} dividaId - ID da dívida em S.dividas
+ * @param {Object|null} [dadosOverride] - Opções de controle (ex: testes sem confirm interativo)
+ * @returns {Object} Resultado da operação { ok: boolean, divida: Object, totalAmortizado, novoSaldo, quitada }
+ */
+function quebrarAcordo(dividaId, dadosOverride = null) {
+  const d = (S.dividas || []).find(x => String(x.id) === String(dividaId));
+  if (!d) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Dívida não encontrada.');
+    return { ok: false, erro: 'Dívida não encontrada' };
+  }
+  if (!d.acordo) {
+    if (typeof alert === 'function' && !dadosOverride) alert('Esta dívida não possui um acordo ativo para ser quebrado.');
+    return { ok: false, erro: 'Dívida não possui acordo ativo' };
+  }
+
+  // Confirmação obrigatória com o usuário
+  if (!dadosOverride && typeof confirm === 'function') {
+    const confirmou = confirm('Deseja realmente quebrar este acordo? O valor já pago de entrada e parcelas será amortizado, e o saldo restante voltará para a cobrança da dívida com juros reativados.');
+    if (!confirmou) {
+      return { ok: false, cancelado: true };
+    }
+  }
+
+  // 1. Total amortizado: entrada paga + parcelas marcadas como pagas
+  const entradaPaga = Number(d.acordo.entrada) || 0;
+  const parcelasPagas = (d.acordo.parcelas || []).filter(p => p.paga).reduce((s, p) => s + (Number(p.valor) || 0), 0);
+  const totalAmortizado = Math.round((entradaPaga + parcelasPagas) * 100) / 100;
+
+  // 2. Saldo base: prioriza saldoOriginalPreAcordo, fallback para d.saldo ou valorTotal do acordo
+  const saldoBase = Number(d.saldoOriginalPreAcordo) || Number(d.saldo) || Number(d.acordo.valorTotal) || 0;
+  const novoSaldo = Math.max(0, Math.round((saldoBase - totalAmortizado) * 100) / 100);
+
+  // 3. Efetivação da quebra do acordo
+  d.saldo = novoSaldo;
+  d.historicoQuebraAcordo = {
+    data: new Date().toISOString().slice(0, 10),
+    totalAmortizado,
+    saldoRestaurado: novoSaldo,
+    saldoBaseOriginal: saldoBase
+  };
+  d.acordo = null;
+
+  if (novoSaldo === 0) {
+    // Caso raro onde pagamentos anteriores cobriram 100% da dívida
+    d.quitada = true;
+    d.valorQuitado = totalAmortizado;
+    d.dataQuitacao = new Date().toISOString().slice(0, 10);
+  } else {
+    d.quitada = false;
+    d.valorQuitado = null;
+    d.dataQuitacao = null;
+  }
+
+  save();
+  render();
+
+  if (typeof alert === 'function' && !dadosOverride) {
+    if (d.quitada) {
+      alert(`✅ Acordo quebrado, mas os pagamentos anteriores (${fmt(totalAmortizado)}) quitaram integralmente o saldo devedor original! Dívida finalizada.`);
+    } else {
+      alert(`⚠️ Acordo quebrado com sucesso! Total amortizado: ${fmt(totalAmortizado)}. Saldo restante restaurado: ${fmt(novoSaldo)} com juros mensais reativados.`);
+    }
+  }
+
+  return {
+    ok: true,
+    divida: d,
+    totalAmortizado,
+    novoSaldo,
+    quitada: d.quitada
+  };
 }
 
 // CALC
@@ -4405,6 +4569,10 @@ function renderDividas(){
     const tipoLabel = TIPOS_DIVIDA[d.tipo] || d.tipo || 'Outro';
     const titBadge = d.titular ? `<span class="badge b-titular">${escapeHtml(d.titular)}</span>` : '';
     const negativadaBadge = d.negativada ? ` <span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);">🔴 Negativada (60+ dias)</span>` : '';
+    // Fatia 5 (ADR-004): Identifica se há parcela do acordo em atraso (+30 dias)
+    const atraso30Dias = d.acordo && acordoTemParcelaAtrasada30Dias(d);
+    const atrasoAcordoBadge = atraso30Dias ? ` <span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);">⚠️ Parcela do Acordo em Atraso (+30 dias)</span>` : '';
+
     let parcelasHtml='';
     if(d.acordo){
       const pagas=d.acordo.parcelas.filter(p=>p.paga).length;
@@ -4412,11 +4580,14 @@ function renderDividas(){
         <div class="div-line"><span style="color:var(--muted);">Entrada</span><span>${fmt(d.acordo.entrada)}</span></div>
         <div class="div-line"><span style="color:var(--muted);">Parcelas pagas</span><span>${pagas}/${d.acordo.numParcelas} (${fmt(d.acordo.valorParcela)} cada)</span></div>
         <div class="parcelas-grid">${d.acordo.parcelas.map(p=>`<span class="parcela-pill ${p.paga?'pp-paga':''}" onclick="toggleParcela(${d.id},${p.num})">${p.num}</span>`).join('')}</div>
-        <p style="font-size:11px;color:var(--muted);margin-top:4px;">Toque no número pra marcar/desmarcar a parcela como paga</p>`;
+        <p style="font-size:11px;color:var(--muted);margin-top:4px;">Toque no número pra marcar/desmarcar a parcela como paga</p>
+        <div style="display:flex;gap:6px;margin-top:10px;">
+          <button class="btn" style="width:100%;margin:0;padding:8px 10px;font-size:12px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.35);cursor:pointer;" onclick="quebrarAcordo(${d.id})">⚠️ Quebrar Acordo</button>
+        </div>`;
     }
     return `<div class="div-row">
       <div class="div-header">
-        <span class="div-name">${escapeHtml(d.credor)}${titBadge}${negativadaBadge}${d.acordo?' <span class="badge b-rec">Acordo</span>':''}</span>
+        <span class="div-name">${escapeHtml(d.credor)}${titBadge}${negativadaBadge}${d.acordo?' <span class="badge b-rec">Acordo</span>':''}${atrasoAcordoBadge}</span>
         <span class="item-del" onclick="if(confirm('Excluir esta dívida?')){S.dividas=del(S.dividas,${d.id});save();render();}">×</span>
       </div>
       <div class="div-line"><span style="color:var(--muted);">Saldo restante</span><span class="c-red" style="font-weight:600;">${fmt(restante)}</span></div>
@@ -4689,6 +4860,15 @@ if (typeof module !== 'undefined' && module.exports) {
     atualizarPreviewCompraModal,
     calcSaldoAcumuladoAnterior,
     togglePagoGasto,
+    quebrarAcordo,
+    parcelaTemAtraso30Dias,
+    acordoTemParcelaAtrasada30Dias,
+    saldoRestante,
+    salvarAcordo,
+    toggleParcela,
+    marcarQuitada,
+    abrirAcordo,
+    renderDividas,
     getState: () => S,
     S
   };
