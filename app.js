@@ -1784,6 +1784,83 @@ function calcularFaturaMes(cartaoId, mesYM, _jaAcumulando = false) {
   };
 }
 
+/**
+ * Fatia 3 (ADR-003 / ADR-005): Gestão Inteligente de Limite de Crédito do Cartão.
+ * Calcula o limite total, comprometido e disponível com base em centavos inteiros:
+ * - Compras futuras (> mesHoje) que NÃO sejam assinaturas (recorrentes mensais).
+ * - Saldo pendente da fatura vigente (mesHoje) que ainda não foi 100% pago.
+ * - Saldo pendente de faturas passadas (< mesHoje) não liquidadas e não roladas.
+ *
+ * @param {number|string} cartaoId - ID do cartão de crédito.
+ * @param {string|null} mesRef - Competência de referência 'YYYY-MM' (default: data civil atual).
+ * @returns {object} { configurado: boolean, limiteTotal: number, limiteComprometido: number, limiteDisponivel: number, pctUsado: number }
+ */
+function calcularLimiteCartao(cartaoId, mesRef = null) {
+  const cid = (cartaoId !== null && cartaoId !== undefined) ? String(cartaoId) : null;
+  const cartao = (S.cartoes || []).find(c => String(c.id) === cid);
+
+  if (!cartao || !(Number(cartao.limiteTotal) > 0)) {
+    return {
+      configurado: false,
+      limiteTotal: 0,
+      limiteComprometido: 0,
+      limiteDisponivel: 0,
+      pctUsado: 0
+    };
+  }
+
+  const mesHoje = (mesRef && String(mesRef).slice(0, 7)) || new Date().toISOString().slice(0, 7);
+
+  // 1. Compras futuras que comprometem o limite:
+  // Filtra compras com mesFatura > mesHoje.
+  // Assinaturas recorrentes (c.assinatura) NÃO comprometem o limite futuro por decisão da ADR-005.
+  const comprasFuturas = (S.comprasCartao || []).filter(c =>
+    String(c.cartaoId) === cid &&
+    c.mesFatura > mesHoje &&
+    !c.canceladaNegativacao &&
+    !c.canceladaAssinatura &&
+    !c.assinatura
+  );
+  const centavosFuturo = comprasFuturas.reduce((acc, c) => acc + Math.round((Number(c.val) || 0) * 100), 0);
+
+  // 2. Saldo comprometido da fatura vigente (mesHoje):
+  const fatHoje = calcularFaturaMes(cartao.id, mesHoje);
+  const vPagoHoje = (fatHoje.registroFatura && Number(fatHoje.registroFatura.valorPago)) || 0;
+  const centavosPendenteHoje = Math.max(0, Math.round(fatHoje.valorTotalFatura * 100) - Math.round(vPagoHoje * 100));
+
+  // 3. Faturas passadas (< mesHoje) não quitadas e não roladas:
+  let centavosPassado = 0;
+  const faturasPassadas = (S.faturasCartao || []).filter(f =>
+    String(f.cartaoId) === cid &&
+    f.mes < mesHoje &&
+    !f.pago &&
+    !f.roladoParaProxima &&
+    !f.liquidadaPorRolagem &&
+    !f.negativada &&
+    !f.migradoDivida
+  );
+  faturasPassadas.forEach(fp => {
+    const vPago = Number(fp.valorPago) || 0;
+    const vTot = Number(fp.valorTotal) || 0;
+    const pendente = Math.max(0, Math.round(vTot * 100) - Math.round(vPago * 100));
+    centavosPassado += pendente;
+  });
+
+  const centavosComprometido = centavosFuturo + centavosPendenteHoje + centavosPassado;
+  const limiteComprometido = Math.round(centavosComprometido) / 100;
+  const limiteTotal = Math.round(Number(cartao.limiteTotal) * 100) / 100;
+  const limiteDisponivel = Math.max(0, Math.round((limiteTotal - limiteComprometido) * 100) / 100);
+  const pctUsado = limiteTotal > 0 ? Math.min(100, Math.round((limiteComprometido / limiteTotal) * 100)) : 0;
+
+  return {
+    configurado: true,
+    limiteTotal,
+    limiteComprometido,
+    limiteDisponivel,
+    pctUsado
+  };
+}
+
 // Renderiza cards horizontais de cartões de crédito no topo da aba Gastos
 function renderCartoesTopo() {
   const container = document.getElementById('cartoes-topo-container');
@@ -1822,6 +1899,33 @@ function renderCartoesTopo() {
       corValor = fatura.valorTotalFatura > 0 ? 'var(--red)' : 'var(--green)';
     }
 
+    // Fatia 3 (ADR-003): Barra visual e informações de limite de crédito
+    let limiteHtml = '';
+    const lim = calcularLimiteCartao(c.id, mesAtual);
+    if (lim && lim.configurado) {
+      let corBarra = '#4ade80'; // < 70% verde
+      if (lim.pctUsado >= 90) {
+        corBarra = '#f87171'; // > 90% vermelho
+      } else if (lim.pctUsado >= 70) {
+        corBarra = '#facc15'; // 70-90% amarelo
+      }
+
+      limiteHtml = `
+      <div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);margin-bottom:3px;">
+          <span>Limite Disp:</span>
+          <span style="font-weight:600;color:${corBarra};">${fmt(lim.limiteDisponivel)}</span>
+        </div>
+        <div style="width:100%;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">
+          <div style="width:${lim.pctUsado}%;height:100%;background:${corBarra};border-radius:2px;transition:width 0.3s;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;">
+          <span>Usado: ${lim.pctUsado}%</span>
+          <span>Total: ${fmt(lim.limiteTotal)}</span>
+        </div>
+      </div>`;
+    }
+
     return `<div class="card" onclick="abrirFaturaCartao(${c.id})" style="min-width:230px;max-width:270px;flex:0 0 auto;cursor:pointer;border:1px solid rgba(139,92,246,0.35);background:linear-gradient(135deg, rgba(139,92,246,0.12), rgba(0,0,0,0.4));border-radius:12px;padding:12px;transition:transform 0.15s, border-color 0.15s;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <span style="font-weight:700;font-size:14px;color:#c084fc;">💳 ${escapeHtml(c.nome)}</span>
@@ -1835,6 +1939,7 @@ function renderCartoesTopo() {
       <div style="font-size:18px;font-weight:700;color:${corValor};margin-top:2px;">
         ${textoValor}
       </div>
+      ${limiteHtml}
       <div style="font-size:11px;color:#a855f7;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
         <span>👁️ Ver compras e ações</span>
         <span style="font-size:10px;opacity:0.8;">›</span>
@@ -1857,6 +1962,47 @@ function abrirFaturaCartao(cartaoId, mesYM) {
   const estaNegativada = fatReg && (fatReg.negativada || fatReg.migradoDivida);
   const valorJaPago = (fatReg && Number(fatReg.valorPago)) || 0;
   const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
+
+  // Fatia 3 (ADR-003): Bloco de Gestão Inteligente de Limite de Crédito
+  const elBlocoLimite = document.getElementById('fatura-bloco-limite');
+  if (elBlocoLimite) {
+    const lim = calcularLimiteCartao(cartaoId, ym);
+    if (lim && lim.configurado) {
+      let corBarra = '#4ade80';
+      if (lim.pctUsado >= 90) corBarra = '#f87171';
+      else if (lim.pctUsado >= 70) corBarra = '#facc15';
+
+      elBlocoLimite.style.display = 'block';
+      elBlocoLimite.innerHTML = `
+        <div class="card" style="background:var(--bg3);border:1px solid rgba(139,92,246,0.3);padding:10px 12px;margin:0 0 10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:12px;font-weight:700;color:#c084fc;">💳 Limite de Crédito</span>
+            <span class="badge" style="background:rgba(255,255,255,0.06);color:var(--text);font-size:11px;">${lim.pctUsado}% utilizado</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center;margin-bottom:8px;">
+            <div style="background:rgba(0,0,0,0.25);padding:6px;border-radius:6px;">
+              <div style="font-size:10px;color:var(--muted);">Total</div>
+              <div style="font-size:12px;font-weight:600;">${fmt(lim.limiteTotal)}</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.25);padding:6px;border-radius:6px;">
+              <div style="font-size:10px;color:var(--muted);">Comprometido</div>
+              <div style="font-size:12px;font-weight:600;color:var(--red);">${fmt(lim.limiteComprometido)}</div>
+            </div>
+            <div style="background:rgba(0,0,0,0.25);padding:6px;border-radius:6px;">
+              <div style="font-size:10px;color:var(--muted);">Disponível</div>
+              <div style="font-size:12px;font-weight:700;color:${corBarra};">${fmt(lim.limiteDisponivel)}</div>
+            </div>
+          </div>
+          <div style="width:100%;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;">
+            <div style="width:${lim.pctUsado}%;height:100%;background:${corBarra};border-radius:3px;transition:width 0.3s;"></div>
+          </div>
+        </div>
+      `;
+    } else {
+      elBlocoLimite.style.display = 'none';
+      elBlocoLimite.innerHTML = '';
+    }
+  }
 
   // Status visual no badge do modal
   const elStatusBadge = document.getElementById('fatura-status-badge');
@@ -4332,6 +4478,7 @@ if (typeof module !== 'undefined' && module.exports) {
     verificarEReabrirFatura,
     calcularMesFaturaCompra,
     cancelarAssinaturaCartao,
+    calcularLimiteCartao,
     toggleCompraRecorrente,
     togglePrazoRecorrenteCartao,
     atualizarPreviewCompraModal,
