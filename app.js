@@ -1483,7 +1483,7 @@ function excluirCartao(id) {
 let cartaoAtualId = null;
 
 // Retorna resumo financeiro da fatura do cartão em determinada competência YYYY-MM
-function calcularFaturaMes(cartaoId, mesYM) {
+function calcularFaturaMes(cartaoId, mesYM, _jaAcumulando = false) {
   const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
   const cartao = (S.cartoes || []).find(c => c.id === cartaoId);
   if (!cartao) {
@@ -1531,12 +1531,14 @@ function calcularFaturaMes(cartaoId, mesYM) {
     }
   }
 
-  // Item de rotativo rolado do mês anterior (se houver registro com rotativoRolado)
+  // Item de rotativo rolado do mês anterior: manual (gravado) ou acúmulo automático (< 60 dias)
   const idFat = `${cartaoId}_${ym}`;
   const fatReg = (S.faturasCartao || []).find(f => f.id === idFat || (f.cartaoId === cartaoId && f.mes === ym));
   let rotativoItem = null;
   let valorRotativo = 0;
+
   if (fatReg && fatReg.rotativoRolado > 0) {
+    // 1. Rolagem manual gravada por pagamento parcial prévio
     valorRotativo = Math.round(Number(fatReg.rotativoRolado) * 100) / 100;
     rotativoItem = {
       desc: 'Rotativo Fatura Anterior (Saldo + Juros)',
@@ -1544,6 +1546,60 @@ function calcularFaturaMes(cartaoId, mesYM) {
       cat: 'recorrente',
       detalhe: fatReg.rotativoDetalhe || null
     };
+  } else if (!_jaAcumulando && ym <= mesAtual && (!fatReg || (!fatReg.pago && !fatReg.negativada && !fatReg.migradoDivida))) {
+    // 2. Fatia A: Acúmulo Automático de Fatura Atrasada (< 60 dias)
+    // Limita o acúmulo automático estritamente até mesAtual (não gera cascata em meses futuros)
+    const mesAnt = adicionarMesesYM(ym, -1);
+    const hojeStr = new Date().toISOString().slice(0, 7);
+    const atrasoAnt = calcularMesesAtraso(mesAnt, hojeStr);
+
+    // O acúmulo automático só ocorre se o cartão estiver ativo, não negativado e com atraso < 2 meses
+    const cartaoValido = cartao.ativo !== false && !cartao.negativado;
+    if (cartaoValido && atrasoAnt < 2) {
+      const fatAnt = (S.faturasCartao || []).find(f => f.cartaoId === cartaoId && f.mes === mesAnt);
+      const estaLiquidadaAnt = fatAnt && (fatAnt.pago || fatAnt.roladoParaProxima || fatAnt.liquidadaPorRolagem || fatAnt.negativada || fatAnt.migradoDivida);
+
+      if (!estaLiquidadaAnt) {
+        // Calcula a fatura da competência anterior sem recursão adicional (_jaAcumulando = true)
+        const fatAntInfo = calcularFaturaMes(cartaoId, mesAnt, true);
+
+        let saldoDev = 0;
+        if (fatAnt && fatAnt.pagoParcial) {
+          saldoDev = Number(fatAnt.saldoRestante) || 0;
+        } else if (fatAnt && fatAnt.saldoRestante !== undefined && fatAnt.saldoRestante !== null) {
+          saldoDev = Number(fatAnt.saldoRestante) || 0;
+        } else {
+          saldoDev = fatAntInfo.valorTotalFatura;
+        }
+
+        saldoDev = Math.round(saldoDev * 100) / 100;
+
+        if (saldoDev > 0) {
+          const saldoDevCentavos = Math.round(saldoDev * 100);
+          const taxa = (cartao.taxaRotativo !== undefined && cartao.taxaRotativo !== null && !isNaN(cartao.taxaRotativo))
+            ? Number(cartao.taxaRotativo)
+            : 14.5;
+          const encargosCentavos = Math.round((saldoDevCentavos * taxa) / 100);
+          const totalRolado = Math.round(saldoDevCentavos + encargosCentavos) / 100;
+
+          valorRotativo = totalRolado;
+          rotativoItem = {
+            desc: `Fatura Anterior em Aberto (${mesLabel(mesAnt)}) + Encargos`,
+            val: totalRolado,
+            cat: 'recorrente',
+            automatico: true,
+            detalhe: {
+              saldoAnterior: saldoDev,
+              principal: saldoDev,
+              juros: Math.round(encargosCentavos) / 100,
+              encargos: Math.round(encargosCentavos) / 100,
+              taxa: taxa,
+              mesOrigem: mesAnt
+            }
+          };
+        }
+      }
+    }
   }
 
   const centavosTotal = centavosCompras + Math.round(valorAnuidade * 100) + Math.round(valorRotativo * 100);
@@ -2076,6 +2132,43 @@ function pagarFaturaTotal(cartaoId, mesYM) {
   fat.migradoDivida = false;
   fat.dataPagamento = new Date().toISOString().slice(0, 10);
 
+  // Fatia A: Ao quitar a fatura do mês atual que acumulou saldo da anterior, marca a fatura anterior como liquidada por absorção/rolagem
+  if (fatura.rotativoItem && fatura.rotativoItem.automatico) {
+    const mesOrig = fatura.rotativoItem.detalhe?.mesOrigem || adicionarMesesYM(ym, -1);
+    let fatAnt = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === mesOrig);
+    if (!fatAnt) {
+      const idAnt = `${cid}_${mesOrig}`;
+      const fatAntInfo = calcularFaturaMes(cid, mesOrig, true);
+      fatAnt = {
+        id: idAnt,
+        cartaoId: cid,
+        mes: mesOrig,
+        valorTotal: fatAntInfo.valorTotalFatura,
+        valorPago: 0,
+        pago: true,
+        pagoParcial: false,
+        saldoRestante: 0,
+        rotativoRolado: 0,
+        roladoParaProxima: true,
+        liquidadaPorRolagem: true,
+        negativada: false,
+        migradoDivida: false
+      };
+      S.faturasCartao.push(fatAnt);
+    } else {
+      fatAnt.pago = true;
+      fatAnt.roladoParaProxima = true;
+      fatAnt.liquidadaPorRolagem = true;
+      fatAnt.saldoRestante = 0;
+      fatAnt.negativada = false;
+      fatAnt.migradoDivida = false;
+    }
+
+    // Registra na fatura atual o rotativo que foi absorvido e quitado
+    fat.rotativoRolado = fatura.rotativoItem.val;
+    fat.rotativoDetalhe = fatura.rotativoItem.detalhe;
+  }
+
   save();
   render();
 
@@ -2211,6 +2304,39 @@ function confirmarPagamentoParcial(dadosOverride) {
   fat.migradoDivida = false;
   fat.dataPagamento = new Date().toISOString().slice(0, 10);
 
+  // Fatia A (Bloqueador 1): Ao pagar parcialmente uma fatura que acumulou saldo da anterior, absorve e liquida a anterior por rolagem
+  if (fatura.rotativoItem && fatura.rotativoItem.automatico) {
+    const mesOrig = fatura.rotativoItem.detalhe?.mesOrigem || adicionarMesesYM(ym, -1);
+    let fatAnt = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === mesOrig);
+    if (!fatAnt) {
+      const idAnt = `${cid}_${mesOrig}`;
+      const fatAntInfo = calcularFaturaMes(cid, mesOrig, true);
+      fatAnt = {
+        id: idAnt,
+        cartaoId: cid,
+        mes: mesOrig,
+        valorTotal: fatAntInfo.valorTotalFatura,
+        valorPago: 0,
+        pago: true,
+        pagoParcial: false,
+        saldoRestante: 0,
+        rotativoRolado: 0,
+        roladoParaProxima: true,
+        liquidadaPorRolagem: true,
+        negativada: false,
+        migradoDivida: false
+      };
+      S.faturasCartao.push(fatAnt);
+    } else {
+      fatAnt.pago = true;
+      fatAnt.roladoParaProxima = true;
+      fatAnt.liquidadaPorRolagem = true;
+      fatAnt.saldoRestante = 0;
+      fatAnt.negativada = false;
+      fatAnt.migradoDivida = false;
+    }
+  }
+
   // Calcula encargos e rolagem para o mês seguinte
   const taxaRotativo = fatura.cartao.taxaRotativo || 0;
   const encargos = Math.round((fat.saldoRestante * (taxaRotativo / 100)) * 100) / 100;
@@ -2239,10 +2365,13 @@ function confirmarPagamentoParcial(dadosOverride) {
   fatProx.rotativoRolado = rolagemTotal;
   fatProx.rotativoDetalhe = {
     saldoAnterior: fat.saldoRestante,
+    principal: fat.saldoRestante,
     taxa: taxaRotativo,
     encargos,
+    juros: encargos,
     total: rolagemTotal,
-    origemMes: ym
+    origemMes: ym,
+    mesOrigem: ym
   };
 
   save();
@@ -2769,12 +2898,18 @@ function calcTotais(){
 
     if (foiRolada) {
       // Se rolada: o gasto do mês = valorTotalFatura MENOS o saldo que foi rolado para o mês seguinte (ou seja: valorPago)
-      const saldoRolado = (fatSeguinte && fatSeguinte.rotativoDetalhe?.saldoAnterior) || Number(fatReg?.saldoRestante) || 0;
+      const saldoRolado = (fatSeguinte && (fatSeguinte.rotativoDetalhe?.saldoAnterior || fatSeguinte.rotativoDetalhe?.principal)) || Number(fatReg?.saldoRestante) || 0;
       const gastoMes = Math.max(0, Math.round((f.valorTotalFatura - saldoRolado) * 100) / 100);
       totalFaturasCartao += gastoMes;
     } else {
-      // Caso contrário (não rolada): valorTotalFatura
-      totalFaturasCartao += f.valorTotalFatura;
+      // Caso contrário (não rolada): se acumulou automaticamente do mês anterior, o principal do mês anterior
+      // já foi computado na competência anterior. O que adiciona no mês corrente são estritamente os ENCARGOS de juros
+      let gastoMes = f.valorTotalFatura;
+      if (f.rotativoItem && f.rotativoItem.automatico) {
+        const principalAcumulado = Number(f.rotativoItem.detalhe?.principal || f.rotativoItem.detalhe?.saldoAnterior || 0);
+        gastoMes = Math.max(0, Math.round((f.valorTotalFatura - principalAcumulado) * 100) / 100);
+      }
+      totalFaturasCartao += gastoMes;
     }
   });
   totalFaturasCartao = Math.round(totalFaturasCartao * 100) / 100;
@@ -2835,11 +2970,16 @@ function calcTotaisAno(anoStr){
       const foiRolada = Boolean((fatReg && fatReg.roladoParaProxima) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
 
       if (foiRolada) {
-        const saldoRolado = (fatSeguinte && fatSeguinte.rotativoDetalhe?.saldoAnterior) || Number(fatReg?.saldoRestante) || 0;
+        const saldoRolado = (fatSeguinte && (fatSeguinte.rotativoDetalhe?.saldoAnterior || fatSeguinte.rotativoDetalhe?.principal)) || Number(fatReg?.saldoRestante) || 0;
         const gastoMes = Math.max(0, Math.round((f.valorTotalFatura - saldoRolado) * 100) / 100);
         totalFaturasAno += gastoMes;
       } else {
-        totalFaturasAno += f.valorTotalFatura;
+        let gastoMes = f.valorTotalFatura;
+        if (f.rotativoItem && f.rotativoItem.automatico) {
+          const principalAcumulado = Number(f.rotativoItem.detalhe?.principal || f.rotativoItem.detalhe?.saldoAnterior || 0);
+          gastoMes = Math.max(0, Math.round((f.valorTotalFatura - principalAcumulado) * 100) / 100);
+        }
+        totalFaturasAno += gastoMes;
       }
     });
   }
@@ -3209,13 +3349,35 @@ function renderGastos(){
     }
   }
 
-  // Inadimplência acumulada de meses anteriores
+  // Inadimplência acumulada de meses anteriores (contas avulsas + faturas de cartão da Fatia A)
   const inadBox = document.getElementById('inadimplencia-box');
   const inadGeral = gastosInadimplentesDoMes();
   const inadFiltrada = inadGeral.filter(g => filtroTitularGasto === 'todos' || g.titular === filtroTitularGasto);
-  if(inadBox){
-    if(inadFiltrada.length > 0){
-      const totalInad = inadFiltrada.reduce((s,g) => s + g.val, 0);
+
+  // Fatia A: Detecta cartões de crédito acumulando faturas em atraso não pagas do mês anterior
+  const faturasAcumuladas = [];
+  const mesAnt = adicionarMesesYM(mesAtual, -1);
+  (S.cartoes || []).filter(c => c.ativo !== false && !c.negativado).forEach(c => {
+    if (filtroTitularGasto !== 'todos' && c.titular !== filtroTitularGasto) return;
+    const fAtual = calcularFaturaMes(c.id, mesAtual);
+    if (fAtual.rotativoItem && fAtual.rotativoItem.automatico) {
+      faturasAcumuladas.push({
+        cartao: c,
+        mesAnt: mesAnt,
+        rotativoItem: fAtual.rotativoItem,
+        val: fAtual.rotativoItem.val,
+        desc: `Fatura ${c.nome} (${mesLabel(mesAnt)})`
+      });
+    }
+  });
+
+  if (inadBox) {
+    const totalItens = inadFiltrada.length + faturasAcumuladas.length;
+    if (totalItens > 0) {
+      const vGastosInad = inadFiltrada.reduce((s, g) => s + g.val, 0);
+      const vFaturasInad = faturasAcumuladas.reduce((s, f) => s + f.val, 0);
+      const totalInad = Math.round((vGastosInad + vFaturasInad) * 100) / 100;
+
       inadBox.innerHTML = `
         <div class="alert alert-r" style="margin-bottom:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;font-weight:700;">
@@ -3223,7 +3385,7 @@ function renderGastos(){
             <span>${fmt(totalInad)}</span>
           </div>
           <p style="font-size:12px;margin:4px 0 8px;opacity:0.9;">
-            ${inadFiltrada.length} conta(s) de meses anteriores não pagas acumularam neste mês:
+            ${totalItens} pendência(s) de meses anteriores não pagas acumularam neste mês:
           </p>
           ${inadFiltrada.map(g => `
             <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:12px;">
@@ -3236,6 +3398,20 @@ function renderGastos(){
                 <span style="font-weight:600;color:var(--red);">${fmt(g.val)}</span>
                 <button class="status-btn pendente" onclick="togglePagoGasto(${g.id})">✓ Pagar</button>
                 <button class="btn-negociar" onclick="abrirModalNegociarGasto(${g.id})">🤝 Negociar</button>
+              </div>
+            </div>
+          `).join('')}
+          ${faturasAcumuladas.map(f => `
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:12px;">
+              <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                <strong>💳 ${escapeHtml(f.desc)}</strong>
+                <span class="badge b-inad">${mesLabel(f.mesAnt)}</span>
+                <span class="badge" style="background:rgba(234,179,8,0.2);color:#facc15;">+ Rotativo (${f.rotativoItem.detalhe?.taxa || 14.5}%)</span>
+                ${f.cartao.titular ? `<span class="badge b-titular">${escapeHtml(f.cartao.titular)}</span>` : ''}
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;color:var(--red);">${fmt(f.val)}</span>
+                <button class="status-btn pendente" onclick="abrirFaturaCartao(${f.cartao.id})">👁️ Ver Fatura</button>
               </div>
             </div>
           `).join('')}
