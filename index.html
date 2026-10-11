@@ -534,22 +534,32 @@
 <div class="modal-bg" id="m-cartao">
   <div class="modal">
     <span class="modal-close" onclick="closeM('m-cartao')">×</span>
-    <p class="modal-title">💳 Novo Cartão de Crédito</p>
-    <div class="input-row">
+    <input type="hidden" id="c-edit-id" value="">
+    <h3 id="c-modal-title" class="modal-title" style="margin-bottom:14px;">Cadastrar Cartão de Crédito</h3>
+    <div class="input-row form-group">
       <label>Nome do cartão</label>
       <input type="text" id="cartao-nome" placeholder="Ex: Nubank Ultravioleta, Inter Mastercard..."/>
     </div>
-    <div class="input-row">
+    <div class="input-row form-group">
       <label>Titular</label>
       <input type="text" id="cartao-titular" placeholder="Ex: Alex, Gabi..." list="lista-titulares"/>
     </div>
-    <div class="input-row">
+    <div class="input-row form-group">
       <label>Taxa de atraso / rotativo (% ao mês)</label>
       <input type="number" id="cartao-taxa-atraso" placeholder="Ex: 14.5" inputmode="decimal" step="0.01"/>
     </div>
-    <div class="input-row">
+    <div class="input-row form-group">
       <label>Dia do Vencimento (1 a 31)</label>
       <input type="number" id="cartao-dia-vencimento" min="1" max="31" value="10" inputmode="numeric"/>
+    </div>
+    <div class="input-row form-group">
+      <label>Melhor Dia de Compra / Fechamento (1 a 31)</label>
+      <input type="number" id="c-dia-fechamento" min="1" max="31" placeholder="Ex: 22" inputmode="numeric"/>
+      <span style="font-size:11px;color:var(--muted);">Compras a partir deste dia entram na fatura seguinte.</span>
+    </div>
+    <div class="input-row form-group">
+      <label>Limite Total de Crédito (R$)</label>
+      <input type="number" id="c-limite" step="0.01" min="0" placeholder="Ex: 5000.00" inputmode="decimal"/>
     </div>
     <div class="input-row" style="margin-top:6px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:14px;">
@@ -575,14 +585,17 @@
         <input type="month" id="cartao-anuidade-mes-inicio"/>
       </div>
     </div>
-    <button class="btn btn-g" style="margin-top:10px;" onclick="salvarCartao()">Salvar Cartão</button>
+    <button type="button" class="btn btn-g" id="c-btn-salvar" style="margin-top:10px;" onclick="salvarCartao()">Salvar Cartão</button>
   </div>
 </div>
 
 <div class="modal-bg" id="m-fatura-cartao">
   <div class="modal" style="max-height:85vh;display:flex;flex-direction:column;">
     <span class="modal-close" onclick="closeM('m-fatura-cartao')">×</span>
-    <p class="modal-title" id="fatura-titulo">💳 Detalhes da Fatura</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-right:20px;">
+      <p class="modal-title" id="fatura-titulo" style="margin:0;">💳 Detalhes da Fatura</p>
+      <button type="button" class="btn" style="width:auto;margin:0;padding:5px 10px;font-size:12px;background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.35);cursor:pointer;" onclick="abrirModalCartao(cartaoAtualId)">✏️ Editar Cartão</button>
+    </div>
     <div class="card" style="margin-bottom:10px;background:var(--bg3);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <p class="card-label" style="margin:0;">Total da fatura neste mês</p>
