@@ -2864,6 +2864,7 @@ function calcSaldoAcumuladoAnterior(targetYM) {
   (S.receitas || []).forEach(r => { const ym = (r.data||'').slice(0,7); if(ym && ym < targetYM) mesesSet.add(ym); });
   (S.gastos || []).forEach(g => { const ym = (g.data||'').slice(0,7); if(ym && ym < targetYM) mesesSet.add(ym); });
   (S.investimentos || []).forEach(i => { const ym = (i.dataInicio||'').slice(0,7); if(ym && ym < targetYM) mesesSet.add(ym); });
+  (S.faturasCartao || []).forEach(f => { const ym = (f.mes||'').slice(0,7); if(ym && ym < targetYM) mesesSet.add(ym); });
 
   const mesesOrdenados = Array.from(mesesSet).sort();
   let acumulado = 0;
@@ -2871,11 +2872,13 @@ function calcSaldoAcumuladoAnterior(targetYM) {
     const rec = (S.receitas || []).filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
     // Gastos do mês pagos no mês anterior (gastos negociados não consumiram caixa no mês original)
     const gasPagos = (S.gastos || []).filter(g => (g.data||'').slice(0,7) === ym && g.pago && !g.negociado).reduce((s,g) => s + g.val, 0);
+    // Fatia B: Faturas de cartão de crédito pagas nos meses anteriores
+    const fatPagos = (S.faturasCartao || []).filter(f => f.mes === ym).reduce((s,f) => s + (Number(f.valorPago) || 0), 0);
     const inv = (S.investimentos || []).filter(i => (i.dataInicio||'').slice(0,7) === ym).reduce((s,i) => s + (i.valorInicial || 0), 0);
-    const saldoDoMes = rec - gasPagos - inv;
+    const saldoDoMes = rec - gasPagos - fatPagos - inv;
     acumulado += saldoDoMes;
   }
-  return Math.max(0, acumulado); // Sobra positiva acumula para os meses posteriores
+  return Math.max(0, Math.round(acumulado * 100) / 100); // Sobra positiva acumula para os meses posteriores
 }
 
 function calcTotais(){
@@ -2935,14 +2938,81 @@ function calcTotais(){
   // Sobras acumuladas de meses anteriores
   const saldoAnterior = calcSaldoAcumuladoAnterior(mesAtual);
   
-  // Saldo total disponível
+  // Saldo total disponível (regime misto legado)
   const saldoDisp = Math.round((saldoMes + saldoAnterior) * 100) / 100;
+
+  // FATIA B: MÉTRICAS DE FLUXO DE CAIXA REAL EM TEMPO REAL ("PAINEL VERDINHO")
+  // 1. Disponível total em caixa (receitas do mês + sobras de caixa anteriores)
+  const totalDisponivel = Math.round((totalRec + saldoAnterior) * 100) / 100;
+
+  // 2. Gastos avulsos marcados como pagos até o momento
+  const gastosPagos = Math.round(gas.filter(g => g.pago).reduce((s,g) => s + g.val, 0) * 100) / 100;
+
+  // 3. Faturas de cartões de crédito pagas ou parcialmente pagas no mês
+  const faturasPagas = Math.round((S.cartoes || []).filter(c => c.ativo !== false).reduce((s,c) => {
+    const fReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesAtual);
+    return s + (fReg && (fReg.pago || fReg.pagoParcial) ? (Number(fReg.valorPago) || 0) : 0);
+  }, 0) * 100) / 100;
+
+  // 4. Total de saídas efetivas realizadas da conta (gastos pagos + faturas pagas + aportes)
+  const totalPago = Math.round((gastosPagos + faturasPagas + totalInv) * 100) / 100;
+
+  // 5. Saldo em Caixa Real em Tempo Real ("Painel Verdinho")
+  const saldoCaixaReal = Math.round((totalDisponivel - totalPago) * 100) / 100;
+
+  // 6. Gastos avulsos em aberto (pendentes)
+  const gastosAbertos = Math.round(gas.filter(g => !g.pago).reduce((s,g) => s + g.val, 0) * 100) / 100;
+
+  // 7. Faturas de cartões em aberto (saldo pendente de quitação no mês atual)
+  const faturasAbertas = Math.round((S.cartoes || []).filter(c => c.ativo !== false).reduce((s, c) => {
+    const fReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesAtual);
+    if (fReg && (fReg.negativada || fReg.migradoDivida)) return s;
+
+    const f = calcularFaturaMes(c.id, mesAtual);
+    const pago = fReg ? (Number(fReg.valorPago) || 0) : 0;
+
+    const mesSeguinte = adicionarMesesYM(mesAtual, 1);
+    const fatSeguinte = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesSeguinte);
+    const foiRolada = Boolean((fReg && (fReg.roladoParaProxima || fReg.liquidadaPorRolagem)) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
+
+    if (foiRolada) {
+      // Se foi rolada para o próximo mês: o saldo rolado NÃO é mais desembolso pendente no mês atual
+      const saldoRolado = (fatSeguinte && (fatSeguinte.rotativoDetalhe?.saldoAnterior || fatSeguinte.rotativoDetalhe?.principal)) || Number(fReg?.saldoRestante) || 0;
+      const abertoMes = Math.max(0, Math.round((f.valorTotalFatura - pago - saldoRolado) * 100) / 100);
+      return s + abertoMes;
+    } else {
+      let valorBaseFatura = f.valorTotalFatura;
+      if (f.rotativoItem && f.rotativoItem.automatico) {
+        const principalAcumulado = Number(f.rotativoItem.detalhe?.principal || f.rotativoItem.detalhe?.saldoAnterior || 0);
+        valorBaseFatura = Math.max(0, Math.round((f.valorTotalFatura - principalAcumulado) * 100) / 100);
+      }
+      const abertoMes = Math.max(0, Math.round((valorBaseFatura - pago) * 100) / 100);
+      return s + abertoMes;
+    }
+  }, 0) * 100) / 100;
+
+  // 8. Total pendente a pagar no mês
+  const totalPendente = Math.round((gastosAbertos + faturasAbertas) * 100) / 100;
+
+  // 9. Previsão de sobra final do mês (Saldo Projetado)
+  // Invariante estrita da ADR-002: saldoProjetado === saldoCaixaReal - totalPendente
+  const saldoProjetado = Math.round((saldoCaixaReal - totalPendente) * 100) / 100;
   
   return {
     totalRec, totalGas, totalInv, totalFaturasCartao,
     gasRec, gasLaz, gasNP, gasVg,
     totalDiv, custoJuros,
-    saldoMes, saldoAnterior, saldoDisp
+    saldoMes, saldoAnterior, saldoDisp,
+    // Fatia B: Caixa Real e Projeção
+    totalDisponivel,
+    gastosPagos,
+    faturasPagas,
+    totalPago,
+    saldoCaixaReal,
+    gastosAbertos,
+    faturasAbertas,
+    totalPendente,
+    saldoProjetado
   };
 }
 
@@ -3079,8 +3149,15 @@ function renderResumo(){
     const sc = tAno.saldoLiquido < 0 ? 'c-red' : 'c-green';
     const lblSaldo = $('lbl-saldo-disp');
     if(lblSaldo) lblSaldo.textContent = `Saldo Líquido Anual (${anoSelecionado})`;
-    $('saldo-disp').textContent = fmt(tAno.saldoLiquido);
-    $('saldo-disp').className = 'big-num ' + sc;
+    const badgeCaixa = $('badge-caixa-status');
+    if(badgeCaixa) badgeCaixa.style.display = 'none';
+    const blocoProj = $('bloco-projecao-mes');
+    if(blocoProj) blocoProj.style.display = 'none';
+
+    if($('saldo-disp')) {
+      $('saldo-disp').textContent = fmt(tAno.saldoLiquido);
+      $('saldo-disp').className = 'big-num ' + sc;
+    }
 
     const txtSaldoMes = $('txt-saldo-mes');
     if(txtSaldoMes) txtSaldoMes.textContent = `Receitas: ${fmt(tAno.totalRec)} • Gastos: ${fmt(tAno.totalGas)} • Aportes: ${fmt(tAno.totalInv)}`;
@@ -3090,16 +3167,20 @@ function renderResumo(){
     const pctUsado = tAno.totalRec > 0 ? Math.min(100, Math.round(((tAno.totalGas + tAno.totalInv) / tAno.totalRec) * 100)) : 0;
     const pctLivre = Math.max(0, 100 - pctUsado);
     const fc = pctUsado >= 100 ? 'var(--red)' : pctUsado > 70 ? 'var(--yellow)' : 'var(--green)';
-    $('meter-fill').style.width = pctLivre + '%';
-    $('meter-fill').style.background = fc;
-    $('meter-tip').textContent = tAno.totalRec > 0 
-      ? `${pctUsado}% da receita anual comprometida — saldo líquido de ${fmt(tAno.saldoLiquido)}`
-      : 'Cadastre receitas no ano para acompanhar o progresso.';
+    if($('meter-fill')) {
+      $('meter-fill').style.width = pctLivre + '%';
+      $('meter-fill').style.background = fc;
+    }
+    if($('meter-tip')) {
+      $('meter-tip').textContent = tAno.totalRec > 0 
+        ? `${pctUsado}% da receita anual comprometida — saldo líquido de ${fmt(tAno.saldoLiquido)}`
+        : 'Cadastre receitas no ano para acompanhar o progresso.';
+    }
 
-    $('r-rec').textContent = fmt(tAno.totalRec);
-    $('r-gas').textContent = fmt(tAno.totalGas);
-    $('r-fix').textContent = fmt(tAno.gasRec);
-    $('r-div').textContent = fmt(tAno.totalDiv);
+    if($('r-rec')) $('r-rec').textContent = fmt(tAno.totalRec);
+    if($('r-gas')) $('r-gas').textContent = fmt(tAno.totalGas);
+    if($('r-fix')) $('r-fix').textContent = fmt(tAno.gasRec);
+    if($('r-div')) $('r-div').textContent = fmt(tAno.totalDiv);
     const rInv = $('r-inv');
     if(rInv) rInv.textContent = fmt(tAno.totalInv);
     const rLiq = $('r-liq');
@@ -3108,53 +3189,77 @@ function renderResumo(){
       rLiq.className = 'mc-val ' + (tAno.saldoLiquido < 0 ? 'c-red' : 'c-green');
     }
 
-    $('alerta-box').innerHTML = tAno.saldoLiquido < 0 
-      ? `<div class="alert alert-r">⚠️ No consolidado de ${anoSelecionado}, os gastos e aportes superam a receita em ${fmt(Math.abs(tAno.saldoLiquido))}.</div>` 
-      : '';
+    if($('alerta-box')) {
+      $('alerta-box').innerHTML = tAno.saldoLiquido < 0 
+        ? `<div class="alert alert-r">⚠️ No consolidado de ${anoSelecionado}, os gastos e aportes superam a receita em ${fmt(Math.abs(tAno.saldoLiquido))}.</div>` 
+        : '';
+    }
 
     const cardPrio = $('card-prio-lista');
     if(cardPrio) cardPrio.style.display = 'none';
 
   } else {
-    // Modo Mensal
+    // Modo Mensal: Painel de Caixa Real em Tempo Real ("Painel Verdinho")
     const t = calcTotais();
     const lblSaldo = $('lbl-saldo-disp');
-    if(lblSaldo) lblSaldo.textContent = 'Saldo disponível no mês';
+    if(lblSaldo) lblSaldo.textContent = '🟢 Saldo em Caixa (Tempo Real)';
+    const badgeCaixa = $('badge-caixa-status');
+    if(badgeCaixa) badgeCaixa.style.display = 'inline-block';
+    const blocoProj = $('bloco-projecao-mes');
+    if(blocoProj) blocoProj.style.display = 'flex';
 
-    const sc = t.saldoDisp < 0 ? 'c-red' : (t.saldoDisp < t.totalRec * 0.1 && t.totalRec > 0 ? 'c-yellow' : 'c-green');
-    $('saldo-disp').textContent = fmt(t.saldoDisp);
-    $('saldo-disp').className = 'big-num ' + sc;
+    // Se >= 0, verde destacado (c-green); se < 0, vermelho (c-red)
+    const sc = t.saldoCaixaReal < 0 ? 'c-red' : 'c-green';
+    if($('saldo-disp')) {
+      $('saldo-disp').textContent = fmt(t.saldoCaixaReal);
+      $('saldo-disp').className = 'big-num ' + sc;
+    }
 
+    // Sub-texto claro: Receitas + Sobras vs Já Pago
     const txtSaldoMes = $('txt-saldo-mes');
-    if(txtSaldoMes) txtSaldoMes.textContent = `Saldo deste mês: ${fmt(t.saldoMes)} (Receita - Gastos - Aportes)`;
+    if(txtSaldoMes) txtSaldoMes.textContent = `Receitas + Sobras: ${fmt(t.totalDisponivel)} • Já Pago: -${fmt(t.totalPago)}`;
     
     const txtSaldoAnt = $('txt-saldo-anterior');
     if(txtSaldoAnt) {
       if(t.saldoAnterior > 0) {
-        txtSaldoAnt.textContent = `Sobras anteriores: +${fmt(t.saldoAnterior)}`;
+        txtSaldoAnt.textContent = `Sobras passadas: +${fmt(t.saldoAnterior)}`;
         txtSaldoAnt.style.display = 'inline';
       } else {
         txtSaldoAnt.style.display = 'none';
       }
     }
 
-    const pctUsado = t.totalRec > 0 ? Math.min(100, Math.round(((t.totalGas + t.totalInv) / t.totalRec) * 100)) : 0;
-    const pctLivre = Math.max(0, 100 - pctUsado);
-    const fc = pctUsado >= 100 ? 'var(--red)' : pctUsado > 70 ? 'var(--yellow)' : 'var(--green)';
-    $('meter-fill').style.width = pctLivre + '%';
-    $('meter-fill').style.background = fc;
-    if(t.totalRec > 0){
-      $('meter-tip').textContent = pctUsado >= 100
-        ? `⚠️ Receita do mês esgotada — faltam ${fmt(Math.abs(t.saldoMes))} para cobrir o mês`
-        : `${pctUsado}% comprometido — sobram ${fmt(t.saldoDisp)} (${pctLivre}%)`;
-    } else {
-      $('meter-tip').textContent = 'Cadastre sua receita para começar';
+    // Barra de progresso: porcentagem do recurso disponível ainda no caixa real
+    if($('meter-fill')) {
+      if(t.totalDisponivel > 0) {
+        const pctLivre = Math.max(0, Math.min(100, Math.round((t.saldoCaixaReal / t.totalDisponivel) * 100)));
+        const fc = t.saldoCaixaReal < 0 ? 'var(--red)' : pctLivre < 20 ? 'var(--yellow)' : 'var(--green)';
+        $('meter-fill').style.width = pctLivre + '%';
+        $('meter-fill').style.background = fc;
+        if($('meter-tip')) {
+          $('meter-tip').textContent = t.saldoCaixaReal < 0
+            ? `⚠️ Caixa negativo — saídas pagas excedem o disponível em ${fmt(Math.abs(t.saldoCaixaReal))}`
+            : `${pctLivre}% do dinheiro disponível ainda em caixa (${fmt(t.saldoCaixaReal)})`;
+        }
+      } else {
+        $('meter-fill').style.width = '0%';
+        if($('meter-tip')) $('meter-tip').textContent = 'Cadastre sua receita para começar';
+      }
     }
 
-    $('r-rec').textContent = fmt(t.totalRec);
-    $('r-gas').textContent = fmt(t.totalGas);
-    $('r-fix').textContent = fmt(t.gasRec);
-    $('r-div').textContent = fmt(t.totalDiv);
+    // Bloco de Projeção do Mês (Contas e Faturas Pendentes vs Previsão de Sobra Final)
+    const txtPendente = $('txt-total-pendente');
+    if(txtPendente) txtPendente.textContent = fmt(t.totalPendente);
+    const txtProj = $('txt-saldo-projetado');
+    if(txtProj) {
+      txtProj.textContent = fmt(t.saldoProjetado);
+      txtProj.style.color = t.saldoProjetado < 0 ? 'var(--red)' : 'var(--green)';
+    }
+
+    if($('r-rec')) $('r-rec').textContent = fmt(t.totalRec);
+    if($('r-gas')) $('r-gas').textContent = fmt(t.totalGas);
+    if($('r-fix')) $('r-fix').textContent = fmt(t.gasRec);
+    if($('r-div')) $('r-div').textContent = fmt(t.totalDiv);
     const rInv = $('r-inv');
     if(rInv) rInv.textContent = fmt(t.totalInv);
     const rLiq = $('r-liq');
@@ -3164,10 +3269,14 @@ function renderResumo(){
     }
 
     let alertHtml = '';
-    if(t.saldoMes < 0 && t.saldoDisp < 0) alertHtml = `<div class="alert alert-r">⚠️ Gastos e aportes superam a receita em ${fmt(Math.abs(t.saldoDisp))} — veja as prioridades abaixo.</div>`;
-    else if(t.saldoMes < 0 && t.saldoDisp >= 0) alertHtml = `<div class="alert alert-y">💡 Gastos do mês superaram a receita, mas você foi coberto pela sobra de meses anteriores (+${fmt(t.saldoAnterior)}).</div>`;
-    else if(t.saldoDisp < t.totalRec * 0.1 && t.totalRec > 0) alertHtml = `<div class="alert alert-y">Atenção: restam apenas ${fmt(t.saldoDisp)} após os gastos e aportes.</div>`;
-    $('alerta-box').innerHTML = alertHtml;
+    if(t.saldoCaixaReal < 0) {
+      alertHtml = `<div class="alert alert-r">⚠️ Saldo em caixa negativo em ${fmt(Math.abs(t.saldoCaixaReal))}! Os pagamentos efetuados superam os recursos disponíveis.</div>`;
+    } else if(t.saldoProjetado < 0) {
+      alertHtml = `<div class="alert alert-y">💡 Atenção: você tem ${fmt(t.saldoCaixaReal)} em caixa, mas as contas pendentes (${fmt(t.totalPendente)}) levarão a um déficit projetado de ${fmt(Math.abs(t.saldoProjetado))} ao fim do mês.</div>`;
+    } else if(t.saldoMes < 0 && t.saldoDisp >= 0) {
+      alertHtml = `<div class="alert alert-y">💡 Gastos do mês superaram a receita, mas você foi coberto pela sobra de meses anteriores (+${fmt(t.saldoAnterior)}).</div>`;
+    }
+    if($('alerta-box')) $('alerta-box').innerHTML = alertHtml;
 
     // Prioridades
     const prios = [];
@@ -3175,7 +3284,7 @@ function renderResumo(){
     const cartoes = abertas.filter(d => d.tipo === 'cartao' && !d.acordo).sort((a,b) => b.juros - a.juros);
     const emps = abertas.filter(d => d.tipo !== 'cartao' && !d.acordo).sort((a,b) => b.juros - a.juros);
     const acordos = abertas.filter(d => d.acordo);
-    if(t.saldoDisp < 0) prios.push({ c: 'r', tag: '🔴 Urgente', nome: 'Receita insuficiente', det: `Corte ${fmt(Math.abs(t.saldoDisp))} em gastos para equilibrar o mês.` });
+    if(t.saldoProjetado < 0) prios.push({ c: 'r', tag: '🔴 Urgente', nome: 'Receita insuficiente', det: `Corte ${fmt(Math.abs(t.saldoProjetado))} em gastos para equilibrar o mês.` });
     cartoes.forEach(d => prios.push({ c: 'r', tag: '🔴 Pagar primeiro', nome: d.credor + ' (cartão)', det: `${d.juros}%/mês = ${fmt(d.saldo * (d.juros / 100))} em juros/mês. Use todo saldo livre.` }));
     emps.forEach((d,i) => prios.push({ c: i === 0 ? 'y' : 'g', tag: i === 0 ? '🟡 Em seguida' : '🟢 Manter parcela', nome: d.credor + (d.tipo === 'emprestimo_pf' ? ' (empréstimo PF)' : ' (empréstimo)'), det: `${d.juros}%/mês${d.parcela ? ' — parcela ' + fmt(d.parcela) : ''}. Mantenha em dia.` }));
     acordos.forEach(d => {
@@ -3187,9 +3296,11 @@ function renderResumo(){
     if(t.gasNP > 0) prios.push({ c: 'g', tag: '🟢 Monitorar', nome: 'Gastos imprevistos', det: `${fmt(t.gasNP)} este mês. Analise o que pode evitar.` });
 
     const classMap = { r: 'prio prio-r', y: 'prio prio-y', g: 'prio prio-g' };
-    $('prio-lista').innerHTML = prios.length
-      ? prios.slice(0,5).map(p => `<div class="${classMap[p.c]}"><p class="prio-tag">${p.tag}</p><p class="prio-name">${p.nome}</p><p class="prio-detail">${p.det}</p></div>`).join('')
-      : '<p style="font-size:13px;color:var(--muted);">Cadastre gastos e dívidas para ver as prioridades.</p>';
+    if($('prio-lista')) {
+      $('prio-lista').innerHTML = prios.length
+        ? prios.slice(0,5).map(p => `<div class="${classMap[p.c]}"><p class="prio-tag">${p.tag}</p><p class="prio-name">${p.nome}</p><p class="prio-detail">${p.det}</p></div>`).join('')
+        : '<p style="font-size:13px;color:var(--muted);">Cadastre gastos e dívidas para ver as prioridades.</p>';
+    }
 
     const cardPrio = $('card-prio-lista');
     if(cardPrio) cardPrio.style.display = 'block';
@@ -3801,6 +3912,8 @@ if (typeof module !== 'undefined' && module.exports) {
     abrirModalAnteciparCartao,
     anteciparCompraCartao,
     verificarEReabrirFatura,
+    calcSaldoAcumuladoAnterior,
+    togglePagoGasto,
     S
   };
 }
