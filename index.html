@@ -847,6 +847,10 @@
         <button class="btn" style="flex:1;" onclick="abrirModalGasto()">+ Adicionar gasto</button>
         <button class="btn btn-primary" id="btn-ler-cupom-gastos" style="flex:1;" onclick="abrirScannerCupom()">📷 Ler Cupom / QR</button>
       </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button type="button" class="btn" style="flex:1; background:rgba(236,72,153,0.12); color:#ec4899; border:1px solid rgba(236,72,153,0.3); font-size:12px; font-weight:700;" onclick="abrirModalTetosCategorias()">🎯 Tetos por Categoria</button>
+        <button type="button" class="btn" style="flex:1; background:rgba(59,130,246,0.12); color:var(--blue); border:1px solid rgba(59,130,246,0.3); font-size:12px; font-weight:700;" onclick="abrirModalAssinaturasFixas()">🔄 Contas Fixas</button>
+      </div>
     </div>
 
     <!-- DÍVIDAS -->
@@ -859,6 +863,7 @@
       </div>
       <div id="lista-dividas"></div>
       <button class="btn btn-r" onclick="abrirModalDivida()">+ Cadastrar dívida</button>
+      <button type="button" class="btn" style="background:rgba(139,92,246,0.18); color:#a855f7; border:1px solid rgba(139,92,246,0.35); font-weight:700; margin-top:8px;" onclick="abrirModalSimuladorDividas()">⛄ Simular Bola de Neve vs Avalanche</button>
     </div>
 
     <!-- METAS E INVESTIMENTOS -->
@@ -875,21 +880,26 @@
       <div id="lista-metas"></div>
     </div>
 
-    <!-- AGENTE -->
-    <div id="sec-agente" class="section" style="display:none;">
-      <p class="sec-title">Agente financeiro</p>
-      <div class="qs-wrap">
-        <button class="qs" onclick="ask('Onde estou perdendo mais dinheiro?')">Onde vaza o dinheiro?</button>
-        <button class="qs" onclick="ask('Qual dívida devo atacar primeiro e por quê?')">Qual dívida atacar?</button>
-        <button class="qs" onclick="ask('Crie um plano realista para chegar nos R$100 mil')">Plano R$100k</button>
-        <button class="qs" onclick="ask('Quais gastos posso cortar agora para acelerar a quitação das dívidas?')">O que cortar?</button>
-        <button class="qs" onclick="ask('Quanto tempo para quitar todas as dívidas no ritmo atual?')">Tempo para quitar</button>
-        <button class="qs" onclick="ask('Quando chegar o 13° salário, o que devo fazer com ele?')">Usar o 13°?</button>
+    <!-- AGENTE NORTE 2.0 OMNISCIENTE -->
+    <div id="sec-agente" class="section section-norte" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; margin-top:4px;">
+        <p class="sec-title" style="margin:0;">🤖 Agente Norte 2.0</p>
+        <span style="font-size:11px; background:rgba(85,129,227,0.15); color:var(--blue); font-weight:700; padding:4px 8px; border-radius:12px;">Omnisciente</span>
       </div>
+
+      <!-- CHIPS RÁPIDOS DA ETAPA 8 -->
+      <div class="qs-wrap" id="norte-chips-rapidos" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+        <button type="button" class="qs" onclick="ask('Resumo da Semana da Família')">📊 Resumo da Semana da Família</button>
+        <button type="button" class="qs" onclick="ask('Quanto posso gastar de VA/VR por dia?')">🥗 Quanto posso gastar de VA/VR por dia?</button>
+        <button type="button" class="qs" onclick="ask('O que falta comprar p/ o cardápio?')">🛒 O que falta comprar p/ o cardápio?</button>
+        <button type="button" class="qs" onclick="ask('Simular Quitação: Bola de Neve vs Avalanche')">⛄ Simular Quitação: Bola de Neve vs Avalanche</button>
+        <button type="button" class="qs" onclick="ask('Progresso das Metas da Família')">🎯 Progresso das Metas da Família</button>
+      </div>
+
       <div id="chat-msgs"></div>
       <div class="ai-input-row">
-        <input type="text" id="ai-input" placeholder="Pergunte ao seu agente..." onkeydown="if(event.key==='Enter')sendMsg()"/>
-        <button onclick="sendMsg()">→</button>
+        <input type="text" id="ai-input" placeholder="Pergunte ao Agente Norte..." onkeydown="if(event.key==='Enter')sendMsg()"/>
+        <button type="button" onclick="sendMsg()">→</button>
       </div>
     </div>
 
@@ -2769,6 +2779,158 @@
         Cancelar
       </button>
     </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- MODAIS DA ETAPA 8: METAS, TETOS, SIMULADOR E ASSINATURAS FIXAS -->
+<!-- ====================================================================== -->
+
+<!-- MODAL METAS E SONHOS DA FAMÍLIA -->
+<div class="modal-bg" id="m-metas-familia">
+  <div class="modal" style="max-height:85vh; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div>
+        <span class="modal-close" onclick="closeM('m-metas-familia')" style="float:none; margin-right:8px;">←</span>
+        <strong style="font-size:16px;">🎯 Metas & Sonhos da Família</strong>
+      </div>
+      <button type="button" class="btn btn-g" style="width:auto; padding:6px 12px; font-size:12px;" onclick="abrirModalNovaMetaFamilia()">+ Nova Meta</button>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:14px;">Planejamento financeiro compartilhado para os objetivos da família.</p>
+    <div id="lista-metas-familia-modal" style="flex:1; overflow-y:auto; padding-right:2px;"></div>
+  </div>
+</div>
+
+<!-- MODAL FORMULÁRIO DE NOVA META -->
+<div class="modal-bg" id="m-form-meta-familia">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-form-meta-familia')">×</span>
+    <p class="modal-title">🎯 Nova Meta da Família</p>
+    <div class="input-row">
+      <label>Título da Meta *</label>
+      <input type="text" id="form-meta-titulo" placeholder="Ex: Reserva de Emergência, Viagem Disney"/>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Valor Alvo (R$) *</label>
+        <input type="number" id="form-meta-alvo" step="0.01" placeholder="10000.00"/>
+      </div>
+      <div>
+        <label>Ícone / Emoji</label>
+        <select id="form-meta-icone">
+          <option value="🎯">🎯 Objetivo</option>
+          <option value="🛡️">🛡️ Reserva</option>
+          <option value="✈️">✈️ Viagem</option>
+          <option value="🏠">🏠 Casa / Reforma</option>
+          <option value="🚗">🚗 Carro / Moto</option>
+          <option value="🎓">🎓 Estudos / Filhos</option>
+          <option value="💳">💳 Quitar Dívidas</option>
+        </select>
+      </div>
+    </div>
+    <div class="input-row">
+      <label>Prazo Estimado (Opcional)</label>
+      <input type="date" id="form-meta-prazo"/>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:6px; margin-top:14px;">
+      <button type="button" class="btn btn-g" style="padding:12px; font-weight:700;" onclick="salvarMetaFamiliaModal()">💾 Salvar Meta</button>
+      <button type="button" class="btn" onclick="closeM('m-form-meta-familia')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REGISTRAR APORTE NA META -->
+<div class="modal-bg" id="m-form-aporte-meta">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-form-aporte-meta')">×</span>
+    <p class="modal-title">💰 Registrar Aporte</p>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:12px;" id="form-aporte-meta-nome">Meta</p>
+    <input type="hidden" id="form-aporte-meta-id"/>
+    <div class="input-row">
+      <label>Valor do Aporte (R$) *</label>
+      <input type="number" id="form-aporte-valor" step="0.01" placeholder="500.00"/>
+    </div>
+    <div class="input-row">
+      <label>Origem do Recurso</label>
+      <select id="form-aporte-origem">
+        <option value="Salário">💵 Salário / Conta Corrente</option>
+        <option value="13º Salário">🎁 13º Salário / Bônus</option>
+        <option value="Renda Extra">⚡ Renda Extra / Freelance</option>
+        <option value="Outros">📦 Outros</option>
+      </select>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:6px; margin-top:14px;">
+      <button type="button" class="btn btn-g" style="padding:12px; font-weight:700;" onclick="confirmarAporteMetaModal()">✓ Confirmar Aporte</button>
+      <button type="button" class="btn" onclick="closeM('m-form-aporte-meta')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TETOS DE ORÇAMENTO POR CATEGORIA -->
+<div class="modal-bg" id="m-tetos-categorias">
+  <div class="modal" style="max-height:85vh; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div>
+        <span class="modal-close" onclick="closeM('m-tetos-categorias')" style="float:none; margin-right:8px;">←</span>
+        <strong style="font-size:16px;">🎯 Tetos por Categoria</strong>
+      </div>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">Alertas automáticos aos 80% (atenção) e 100% (estourado) do teto mensal.</p>
+
+    <div class="card" style="margin-bottom:14px; padding:12px; border:1px solid var(--border);">
+      <p style="font-weight:700; font-size:13px; margin:0 0 8px;">Definir / Atualizar Teto</p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+        <div>
+          <label>Categoria</label>
+          <select id="form-teto-categoria"></select>
+        </div>
+        <div>
+          <label>Teto Mensal (R$)</label>
+          <input type="number" id="form-teto-limite" step="0.01" placeholder="Ex: 500.00"/>
+        </div>
+      </div>
+      <button type="button" class="btn btn-g" style="width:100%; padding:8px; font-weight:700; margin-top:6px;" onclick="salvarTetoCategoriaModal()">💾 Salvar Teto</button>
+    </div>
+
+    <div id="lista-tetos-categorias-modal" style="flex:1; overflow-y:auto; padding-right:2px;"></div>
+  </div>
+</div>
+
+<!-- MODAL SIMULADOR DE DÍVIDAS (BOLA DE NEVE VS AVALANCHE) -->
+<div class="modal-bg" id="m-simulador-dividas">
+  <div class="modal" style="max-height:85vh; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div>
+        <span class="modal-close" onclick="closeM('m-simulador-dividas')" style="float:none; margin-right:8px;">←</span>
+        <strong style="font-size:16px;">⛄ Simulador: Bola de Neve vs Avalanche</strong>
+      </div>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">Comparação estratégica de amortização e economia de juros nas suas dívidas.</p>
+
+    <div class="input-row" style="margin-bottom:12px;">
+      <label>Aporte Mensal Extra (R$ além das parcelas):</label>
+      <div style="display:flex; gap:8px;">
+        <input type="number" id="simulador-aporte-extra" placeholder="0.00" step="10" style="flex:1;"/>
+        <button type="button" class="btn btn-primary" style="width:auto; padding:10px 16px; font-weight:700;" onclick="calcularSimulacaoDividasModal()">Simular</button>
+      </div>
+    </div>
+
+    <div id="resultado-simulador-dividas" style="flex:1; overflow-y:auto; padding-right:2px;"></div>
+  </div>
+</div>
+
+<!-- MODAL CONTAS FIXAS & ASSINATURAS RECORRENTES -->
+<div class="modal-bg" id="m-assinaturas-fixas">
+  <div class="modal" style="max-height:85vh; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div>
+        <span class="modal-close" onclick="closeM('m-assinaturas-fixas')" style="float:none; margin-right:8px;">←</span>
+        <strong style="font-size:16px;">🔄 Contas Fixas & Assinaturas</strong>
+      </div>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">Detector automático de despesas recorrentes e serviços no cartão.</p>
+    <div id="resumo-assinaturas-fixas-modal"></div>
+    <div id="lista-assinaturas-fixas-modal" style="flex:1; overflow-y:auto; padding-right:2px;"></div>
   </div>
 </div>
 

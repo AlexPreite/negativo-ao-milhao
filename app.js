@@ -43,7 +43,8 @@ const MODULOS_INICIO_CATALOGO = [
   { id: 'horario', nome: 'Horário Escolar', desc: 'Aulas e atividades dos filhos', icone: '🎒', cor: '#A855F7', bgIcon: 'rgba(168,85,247,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
   { id: 'contatos', nome: 'Contatos Úteis', desc: 'Telefones de emergência e médicos', icone: '📞', cor: '#64748B', bgIcon: 'rgba(100,116,139,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
   { id: 'beneficios', nome: 'Vales VA / VR', desc: 'Carteiras de alimentação e refeição', icone: '🥗', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'gastos' },
-  { id: 'scanner_cupom', nome: 'Scanner de Cupom', desc: 'Leitura inteligente de notas fiscais com IA', icone: '📷', cor: '#3B82F6', bgIcon: 'rgba(59,130,246,0.14)', categoria: 'avancado', telaAlvo: 'gastos' }
+  { id: 'scanner_cupom', nome: 'Scanner de Cupom', desc: 'Leitura inteligente de notas fiscais com IA', icone: '📷', cor: '#3B82F6', bgIcon: 'rgba(59,130,246,0.14)', categoria: 'avancado', telaAlvo: 'gastos' },
+  { id: 'metas_fam', nome: 'Metas & Sonhos', desc: 'Objetivos e poupança da família', icone: '🎯', cor: '#EC4899', bgIcon: 'rgba(236,72,153,0.14)', categoria: 'avancado', telaAlvo: 'explorar' }
 ];
 
 let S = {
@@ -104,6 +105,9 @@ let S = {
   cardapioSemanal: [],
   documentosFamilia: [],
   gradeHoraria: [],
+  // Super-App Familiar v2.0 (Etapa 8 - Agente Norte 2.0, Metas/Sonhos, Tetos & Simulador)
+  metasFamilia: [],
+  tetosCategorias: [],
   chat:[],
   apiKey:'',
   onboardingDone:false
@@ -1120,6 +1124,54 @@ function migrarParaUpgradeFamiliarV2() {
         semanaAlternada: 'todas',
         cor: '#5581E3'
       }
+    ];
+  }
+
+  // 18. Metas e Sonhos da Família (Etapa 8)
+  const cIdEtapa8 = S.circuloAtivoId || 'circ_1';
+  const mIdEtapa8 = S.membroAtivoId || 'm_1';
+  const agoraIsoEtapa8 = new Date().toISOString();
+
+  if (!Array.isArray(S.metasFamilia) || S.metasFamilia.length === 0) {
+    S.metasFamilia = [
+      {
+        id: 'meta_fam_padrao_1',
+        circuloId: cIdEtapa8,
+        titulo: 'Reserva de Emergência da Família',
+        icone: '🛡️',
+        valorAlvo: 15000.0,
+        valorAtual: 4500.0,
+        prazo: '2026-12-31',
+        aportes: [
+          { id: 'ap_fam_1', valor: 2000.0, data: '2026-09-10', membroNome: 'Alex', origem: 'Salário' },
+          { id: 'ap_fam_2', valor: 2500.0, data: '2026-10-05', membroNome: 'Gabi', origem: 'Salário' }
+        ],
+        criadoPor: mIdEtapa8,
+        criadoEm: agoraIsoEtapa8
+      },
+      {
+        id: 'meta_fam_padrao_2',
+        circuloId: cIdEtapa8,
+        titulo: 'Viagem de Férias em Família',
+        icone: '✈️',
+        valorAlvo: 8000.0,
+        valorAtual: 2200.0,
+        prazo: '2027-01-15',
+        aportes: [
+          { id: 'ap_fam_3', valor: 1200.0, data: '2026-09-15', membroNome: 'Alex', origem: 'Salário' },
+          { id: 'ap_fam_4', valor: 1000.0, data: '2026-10-10', membroNome: 'Gabi', origem: 'Salário' }
+        ],
+        criadoPor: mIdEtapa8,
+        criadoEm: agoraIsoEtapa8
+      }
+    ];
+  }
+
+  // 19. Limites (Tetos) de Orçamento por Categoria (Etapa 8)
+  if (!Array.isArray(S.tetosCategorias) || S.tetosCategorias.length === 0) {
+    S.tetosCategorias = [
+      { categoria: 'lazer', limiteMensal: 600.0 },
+      { categoria: 'recorrente', limiteMensal: 3500.0 }
     ];
   }
 }
@@ -4656,6 +4708,7 @@ const ROTAS_FINANCEIRAS = ['resumo', 'receitas', 'gastos', 'dividas', 'metas'];
 
 function go(id) {
   if (!id) id = 'inicio';
+  if (id === 'norte') id = 'agente';
 
   // Blindagem do perfil 'crianca': bloqueia acesso a rotas contábeis e financeiras
   const membroAtivo = obterMembroAtivo();
@@ -4671,8 +4724,10 @@ function go(id) {
   // Oculta todas as seções
   document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
 
-  // Exibe a seção ativa
-  const targetSec = document.getElementById('sec-' + id);
+  // Exibe a seção ativa (suporta tanto sec-agente quanto sec-norte)
+  let targetSec = document.getElementById('sec-' + id);
+  if (!targetSec && id === 'agente') targetSec = document.getElementById('sec-norte');
+  if (!targetSec && id === 'norte') targetSec = document.getElementById('sec-agente');
   if (targetSec) {
     targetSec.style.display = 'block';
   }
@@ -8436,9 +8491,9 @@ function renderMuralInicio() {
   const membroAtivo = obterMembroAtivo();
   const isCrianca = membroAtivo && membroAtivo.papel === 'crianca';
 
-  // Filtra módulos: se for perfil criança, blinda e oculta orçamento e benefícios
+  // Filtra módulos: se for perfil criança, blinda e oculta orçamento, benefícios e metas familiares
   const modulosVisiveis = (S.modulosInicio || []).filter(modId => {
-    if (isCrianca && (modId === 'orcamento' || modId === 'beneficios')) return false;
+    if (isCrianca && (modId === 'orcamento' || modId === 'beneficios' || modId === 'metas_fam' || modId === 'metas')) return false;
     return true;
   });
 
@@ -8757,6 +8812,35 @@ function renderMuralInicio() {
             <span>📅 Rotina semanal</span>
             <span>•</span>
             <span style="color:var(--blue); font-weight:600;">Ver Grade →</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Card Especial do Módulo de Metas & Sonhos da Família (Etapa 8)
+    if (modDef.id === 'metas_fam' || modDef.id === 'metas') {
+      const metas = S.metasFamilia || [];
+      const primeira = metas[0];
+      const pctPrimeira = primeira && primeira.valorAlvo > 0
+        ? Math.min(100, Math.round((primeira.valorAtual / primeira.valorAlvo) * 100))
+        : 0;
+
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalMetasFamilia()">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            <span style="font-size:11px; font-weight:700; color:var(--primary);">${metas.length} ${metas.length === 1 ? 'meta' : 'metas'}</span>
+          </div>
+          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">
+            ${primeira ? `${primeira.icone || '🎯'} ${escapeHtml(primeira.titulo)}: ${pctPrimeira}%` : 'Defina os sonhos da família'}
+          </p>
+          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <span>💰 Poupança conjunta</span>
+            <span>•</span>
+            <span style="color:var(--blue); font-weight:600;">Ver Metas →</span>
           </div>
         </div>
       `;
@@ -9722,31 +9806,64 @@ CONTEXTO: Gestão financeira familiar. Renda extra anual: 13° salário (dez), P
 Use metodologia avalanche (maior juro primeiro). Dê planos com números e datas reais quando possível.`;
 }
 
-async function ask(q){ document.getElementById('ai-input').value=q; await sendMsg(); }
+async function ask(q) {
+  const el = document.getElementById('ai-input');
+  if (el) el.value = q;
+  await sendMsg();
+}
 
-async function sendMsg(){
-  const input=document.getElementById('ai-input');
-  const msg=input.value.trim(); if(!msg) return;
-  input.value='';
-  if(!apiKey){ alert('Configure a Gemini API Key em Configurações para usar o agente.'); go('config'); return; }
-  S.chat.push({role:'user',parts:[{text:msg}]});
+async function sendMsg() {
+  const input = document.getElementById('ai-input');
+  const msg = input ? input.value.trim() : '';
+  if (!msg) return;
+  if (input) input.value = '';
+
+  const membroAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  const mId = membroAtivo ? membroAtivo.id : (S.membroAtivoId || 'm_1');
+
+  S.chat.push({ role: 'user', parts: [{ text: msg }] });
   renderChat();
-  const loadId='ld'+Date.now();
-  document.getElementById('chat-msgs').innerHTML+=`<div id="${loadId}" class="ai-msg ai-loading">Analisando suas finanças...</div>`;
-  document.getElementById('chat-msgs').scrollTop=99999;
+  const loadId = 'ld' + Date.now();
+  const chatMsgsEl = document.getElementById('chat-msgs');
+  if (chatMsgsEl) {
+    chatMsgsEl.innerHTML += `<div id="${loadId}" class="ai-msg ai-loading">Agente Norte analisando informações...</div>`;
+    chatMsgsEl.scrollTop = 99999;
+  }
+
+  // Se não houver apiKey configurada, responde imediatamente com o motor local omnisciente (offline-ready)
+  if (!apiKey && (!S.apiKey || !S.apiKey.trim())) {
+    const respostaLocal = typeof responderPerguntaNorteLocal === 'function'
+      ? responderPerguntaNorteLocal(msg, mId)
+      : 'Agente Norte ativo em modo local offline.';
+    S.chat.push({ role: 'model', parts: [{ text: respostaLocal }] });
+    if (typeof save === 'function') save();
+    document.getElementById(loadId)?.remove();
+    renderChat();
+    return;
+  }
 
   try {
-    const messages=[{role:'user',parts:[{text:buildCtx()+'\n\nPrimeira pergunta: '+S.chat[0]?.parts[0]?.text}]},...S.chat.slice(1)];
+    const ctx = typeof construirContextoAgenteNorte === 'function'
+      ? construirContextoAgenteNorte(mId)
+      : { promptTexto: buildCtx() };
+    const messages = [
+      { role: 'user', parts: [{ text: (ctx.promptTexto || buildCtx()) + '\n\nPrimeira pergunta: ' + (S.chat[0]?.parts[0]?.text || msg) }] },
+      ...S.chat.slice(1)
+    ];
     const resultado = await chamarGeminiComFallback({
       contents: messages,
       generationConfig: { maxOutputTokens: 1000 }
     });
-    const reply = resultado.text || 'Erro ao obter resposta da inteligência artificial.';
-    S.chat.push({role:'model',parts:[{text:reply}]});
-    save();
-  } catch(e){
-    console.error('Erro em sendMsg com roteador Gemini:', e);
-    S.chat.push({role:'model',parts:[{text:'Erro: ' + (e.message || 'Erro de conexão ou indisponibilidade de cota nos modelos Gemini.')}]});
+    const reply = resultado.text || (typeof responderPerguntaNorteLocal === 'function' ? responderPerguntaNorteLocal(msg, mId) : 'Resposta recebida.');
+    S.chat.push({ role: 'model', parts: [{ text: reply }] });
+    if (typeof save === 'function') save();
+  } catch (e) {
+    console.warn('Fallback para resposta determinística local do Agente Norte:', e);
+    const replyFallback = typeof responderPerguntaNorteLocal === 'function'
+      ? responderPerguntaNorteLocal(msg, mId)
+      : ('Erro: ' + (e.message || 'Erro de conexão nos modelos Gemini.'));
+    S.chat.push({ role: 'model', parts: [{ text: replyFallback }] });
+    if (typeof save === 'function') save();
   }
 
   document.getElementById(loadId)?.remove();
@@ -14535,10 +14652,1102 @@ function abrirModuloExplorar(moduloId) {
     abrirModalGradeHoraria();
     return;
   }
+  // Super-App Familiar v2.0 (Etapa 8 - Metas, Tetos, Simulador e Assinaturas)
+  if (moduloId === 'metas_fam' || moduloId === 'metas') {
+    abrirModalMetasFamilia();
+    return;
+  }
+  if (moduloId === 'tetos_orcamento' || moduloId === 'tetos') {
+    abrirModalTetosCategorias();
+    return;
+  }
+  if (moduloId === 'simulador_dividas') {
+    abrirModalSimuladorDividas();
+    return;
+  }
+  if (moduloId === 'assinaturas_fixas') {
+    abrirModalAssinaturasFixas();
+    return;
+  }
   const modDef = MODULOS_INICIO_CATALOGO.find(m => m.id === moduloId);
   if (modDef && modDef.telaAlvo && typeof go === 'function') {
     go(modDef.telaAlvo);
   }
+}
+
+// ============================================================================
+// SUPER-APP FAMILIAR v2.0 - ETAPA 8: AGENTE NORTE 2.0 OMNISCIENTE & DIFERENCIAIS
+// ============================================================================
+
+/**
+ * Construtor de Contexto Unificado e Seguro do Agente Norte 2.0.
+ * Lê todos os módulos do Círculo Familiar (Agenda, Listas, Cardápio, Grade, Documentos, Finanças).
+ * REGRA DE SEGURANÇA RLS: Se o membro for 'crianca', NUNCA expõe dados financeiros, dívidas,
+ * saldos, VA/VR ou documentos da pasta 'privado'.
+ */
+function construirContextoAgenteNorte(membroId) {
+  try {
+    const mId = membroId || S.membroAtivoId || (S.membrosPerfil && S.membrosPerfil[0]?.id) || 'm_1';
+    const membro = (S.membrosPerfil || []).find(m => m.id === mId) || { id: mId, papel: 'membro', nome: 'Familiar' };
+    const isCrianca = membro.papel === 'crianca';
+
+    const hojeStr = new Date().toISOString().slice(0, 10);
+    const em7Dias = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+    // 1. Agenda e Eventos da Semana (próximos 7 dias)
+    const eventosConsolidados = typeof obterEventosConsolidadosPeriodo === 'function'
+      ? obterEventosConsolidadosPeriodo(hojeStr, em7Dias)
+      : [];
+    const eventosSemana = eventosConsolidados.filter(e => {
+      const dt = (e.dataInicio || e.data || '').slice(0, 10);
+      return dt >= hojeStr && dt <= em7Dias;
+    });
+
+    // Se for criança, o gasto previsto em R$ é estritamente ocultado (0)
+    const totalGastoPrevistoEventos = isCrianca ? 0 : Math.round(
+      eventosSemana.reduce((s, e) => s + (Number(e.gastoPrevisto) || 0), 0) * 100
+    ) / 100;
+
+    // 2. Listas de Compras e Tarefas
+    const listaCompras = (S.listas || []).find(l => l.tipo === 'compras');
+    const itensMercadoPendentes = listaCompras ? (listaCompras.itens || []).filter(i => !i.comprado).length : 0;
+
+    const tarefasPendentes = (S.listas || []).filter(l => l.tipo === 'tarefas').flatMap(l => l.itens || []).filter(i => {
+      if (i.concluida) return false;
+      if (isCrianca) return i.responsavelId === membro.id || !i.responsavelId;
+      return true;
+    });
+
+    // 3. Cardápio Semanal e Ingredientes Faltantes
+    const ingredientesFaltantesCardapio = typeof obterIngredientesFaltantesCardapio === 'function'
+      ? obterIngredientesFaltantesCardapio()
+      : [];
+
+    // 4. Grade Horária do Dia
+    const diasMap = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+    const diaHojeNome = diasMap[new Date().getDay()] || 'segunda';
+    const gradeHoje = (S.gradeHoraria || []).filter(g => {
+      if (g.diaSemana !== diaHojeNome) return false;
+      if (isCrianca && g.membroId !== membro.id) return false;
+      return true;
+    });
+
+    // 5. Documentos com Alerta de Vencimento (<= 30 dias)
+    let documentosAlertas = [];
+    if (isCrianca) {
+      const docsVis = typeof listarDocumentosVisiveisParaMembro === 'function'
+        ? listarDocumentosVisiveisParaMembro(membro.id)
+        : [];
+      const hoje = new Date(hojeStr + 'T00:00:00');
+      documentosAlertas = docsVis.filter(d => {
+        if (!d.dataValidade || d.pasta === 'privado') return false;
+        const dVal = new Date(d.dataValidade + 'T00:00:00');
+        if (isNaN(dVal.getTime())) return false;
+        const diff = Math.round((dVal.getTime() - hoje.getTime()) / 86400000);
+        return diff <= 30;
+      });
+    } else {
+      documentosAlertas = typeof obterAlertasDocumentosVencendo === 'function'
+        ? obterAlertasDocumentosVencendo(30)
+        : [];
+    }
+
+    // 6. Finanças, Contas a Vencer, Dívidas e Carteiras VA/VR (RLS estrito)
+    let contasVencer7Dias = [];
+    let totalContasVencer7Dias = 0;
+    let cotasBeneficios = [];
+    let fraseCotaBeneficios = '';
+    let statusTetos = [];
+    let alertaTetosTexto = '';
+    let totaisFinanceiros = null;
+    let metasFamilia = [];
+
+    if (!isCrianca) {
+      // Contas a vencer nos próximos 7 dias
+      const contas = (S.gastos || []).filter(g => {
+        if (g.pago || g.negociado || g.canceladaNegativacao || g.migradoDivida) return false;
+        const dt = (g.data || '').slice(0, 10);
+        return dt >= hojeStr && dt <= em7Dias;
+      });
+      contasVencer7Dias = contas.map(g => ({ id: g.id, desc: g.desc, val: Number(g.val) || 0, data: g.data }));
+      totalContasVencer7Dias = Math.round(contasVencer7Dias.reduce((s, c) => s + c.val, 0) * 100) / 100;
+
+      // Cotas diárias de VA / VR
+      (S.carteirasBeneficio || []).forEach(c => {
+        const met = typeof calcularMetricasCarteiraBeneficio === 'function'
+          ? calcularMetricasCarteiraBeneficio(c.id)
+          : null;
+        if (met) {
+          cotasBeneficios.push(met);
+          if (!fraseCotaBeneficios && met.cotaDiaria > 0) {
+            fraseCotaBeneficios = `🥗 Com o saldo atual de ${c.nome || c.tipo.toUpperCase()} (${fmt(met.saldoAtual)}), dá para gastar ${fmt(met.cotaDiaria)} por dia até a recarga do dia ${met.diaRecarga || 25}. `;
+          }
+        }
+      });
+
+      // Status dos Tetos de Categoria
+      statusTetos = typeof calcularStatusTetosCategorias === 'function'
+        ? calcularStatusTetosCategorias()
+        : [];
+      const tetosAlerta = statusTetos.filter(t => t.statusAlerta === 'atencao_80' || t.statusAlerta === 'estourado_100');
+      if (tetosAlerta.length > 0) {
+        alertaTetosTexto = `⚠️ Tetos de gastos em alerta: ${tetosAlerta.map(t => `${t.categoria} (${t.percentual}%)`).join(', ')}. `;
+      }
+
+      totaisFinanceiros = typeof calcTotais === 'function' ? calcTotais() : null;
+      metasFamilia = S.metasFamilia || [];
+    }
+
+    // Montagem do Prompt textual para o Agente Norte
+    let promptTexto = `Você é o Agente Norte 2.0, orientador familiar e financeiro de alta precisão.\n`;
+    promptTexto += `Usuário: ${membro.nome} (papel: ${membro.papel}). Data hoje: ${hojeStr} (${diaHojeNome}).\n\n`;
+
+    if (isCrianca) {
+      promptTexto += `[BLINDAGEM RLS CRIANÇA ATIVA]\n`;
+      promptTexto += `Você NÃO DEVE divulgar valores em dinheiro, contas, dívidas ou documentos confidenciais.\n`;
+      promptTexto += `Concentre-se em incentivar a rotina, estudos e tarefas da casa.\n`;
+      promptTexto += `- Tarefas pendentes: ${tarefasPendentes.length}.\n`;
+      promptTexto += `- Compromissos da semana: ${eventosSemana.length}.\n`;
+      promptTexto += `- Grade hoje: ${gradeHoje.map(g => `${g.horaInicio} ${g.titulo}`).join(', ') || 'Sem aulas hoje'}.\n`;
+    } else {
+      promptTexto += `[PANORAMA FAMILIAR E FINANCEIRO]\n`;
+      promptTexto += `- Contas a vencer em 7 dias: ${fmt(totalContasVencer7Dias)} (${contasVencer7Dias.length} contas).\n`;
+      promptTexto += `- Compromissos nos próximos 7 dias: ${eventosSemana.length} eventos (Gasto previsto: ${fmt(totalGastoPrevistoEventos)}).\n`;
+      promptTexto += `- Lista de mercado: ${itensMercadoPendentes} itens pendentes.\n`;
+      promptTexto += `- Ingredientes faltantes do cardápio: ${ingredientesFaltantesCardapio.length}.\n`;
+      promptTexto += `- Documentos em alerta: ${documentosAlertas.length}.\n`;
+      if (totaisFinanceiros) {
+        promptTexto += `- Caixa Real: ${fmt(totaisFinanceiros.saldoCaixaReal ?? totaisFinanceiros.saldoReal)} | Saldo Projetado: ${fmt(totaisFinanceiros.saldoProjetado)} | Dívidas: ${fmt(totaisFinanceiros.totalDiv)}.\n`;
+      }
+      if (cotasBeneficios.length > 0) {
+        promptTexto += `- Benefícios VA/VR: ${cotasBeneficios.map(b => `${b.nome}: saldo ${fmt(b.saldoAtual)}, cota ${fmt(b.cotaDiaria)}/dia até dia ${b.diaRecarga}`).join('; ')}.\n`;
+      }
+      if (metasFamilia.length > 0) {
+        promptTexto += `- Metas: ${metasFamilia.map(m => `${m.titulo}: ${fmt(m.valorAtual)}/${fmt(m.valorAlvo)}`).join('; ')}.\n`;
+      }
+    }
+
+    return {
+      membro,
+      isCrianca,
+      hojeStr,
+      diaHojeNome,
+      eventosSemana,
+      totalGastoPrevistoEventos,
+      itensMercadoPendentes,
+      tarefasPendentes,
+      ingredientesFaltantesCardapio,
+      gradeHoje,
+      documentosAlertas,
+      contasVencer7Dias,
+      totalContasVencer7Dias,
+      cotasBeneficios,
+      fraseCotaBeneficios,
+      statusTetos,
+      alertaTetosTexto,
+      totaisFinanceiros,
+      metasFamilia,
+      promptTexto
+    };
+  } catch (err) {
+    console.error('Erro em construirContextoAgenteNorte:', err);
+    return {
+      membro: { id: membroId, papel: 'membro', nome: 'Familiar' },
+      isCrianca: false,
+      eventosSemana: [],
+      totalGastoPrevistoEventos: 0,
+      itensMercadoPendentes: 0,
+      tarefasPendentes: [],
+      ingredientesFaltantesCardapio: [],
+      gradeHoje: [],
+      documentosAlertas: [],
+      contasVencer7Dias: [],
+      totalContasVencer7Dias: 0,
+      cotasBeneficios: [],
+      fraseCotaBeneficios: '',
+      statusTetos: [],
+      alertaTetosTexto: '',
+      totaisFinanceiros: null,
+      metasFamilia: [],
+      promptTexto: 'Erro ao gerar contexto.'
+    };
+  }
+}
+
+/**
+ * Gera o Resumo Semanal da Família estruturado e acolhedor.
+ */
+function gerarResumoSemanalNorte(membroId) {
+  const ctx = construirContextoAgenteNorte(membroId);
+  if (ctx.isCrianca) {
+    return `📅 Olá, ${ctx.membro.nome}! Esta semana você tem ${ctx.eventosSemana.length} compromissos agendados e ${ctx.tarefasPendentes.length} tarefas na rotina da casa. 🍽️ O cardápio semanal já está pronto com refeições planejadas e sua grade escolar está em dia! Bom aproveitamento da sua semana!`;
+  }
+
+  let texto = `📅 Esta semana vencem ${fmt(ctx.totalContasVencer7Dias)} em contas e há ${ctx.eventosSemana.length} eventos com gasto previsto de ${fmt(ctx.totalGastoPrevistoEventos)}. 🛒 Faltam ${ctx.itensMercadoPendentes} itens na lista de mercado e o cardápio precisa de ${ctx.ingredientesFaltantesCardapio.length} ingredientes que não estão nela. ${ctx.fraseCotaBeneficios || ''}${ctx.alertaTetosTexto || ''}`.trim();
+  return texto;
+}
+
+/**
+ * Motor determinístico local de respostas rápidas para o Agente Norte (offline-ready).
+ */
+function responderPerguntaNorteLocal(pergunta, membroId) {
+  try {
+    const ctx = construirContextoAgenteNorte(membroId);
+    const p = String(pergunta || '').toLowerCase().trim();
+
+    // 1. Resumo da Semana
+    if (p.includes('resumo') || p.includes('semana') || p.includes('panorama') || p.includes('geral')) {
+      return gerarResumoSemanalNorte(membroId);
+    }
+
+    // 2. Benefícios / VA / VR
+    if (p.includes('va') || p.includes('vr') || p.includes('beneficio') || p.includes('alimentacao') || p.includes('refeicao') || p.includes('quanto posso gastar')) {
+      if (ctx.isCrianca) {
+        return '🔒 Informações financeiras sobre vales e benefícios são reservadas aos responsáveis da família.';
+      }
+      if (ctx.cotasBeneficios.length === 0) {
+        return '🥗 Nenhuma carteira de benefício VA/VR cadastrada. Configure na aba Gastos > Carteiras VA/VR.';
+      }
+      let resp = '🥗 Cotas Diárias de Benefícios (VA / VR):\n';
+      ctx.cotasBeneficios.forEach(b => {
+        resp += `• ${b.nome} (${b.tipo.toUpperCase()}): Saldo de ${fmt(b.saldoAtual)} — Cota recomendada: ${fmt(b.cotaDiaria)}/dia até a recarga do dia ${b.diaRecarga} (${b.diasAteRecarga} dias restantes).\n`;
+      });
+      return resp.trim();
+    }
+
+    // 3. Cardápio / Ingredientes
+    if (p.includes('cardapio') || p.includes('ingrediente') || p.includes('comprar') || p.includes('receita') || p.includes('mercado')) {
+      if (ctx.ingredientesFaltantesCardapio.length === 0) {
+        return '🛒 Boa notícia! Todos os ingredientes necessários para as receitas do cardápio semanal já estão na lista de compras ou em estoque!';
+      }
+      const nomes = ctx.ingredientesFaltantesCardapio.slice(0, 5).map(i => `${i.nome} (${i.quantidade} ${i.unidade})`).join(', ');
+      return `🛒 Faltam ${ctx.ingredientesFaltantesCardapio.length} ingredientes do cardápio semanal que ainda não estão na lista de compras: ${nomes}${ctx.ingredientesFaltantesCardapio.length > 5 ? ' e mais...' : ''}. Abra o módulo de Refeições para adicioná-los automaticamente com 1 clique!`;
+    }
+
+    // 4. Simulador de Dívidas: Bola de Neve vs Avalanche
+    if (p.includes('bola de neve') || p.includes('avalanche') || p.includes('divida') || p.includes('quitar') || p.includes('simular')) {
+      if (ctx.isCrianca) {
+        return '🔒 Informações financeiras sobre dívidas são restritas aos adultos da família.';
+      }
+      const sim = simularQuitacaoDividas(0);
+      if (sim.bolaDeNeve.mesesParaQuitar === 0) {
+        return '🎉 Parabéns! A família não possui dívidas ativas para simulação no momento.';
+      }
+      let resp = '⛄ Simulação de Quitação de Dívidas:\n';
+      resp += `• Bola de Neve: Quitação em ${sim.bolaDeNeve.mesesParaQuitar} meses (Total: ${fmt(sim.bolaDeNeve.totalPago)}). Foco na motivação quitando as menores primeiro!\n`;
+      resp += `• Avalanche: Quitação em ${sim.avalanche.mesesParaQuitar} meses (Total: ${fmt(sim.avalanche.totalPago)}). Economia de ${fmt(sim.avalanche.economiaJuros || (sim.bolaDeNeve.totalPago - sim.avalanche.totalPago))} em juros!\n`;
+      resp += `💡 ${sim.recomendacao}`;
+      return resp;
+    }
+
+    // 5. Metas da Família
+    if (p.includes('meta') || p.includes('sonho') || p.includes('poupanca') || p.includes('objetivo')) {
+      if (ctx.metasFamilia.length === 0) {
+        return '🎯 A família ainda não cadastrou Metas & Sonhos no círculo. Defina um objetivo para acompanhar o progresso!';
+      }
+      if (ctx.isCrianca) {
+        return `🎯 Nossas Metas da Família: ${ctx.metasFamilia.map(m => `${m.icone || '🎯'} ${m.titulo}`).join(', ')}. Vamos juntos conquistar cada uma delas!`;
+      }
+      let resp = '🎯 Progresso das Metas & Sonhos da Família:\n';
+      ctx.metasFamilia.forEach(m => {
+        const pct = m.valorAlvo > 0 ? Math.min(100, Math.round((m.valorAtual / m.valorAlvo) * 100)) : 0;
+        resp += `• ${m.icone || '🎯'} ${m.titulo}: ${fmt(m.valorAtual)} de ${fmt(m.valorAlvo)} (${pct}% concluído)\n`;
+      });
+      return resp.trim();
+    }
+
+    // 6. Contas Fixas & Assinaturas
+    if (p.includes('assinatura') || p.includes('fixa') || p.includes('recorrente') || p.includes('recorrencia')) {
+      if (ctx.isCrianca) {
+        return '🔒 Informações financeiras reservadas aos responsáveis.';
+      }
+      const fixas = typeof detectarAssinaturasEContasFixas === 'function' ? detectarAssinaturasEContasFixas() : { itens: [], totalMensalRecorrente: 0, totalAnualProjetado: 0 };
+      return `🔄 A família possui ${fixas.itens.length} despesas fixas e assinaturas ativas, totalizando ${fmt(fixas.totalMensalRecorrente)}/mês (${fmt(fixas.totalAnualProjetado)}/ano). Abra o detector na aba Gastos para conferir oportunidades de corte!`;
+    }
+
+    // Fallback geral
+    if (ctx.isCrianca) {
+      return `Olá, ${ctx.membro.nome}! Posso ajudar você a conferir suas tarefas da casa, os horários das suas aulas e as refeições do cardápio semanal! O que gostaria de ver?`;
+    }
+
+    return `Olá, ${ctx.membro.nome}! Posso ajudar você com o Resumo Semanal, cotas de VA/VR, ingredientes do cardápio, simulador Bola de Neve vs Avalanche ou o progresso das metas familiares!`;
+  } catch (err) {
+    console.error('Erro em responderPerguntaNorteLocal:', err);
+    return 'Desculpe, ocorreu um erro ao processar sua solicitação localmente.';
+  }
+}
+
+// --- SEÇÃO 7.1: METAS E SONHOS DA FAMÍLIA ---
+
+function salvarMetaFamilia(dados) {
+  if (!dados || !dados.titulo || !String(dados.titulo).trim()) {
+    return { ok: false, erro: 'Título da meta é obrigatório' };
+  }
+  const valorAlvo = Number(dados.valorAlvo) || 0;
+  if (valorAlvo <= 0) {
+    return { ok: false, erro: 'Valor alvo deve ser maior que zero' };
+  }
+
+  if (!Array.isArray(S.metasFamilia)) S.metasFamilia = [];
+
+  const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  const agoraIso = new Date().toISOString();
+  let metaSalva = null;
+
+  if (dados.id) {
+    const idx = S.metasFamilia.findIndex(m => m.id === dados.id);
+    if (idx >= 0) {
+      S.metasFamilia[idx] = {
+        ...S.metasFamilia[idx],
+        titulo: String(dados.titulo).trim(),
+        icone: dados.icone || S.metasFamilia[idx].icone || '🎯',
+        valorAlvo: Math.round(valorAlvo * 100) / 100,
+        prazo: dados.prazo || S.metasFamilia[idx].prazo || '',
+        atualizadoEm: agoraIso
+      };
+      metaSalva = S.metasFamilia[idx];
+    }
+  }
+
+  if (!metaSalva) {
+    metaSalva = {
+      id: 'meta_fam_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      circuloId: S.circuloAtivoId || 'circ_1',
+      titulo: String(dados.titulo).trim(),
+      icone: dados.icone || '🎯',
+      valorAlvo: Math.round(valorAlvo * 100) / 100,
+      valorAtual: Math.round((Number(dados.valorAtual) || 0) * 100) / 100,
+      prazo: dados.prazo || '',
+      aportes: [],
+      criadoPor: mAtivo ? mAtivo.id : 'm_1',
+      criadoEm: agoraIso
+    };
+    S.metasFamilia.push(metaSalva);
+  }
+
+  if (typeof registrarNotificacaoFamilia === 'function') {
+    registrarNotificacaoFamilia({
+      tipo: 'financas',
+      titulo: 'Meta Familiar Atualizada',
+      texto: `Meta "${metaSalva.titulo}" (${fmt(metaSalva.valorAlvo)}) ativa no círculo.`,
+      valor: metaSalva.valorAlvo
+    });
+  }
+
+  if (typeof enfileirarSync === 'function') {
+    enfileirarSync('metas_familia', 'upsert', metaSalva);
+  }
+
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+  return { ok: true, meta: metaSalva };
+}
+
+function aportarNaMetaFamilia(metaId, valor, origem = 'Salário', membroNome = '') {
+  if (!metaId) return { ok: false, erro: 'ID da meta obrigatório' };
+  const v = Number(valor) || 0;
+  if (v <= 0) return { ok: false, erro: 'Valor do aporte deve ser maior que zero' };
+
+  if (!Array.isArray(S.metasFamilia)) S.metasFamilia = [];
+  const meta = S.metasFamilia.find(m => m.id === metaId);
+  if (!meta) return { ok: false, erro: 'Meta familiar não encontrada' };
+
+  const vAporte = Math.round(v * 100) / 100;
+  meta.valorAtual = Math.round(((Number(meta.valorAtual) || 0) + vAporte) * 100) / 100;
+  if (!Array.isArray(meta.aportes)) meta.aportes = [];
+
+  const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  const nomeAportante = membroNome || (mAtivo ? mAtivo.nome : 'Alex');
+
+  const novoAporte = {
+    id: 'ap_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    valor: vAporte,
+    origem: origem || 'Salário',
+    membroNome: nomeAportante,
+    data: new Date().toISOString().slice(0, 10)
+  };
+  meta.aportes.push(novoAporte);
+
+  if (typeof registrarNotificacaoFamilia === 'function') {
+    registrarNotificacaoFamilia({
+      tipo: 'financas',
+      titulo: 'Novo Aporte em Meta Familiar',
+      texto: `${nomeAportante} aportou ${fmt(vAporte)} na meta "${meta.titulo}". Saldo atual: ${fmt(meta.valorAtual)}.`,
+      valor: vAporte
+    });
+  }
+
+  if (typeof enfileirarSync === 'function') {
+    enfileirarSync('metas_familia', 'upsert', meta);
+  }
+
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+  return { ok: true, meta, novoSaldo: meta.valorAtual, aporte: novoAporte };
+}
+
+function excluirMetaFamilia(metaId) {
+  if (!metaId) return { ok: false, erro: 'ID obrigatório' };
+  if (!Array.isArray(S.metasFamilia)) return { ok: false, erro: 'Sem metas' };
+
+  const meta = S.metasFamilia.find(m => m.id === metaId);
+  if (!meta) return { ok: false, erro: 'Meta não encontrada' };
+
+  S.metasFamilia = S.metasFamilia.filter(m => m.id !== metaId);
+
+  if (typeof enfileirarSync === 'function') {
+    enfileirarSync('metas_familia', 'delete', { id: metaId });
+  }
+
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+  return { ok: true, id: metaId };
+}
+
+// --- SEÇÃO 7.2: LIMITES (TETOS) DE ORÇAMENTO POR CATEGORIA ---
+
+function definirTetoCategoria(categoria, limiteMensal) {
+  if (!categoria || typeof categoria !== 'string') return { ok: false, erro: 'Categoria inválida' };
+  const catLimpa = categoria.trim();
+  if (!Array.isArray(S.tetosCategorias)) S.tetosCategorias = [];
+
+  const limite = Number(limiteMensal) || 0;
+  if (limite <= 0) {
+    S.tetosCategorias = S.tetosCategorias.filter(t => t.categoria !== catLimpa);
+    if (typeof save === 'function') save();
+    if (typeof render === 'function') render();
+    return { ok: true, removido: true, categoria: catLimpa };
+  }
+
+  const limiteFormatado = Math.round(limite * 100) / 100;
+  const existente = S.tetosCategorias.find(t => t.categoria === catLimpa);
+  if (existente) {
+    existente.limiteMensal = limiteFormatado;
+  } else {
+    S.tetosCategorias.push({ categoria: catLimpa, limiteMensal: limiteFormatado });
+  }
+
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+  return { ok: true, teto: { categoria: catLimpa, limiteMensal: limiteFormatado } };
+}
+
+function calcularStatusTetosCategorias(mesYM) {
+  if (!Array.isArray(S.tetosCategorias)) S.tetosCategorias = [];
+  const ym = mesYM ? String(mesYM).slice(0, 7) : (mesAtual || new Date().toISOString().slice(0, 7));
+
+  return S.tetosCategorias.map(teto => {
+    let centavosGastos = 0;
+    (S.gastos || []).forEach(g => {
+      if (g.cat === teto.categoria && (g.data || '').slice(0, 7) === ym && !g.negociado && !g.canceladaNegativacao && !g.migradoDivida) {
+        centavosGastos += Math.round((Number(g.val) || 0) * 100);
+      }
+    });
+
+    (S.comprasCartao || []).forEach(cp => {
+      if (cp.cat === teto.categoria && cp.mesFatura === ym && !cp.cancelada && !cp.canceladaNegativacao) {
+        centavosGastos += Math.round((Number(cp.val) || 0) * 100);
+      }
+    });
+
+    const gastoAtual = Math.round(centavosGastos) / 100;
+    const limite = Number(teto.limiteMensal) || 0;
+    const percentual = limite > 0 ? Math.round((gastoAtual / limite) * 100) : 0;
+
+    let statusAlerta = 'normal';
+    if (percentual >= 100) {
+      statusAlerta = 'estourado_100';
+    } else if (percentual >= 80) {
+      statusAlerta = 'atencao_80';
+    }
+
+    const valorRestante = Math.max(0, Math.round((limite - gastoAtual) * 100) / 100);
+
+    return {
+      categoria: teto.categoria,
+      limiteMensal: limite,
+      gastoAtual,
+      percentual,
+      statusAlerta,
+      valorRestante
+    };
+  });
+}
+
+// --- SEÇÃO 7.3: SIMULADOR DE QUITAÇÃO DE DÍVIDAS (BOLA DE NEVE VS AVALANCHE) ---
+
+function simularQuitacaoDividas(aporteMensalExtra = 0) {
+  const abertas = (S.dividas || []).filter(d => !d.quitada && (Number(d.saldo) || 0) > 0);
+  if (abertas.length === 0) {
+    return {
+      bolaDeNeve: { mesesParaQuitar: 0, totalPago: 0, totalJuros: 0, economiaJuros: 0, ordemQuitacao: [] },
+      avalanche: { mesesParaQuitar: 0, totalPago: 0, totalJuros: 0, economiaJuros: 0, ordemQuitacao: [] },
+      recomendacao: 'Parabéns! Nenhuma dívida ativa para simular no momento.'
+    };
+  }
+
+  const extra = Math.max(0, Number(aporteMensalExtra) || 0);
+
+  function simularEstrategia(ordenacao) {
+    let divs = abertas.map(d => ({
+      credor: d.credor || 'Dívida',
+      saldo: Number(d.saldo) || 0,
+      juros: Number(d.juros) || 0,
+      parcela: Number(d.parcela) || 0
+    }));
+
+    if (ordenacao === 'bola_de_neve') {
+      divs.sort((a, b) => a.saldo - b.saldo);
+    } else {
+      divs.sort((a, b) => b.juros - a.juros);
+    }
+
+    // Calcula parcela mínima padrão para cada dívida
+    divs.forEach(d => {
+      if (d.parcela <= 0) {
+        const jurosMin = d.saldo * (d.juros / 100);
+        d.parcela = Math.max(50, Math.round((jurosMin + d.saldo * 0.03) * 100) / 100);
+      }
+    });
+
+    let mes = 0;
+    let totalJuros = 0;
+    let totalPago = 0;
+    const ordemQuitacao = [];
+    let bolaNeveAcumulada = 0;
+
+    while (divs.some(d => d.saldo > 0.01) && mes < 360) {
+      mes++;
+      // 1. Aplica juros do mês
+      divs.forEach(d => {
+        if (d.saldo > 0) {
+          const j = Math.round(d.saldo * (d.juros / 100) * 100) / 100;
+          totalJuros += j;
+          d.saldo = Math.round((d.saldo + j) * 100) / 100;
+        }
+      });
+
+      // 2. Amortização regular de parcelas
+      divs.forEach(d => {
+        if (d.saldo > 0) {
+          const pag = Math.min(d.saldo, d.parcela);
+          d.saldo = Math.round((d.saldo - pag) * 100) / 100;
+          totalPago += pag;
+          if (d.saldo <= 0) {
+            bolaNeveAcumulada += d.parcela;
+            if (!ordemQuitacao.some(o => o.credor === d.credor)) {
+              ordemQuitacao.push({ credor: d.credor, mes });
+            }
+          }
+        }
+      });
+
+      // 3. Aplica aporte extra + bola de neve acumulada na primeira dívida não quitada
+      let extraDisponivel = extra + bolaNeveAcumulada;
+      for (const d of divs) {
+        if (d.saldo > 0 && extraDisponivel > 0) {
+          const amortizar = Math.min(d.saldo, extraDisponivel);
+          d.saldo = Math.round((d.saldo - amortizar) * 100) / 100;
+          totalPago += amortizar;
+          extraDisponivel -= amortizar;
+          if (d.saldo <= 0) {
+            bolaNeveAcumulada += d.parcela;
+            if (!ordemQuitacao.some(o => o.credor === d.credor)) {
+              ordemQuitacao.push({ credor: d.credor, mes });
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      mesesParaQuitar: mes,
+      totalPago: Math.round(totalPago * 100) / 100,
+      totalJuros: Math.round(totalJuros * 100) / 100,
+      ordemQuitacao
+    };
+  }
+
+  const bolaDeNeve = simularEstrategia('bola_de_neve');
+  const avalanche = simularEstrategia('avalanche');
+
+  const economiaJuros = Math.max(0, Math.round((bolaDeNeve.totalJuros - avalanche.totalJuros) * 100) / 100);
+  bolaDeNeve.economiaJuros = 0;
+  avalanche.economiaJuros = economiaJuros;
+
+  let recomendacao = '';
+  if (economiaJuros > 0) {
+    const mesesDif = bolaDeNeve.mesesParaQuitar - avalanche.mesesParaQuitar;
+    const tempoTxt = mesesDif > 0 ? ` e quita ${mesesDif} mês(es) antes` : '';
+    const primeiraQuitada = bolaDeNeve.ordemQuitacao[0]?.credor || 'a primeira dívida';
+    recomendacao = `A estratégia Avalanche é matematicamente recomendada: você economiza ${fmt(economiaJuros)} em juros${tempoTxt}. A Bola de Neve é indicada se a família busca motivação imediata, quitando '${primeiraQuitada}' já no início.`;
+  } else {
+    recomendacao = 'Ambas as estratégias (Avalanche e Bola de Neve) apresentam resultado equivalente no montante de juros para o perfil atual das dívidas.';
+  }
+
+  return {
+    bolaDeNeve,
+    avalanche,
+    recomendacao
+  };
+}
+
+// --- SEÇÃO 7.4: DETECTOR DE CONTAS FIXAS E ASSINATURAS RECORRENTES ---
+
+function detectarAssinaturasEContasFixas() {
+  const itens = [];
+  const vistos = new Set();
+
+  (S.gastos || []).forEach(g => {
+    if ((g.recorrente === true || g.cat === 'recorrente') && !g.canceladaNegativacao && !g.migradoDivida) {
+      const chave = g.grupoId ? `g_grupo_${g.grupoId}` : `g_desc_${g.desc}_${g.val}`;
+      if (!vistos.has(chave)) {
+        vistos.add(chave);
+        itens.push({
+          id: g.id,
+          nome: g.descOriginal || g.desc || 'Despesa Recorrente',
+          valor: Number(g.val) || 0,
+          tipo: 'conta_fixa',
+          origem: 'Salário / Conta Corrente',
+          titular: g.titular || '',
+          categoria: g.cat || 'recorrente'
+        });
+      }
+    }
+  });
+
+  (S.comprasCartao || []).forEach(c => {
+    if ((c.recorrente === true || (c.id && String(c.id).startsWith('crec_'))) && !c.cancelada && !c.canceladaNegativacao) {
+      const chave = c.recorrenteId ? `cartao_rec_${c.recorrenteId}` : `cartao_${c.desc}_${c.val}`;
+      if (!vistos.has(chave)) {
+        vistos.add(chave);
+        const cartao = (S.cartoes || []).find(x => x.id === c.cartaoId);
+        itens.push({
+          id: c.id,
+          nome: c.desc || 'Assinatura no Cartão',
+          valor: Number(c.val) || 0,
+          tipo: 'assinatura_cartao',
+          origem: cartao ? cartao.nome : 'Cartão de Crédito',
+          titular: c.titular || (cartao ? cartao.titular : ''),
+          categoria: c.cat || 'servicos'
+        });
+      }
+    }
+  });
+
+  const totalMensalRecorrente = Math.round(itens.reduce((s, x) => s + (Number(x.valor) || 0), 0) * 100) / 100;
+  const totalAnualProjetado = Math.round(totalMensalRecorrente * 12 * 100) / 100;
+
+  return {
+    itens,
+    totalMensalRecorrente,
+    totalAnualProjetado,
+    quantidade: itens.length
+  };
+}
+
+// --- RENDERIZADORES E HANDLERS DE MODAL DA ETAPA 8 ---
+
+function renderMetasFamiliaModal() {
+  if (typeof document === 'undefined') return;
+  const listaEl = document.getElementById('lista-metas-familia-modal');
+  if (!listaEl) return;
+
+  const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (mAtivo && mAtivo.papel === 'crianca') {
+    listaEl.innerHTML = `
+      <div style="text-align:center; padding:24px 16px; color:var(--muted);">
+        <p style="font-size:32px; margin-bottom:8px;">🔒</p>
+        <p style="font-weight:700; color:var(--text); margin-bottom:4px;">Área Restrita aos Responsáveis</p>
+        <p style="font-size:12px;">Os valores das metas financeiras são gerenciados pelos adultos da família.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const metas = S.metasFamilia || [];
+  if (metas.length === 0) {
+    listaEl.innerHTML = `
+      <div style="text-align:center; padding:32px 16px; color:var(--muted);">
+        <p style="font-size:32px; margin-bottom:8px;">🎯</p>
+        <p style="font-weight:700; color:var(--text); margin-bottom:4px;">Nenhuma meta cadastrada</p>
+        <p style="font-size:12px; margin-bottom:14px;">Crie metas conjuntas como Reserva de Emergência ou Viagem de Férias.</p>
+        <button type="button" class="btn btn-primary" onclick="abrirModalNovaMetaFamilia()" style="max-width:200px; margin:0 auto;">+ Nova Meta</button>
+      </div>
+    `;
+    return;
+  }
+
+  listaEl.innerHTML = metas.map(m => {
+    const pct = m.valorAlvo > 0 ? Math.min(100, Math.round((m.valorAtual / m.valorAlvo) * 100)) : 0;
+    const falta = Math.max(0, Math.round((m.valorAlvo - m.valorAtual) * 100) / 100);
+    const aportes = m.aportes || [];
+    const ultimosAportes = aportes.slice(-3).reverse();
+
+    return `
+      <div class="card" style="margin-bottom:12px; border:1px solid var(--border); padding:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:24px;">${m.icone || '🎯'}</span>
+            <div>
+              <p style="font-weight:700; font-size:15px; margin:0;">${escapeHtml(m.titulo)}</p>
+              ${m.prazo ? `<span style="font-size:11px; color:var(--muted);">📅 Prazo: ${m.prazo.split('-').reverse().join('/')}</span>` : ''}
+            </div>
+          </div>
+          <button type="button" class="item-del" style="font-size:18px;" onclick="confirmarExcluirMetaFamiliaModal('${m.id}')">×</button>
+        </div>
+
+        <div class="prog-wrap" style="margin-bottom:8px;">
+          <div class="prog-row" style="font-size:12px; margin-bottom:4px;">
+            <span style="font-weight:700; color:var(--green);">${fmt(m.valorAtual)}</span>
+            <span style="color:var(--muted);">de ${fmt(m.valorAlvo)} (${pct}%)</span>
+          </div>
+          <div class="prog-bar" style="height:8px;">
+            <div class="prog-fill" style="width:${pct}%; background:var(--green);"></div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--muted); margin-bottom:10px;">
+          <span>${falta > 0 ? `Faltam ${fmt(falta)}` : '🎉 Meta atingida!'}</span>
+          <span>${aportes.length} aporte(s)</span>
+        </div>
+
+        ${ultimosAportes.length > 0 ? `
+          <div style="background:var(--bg3); border-radius:6px; padding:8px; margin-bottom:10px; font-size:11px;">
+            <p style="font-weight:700; margin:0 0 4px; color:var(--muted);">Últimos Aportes:</p>
+            ${ultimosAportes.map(a => `
+              <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                <span>${escapeHtml(a.membroNome || 'Família')} (${a.data ? a.data.split('-').reverse().slice(0, 2).join('/') : ''}):</span>
+                <span style="font-weight:600; color:var(--green);">+${fmt(a.valor)}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+
+        <button type="button" class="btn btn-g" style="padding:8px; font-size:12px; font-weight:700;" onclick="abrirModalAportarMeta('${m.id}')">
+          + Registrar Aporte
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+function abrirModalMetasFamilia() {
+  const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (mAtivo && mAtivo.papel === 'crianca') {
+    if (typeof alert === 'function') alert('Área de metas financeiras restrita aos responsáveis da família.');
+    return;
+  }
+  renderMetasFamiliaModal();
+  if (typeof openM === 'function') openM('m-metas-familia');
+}
+
+function fecharModalMetasFamilia() {
+  if (typeof closeM === 'function') closeM('m-metas-familia');
+}
+
+function abrirModalNovaMetaFamilia() {
+  if (typeof document === 'undefined') return;
+  const tEl = document.getElementById('form-meta-titulo');
+  const vEl = document.getElementById('form-meta-alvo');
+  const pEl = document.getElementById('form-meta-prazo');
+  const iEl = document.getElementById('form-meta-icone');
+  if (tEl) tEl.value = '';
+  if (vEl) vEl.value = '';
+  if (pEl) pEl.value = '';
+  if (iEl) iEl.value = '🎯';
+  if (typeof openM === 'function') openM('m-form-meta-familia');
+}
+
+function salvarMetaFamiliaModal() {
+  if (typeof document === 'undefined') return;
+  const titulo = document.getElementById('form-meta-titulo')?.value || '';
+  const valorAlvo = parseFloat(document.getElementById('form-meta-alvo')?.value || '0');
+  const prazo = document.getElementById('form-meta-prazo')?.value || '';
+  const icone = document.getElementById('form-meta-icone')?.value || '🎯';
+
+  const res = salvarMetaFamilia({ titulo, valorAlvo, prazo, icone });
+  if (res.ok) {
+    if (typeof closeM === 'function') closeM('m-form-meta-familia');
+    renderMetasFamiliaModal();
+  } else if (typeof alert === 'function') {
+    alert(res.erro || 'Erro ao salvar meta');
+  }
+}
+
+function abrirModalAportarMeta(metaId) {
+  if (typeof document === 'undefined') return;
+  const idEl = document.getElementById('form-aporte-meta-id');
+  const vEl = document.getElementById('form-aporte-valor');
+  const oEl = document.getElementById('form-aporte-origem');
+  if (idEl) idEl.value = metaId;
+  if (vEl) vEl.value = '';
+  if (oEl) oEl.value = 'Salário';
+
+  const meta = (S.metasFamilia || []).find(m => m.id === metaId);
+  const titEl = document.getElementById('form-aporte-meta-nome');
+  if (titEl && meta) titEl.textContent = `Meta: ${meta.titulo}`;
+
+  if (typeof openM === 'function') openM('m-form-aporte-meta');
+}
+
+function confirmarAporteMetaModal() {
+  if (typeof document === 'undefined') return;
+  const metaId = document.getElementById('form-aporte-meta-id')?.value || '';
+  const valor = parseFloat(document.getElementById('form-aporte-valor')?.value || '0');
+  const origem = document.getElementById('form-aporte-origem')?.value || 'Salário';
+
+  const res = aportarNaMetaFamilia(metaId, valor, origem);
+  if (res.ok) {
+    if (typeof closeM === 'function') closeM('m-form-aporte-meta');
+    renderMetasFamiliaModal();
+  } else if (typeof alert === 'function') {
+    alert(res.erro || 'Erro ao registrar aporte');
+  }
+}
+
+function confirmarExcluirMetaFamiliaModal(metaId) {
+  if (typeof confirm === 'function') {
+    if (!confirm('Deseja excluir esta meta familiar?')) return;
+  }
+  excluirMetaFamilia(metaId);
+  renderMetasFamiliaModal();
+}
+
+function renderTetosCategoriasModal() {
+  if (typeof document === 'undefined') return;
+  const listaEl = document.getElementById('lista-tetos-categorias-modal');
+  if (!listaEl) return;
+
+  const status = calcularStatusTetosCategorias();
+
+  // Atualiza select de categorias disponíveis
+  const selCat = document.getElementById('form-teto-categoria');
+  if (selCat) {
+    const cats = S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS;
+    selCat.innerHTML = cats.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+  }
+
+  if (status.length === 0) {
+    listaEl.innerHTML = `
+      <div style="text-align:center; padding:24px 16px; color:var(--muted);">
+        <p style="font-size:28px; margin-bottom:8px;">🎯</p>
+        <p style="font-weight:700; color:var(--text); margin-bottom:4px;">Nenhum teto configurado</p>
+        <p style="font-size:12px;">Defina um limite mensal para receber alertas preventivos de 80% e 100%.</p>
+      </div>
+    `;
+    return;
+  }
+
+  listaEl.innerHTML = status.map(t => {
+    let corBadge = 'var(--green)';
+    let textoBadge = 'Normal';
+    let corBarra = 'var(--green)';
+
+    if (t.statusAlerta === 'estourado_100') {
+      corBadge = 'var(--red)';
+      textoBadge = '🚨 Estourado!';
+      corBarra = 'var(--red)';
+    } else if (t.statusAlerta === 'atencao_80') {
+      corBadge = 'var(--yellow)';
+      textoBadge = '⚠️ Atenção 80%';
+      corBarra = 'var(--yellow)';
+    }
+
+    const catObj = (S.categoriasGastos || []).find(c => c.id === t.categoria) || { nome: t.categoria };
+
+    return `
+      <div class="card" style="margin-bottom:10px; padding:12px; border:1px solid var(--border);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div>
+            <span style="font-weight:700; font-size:14px;">${escapeHtml(catObj.nome)}</span>
+            <span style="margin-left:6px; font-size:10px; font-weight:700; color:${corBadge}; background:rgba(0,0,0,0.15); padding:2px 6px; border-radius:10px;">${textoBadge}</span>
+          </div>
+          <button type="button" class="item-del" style="font-size:18px;" onclick="removerTetoCategoriaModal('${t.categoria}')">×</button>
+        </div>
+
+        <div class="prog-wrap" style="margin-bottom:6px;">
+          <div class="prog-row" style="font-size:12px; margin-bottom:4px;">
+            <span>${fmt(t.gastoAtual)}</span>
+            <span style="color:var(--muted);">de ${fmt(t.limiteMensal)} (${t.percentual}%)</span>
+          </div>
+          <div class="prog-bar" style="height:6px;">
+            <div class="prog-fill" style="width:${Math.min(100, t.percentual)}%; background:${corBarra};"></div>
+          </div>
+        </div>
+
+        <p style="font-size:11px; color:var(--muted); margin:0;">
+          ${t.valorRestante > 0 ? `Restam ${fmt(t.valorRestante)} disponíveis este mês` : `Excedido em ${fmt(Math.abs(t.gastoAtual - t.limiteMensal))}`}
+        </p>
+      </div>
+    `;
+  }).join('');
+}
+
+function abrirModalTetosCategorias() {
+  const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (mAtivo && mAtivo.papel === 'crianca') {
+    if (typeof alert === 'function') alert('Configuração de tetos restrita aos adultos.');
+    return;
+  }
+  renderTetosCategoriasModal();
+  if (typeof openM === 'function') openM('m-tetos-categorias');
+}
+
+function fecharModalTetosCategorias() {
+  if (typeof closeM === 'function') closeM('m-tetos-categorias');
+}
+
+function salvarTetoCategoriaModal() {
+  if (typeof document === 'undefined') return;
+  const categoria = document.getElementById('form-teto-categoria')?.value || '';
+  const limite = parseFloat(document.getElementById('form-teto-limite')?.value || '0');
+
+  const res = definirTetoCategoria(categoria, limite);
+  if (res.ok) {
+    const limEl = document.getElementById('form-teto-limite');
+    if (limEl) limEl.value = '';
+    renderTetosCategoriasModal();
+  } else if (typeof alert === 'function') {
+    alert(res.erro || 'Erro ao definir teto');
+  }
+}
+
+function removerTetoCategoriaModal(cat) {
+  definirTetoCategoria(cat, 0);
+  renderTetosCategoriasModal();
+}
+
+function renderSimuladorDividasModal(resultado) {
+  if (typeof document === 'undefined') return;
+  const resEl = document.getElementById('resultado-simulador-dividas');
+  if (!resEl) return;
+
+  const sim = resultado || simularQuitacaoDividas(0);
+  const b = sim.bolaDeNeve;
+  const a = sim.avalanche;
+
+  resEl.innerHTML = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+      <div class="card" style="padding:12px; border:1px solid rgba(59,130,246,0.3); background:rgba(59,130,246,0.06);">
+        <p style="font-weight:700; font-size:13px; color:var(--blue); margin:0 0 6px;">⛄ Bola de Neve</p>
+        <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Prazo Total</p>
+        <p style="font-size:16px; font-weight:800; margin:0 0 6px;">${b.mesesParaQuitar} meses</p>
+        <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Total Pago</p>
+        <p style="font-size:13px; font-weight:700; color:var(--text); margin:0 0 6px;">${fmt(b.totalPago)}</p>
+        <span style="font-size:10px; background:rgba(59,130,246,0.15); color:var(--blue); padding:2px 6px; border-radius:8px;">Foco Motivacional</span>
+      </div>
+
+      <div class="card" style="padding:12px; border:1px solid rgba(16,185,129,0.3); background:rgba(16,185,129,0.06);">
+        <p style="font-weight:700; font-size:13px; color:var(--green); margin:0 0 6px;">🏔️ Avalanche</p>
+        <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Prazo Total</p>
+        <p style="font-size:16px; font-weight:800; margin:0 0 6px;">${a.mesesParaQuitar} meses</p>
+        <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Total Pago</p>
+        <p style="font-size:13px; font-weight:700; color:var(--text); margin:0 0 6px;">${fmt(a.totalPago)}</p>
+        <span style="font-size:10px; background:rgba(16,185,129,0.15); color:var(--green); padding:2px 6px; border-radius:8px;">Economia Máxima</span>
+      </div>
+    </div>
+
+    ${a.economiaJuros > 0 ? `
+      <div style="background:rgba(16,185,129,0.15); border:1px solid var(--green); border-radius:var(--radius-sm); padding:10px; margin-bottom:12px; text-align:center;">
+        <p style="font-size:12px; font-weight:700; color:var(--green); margin:0;">
+          💰 A Avalanche economiza ${fmt(a.economiaJuros)} em juros!
+        </p>
+      </div>
+    ` : ''}
+
+    <div class="card" style="padding:12px; background:var(--bg3); border-radius:var(--radius-sm); margin-bottom:12px;">
+      <p style="font-weight:700; font-size:12px; color:var(--muted); margin:0 0 6px;">💡 RECOMENDAÇÃO DO AGENTE NORTE:</p>
+      <p style="font-size:13px; line-height:1.4; margin:0;">${escapeHtml(sim.recomendacao)}</p>
+    </div>
+  `;
+}
+
+function abrirModalSimuladorDividas() {
+  const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (mAtivo && mAtivo.papel === 'crianca') {
+    if (typeof alert === 'function') alert('Simulador de dívidas restrito aos adultos.');
+    return;
+  }
+  renderSimuladorDividasModal();
+  if (typeof openM === 'function') openM('m-simulador-dividas');
+}
+
+function fecharModalSimuladorDividas() {
+  if (typeof closeM === 'function') closeM('m-simulador-dividas');
+}
+
+function calcularSimulacaoDividasModal() {
+  if (typeof document === 'undefined') return;
+  const extra = parseFloat(document.getElementById('simulador-aporte-extra')?.value || '0');
+  const res = simularQuitacaoDividas(extra);
+  renderSimuladorDividasModal(res);
+}
+
+function renderAssinaturasFixasModal() {
+  if (typeof document === 'undefined') return;
+  const listaEl = document.getElementById('lista-assinaturas-fixas-modal');
+  const resumoEl = document.getElementById('resumo-assinaturas-fixas-modal');
+  if (!listaEl) return;
+
+  const dados = detectarAssinaturasEContasFixas();
+
+  if (resumoEl) {
+    resumoEl.innerHTML = `
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+        <div class="card" style="padding:12px; text-align:center;">
+          <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Custo Fixo Mensal</p>
+          <p style="font-size:18px; font-weight:800; color:var(--red); margin:0;">${fmt(dados.totalMensalRecorrente)}</p>
+        </div>
+        <div class="card" style="padding:12px; text-align:center;">
+          <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Projeção Anual</p>
+          <p style="font-size:18px; font-weight:800; color:var(--yellow); margin:0;">${fmt(dados.totalAnualProjetado)}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (dados.itens.length === 0) {
+    listaEl.innerHTML = `
+      <div style="text-align:center; padding:24px 16px; color:var(--muted);">
+        <p style="font-size:28px; margin-bottom:8px;">🔍</p>
+        <p style="font-weight:700; color:var(--text); margin-bottom:4px;">Nenhuma assinatura detectada</p>
+        <p style="font-size:12px;">Gastos fixos ou compras de cartão recorrentes aparecerão aqui.</p>
+      </div>
+    `;
+    return;
+  }
+
+  listaEl.innerHTML = dados.itens.map(item => `
+    <div class="item-row" style="margin-bottom:8px; padding:10px; border-radius:8px; background:var(--bg3);">
+      <div style="flex:1;">
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          <span style="font-weight:700; font-size:13px;">${escapeHtml(item.nome)}</span>
+          <span class="badge ${item.tipo === 'assinatura_cartao' ? 'b-parc' : 'b-rec'}">${item.tipo === 'assinatura_cartao' ? 'Cartão' : 'Conta'}</span>
+          ${item.titular ? `<span class="badge b-titular">${escapeHtml(item.titular)}</span>` : ''}
+        </div>
+        <span style="font-size:11px; color:var(--muted);">${escapeHtml(item.origem)}</span>
+      </div>
+      <div style="text-align:right;">
+        <span style="font-weight:700; color:var(--red); font-size:14px;">${fmt(item.valor)}/mês</span>
+        <p style="font-size:10px; color:var(--muted); margin:2px 0 0;">${fmt(item.valor * 12)}/ano</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+function abrirModalAssinaturasFixas() {
+  const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (mAtivo && mAtivo.papel === 'crianca') {
+    if (typeof alert === 'function') alert('Acesso restrito aos adultos.');
+    return;
+  }
+  renderAssinaturasFixasModal();
+  if (typeof openM === 'function') openM('m-assinaturas-fixas');
+}
+
+function fecharModalAssinaturasFixas() {
+  if (typeof closeM === 'function') closeM('m-assinaturas-fixas');
 }
 
 // SERVICE WORKER
@@ -14801,6 +16010,37 @@ if (typeof window !== 'undefined') {
   window.editarItemGradeModal = editarItemGradeModal;
   window.salvarItemGradeModal = salvarItemGradeModal;
   window.confirmarExcluirItemGradeModal = confirmarExcluirItemGradeModal;
+  // Super-App Familiar v2.0 (Etapa 8 - Agente Norte 2.0, Metas, Tetos, Simulador & Assinaturas)
+  window.construirContextoAgenteNorte = construirContextoAgenteNorte;
+  window.gerarResumoSemanalNorte = gerarResumoSemanalNorte;
+  window.responderPerguntaNorteLocal = responderPerguntaNorteLocal;
+  window.salvarMetaFamilia = salvarMetaFamilia;
+  window.aportarNaMetaFamilia = aportarNaMetaFamilia;
+  window.excluirMetaFamilia = excluirMetaFamilia;
+  window.definirTetoCategoria = definirTetoCategoria;
+  window.calcularStatusTetosCategorias = calcularStatusTetosCategorias;
+  window.simularQuitacaoDividas = simularQuitacaoDividas;
+  window.detectarAssinaturasEContasFixas = detectarAssinaturasEContasFixas;
+  window.renderMetasFamiliaModal = renderMetasFamiliaModal;
+  window.abrirModalMetasFamilia = abrirModalMetasFamilia;
+  window.fecharModalMetasFamilia = fecharModalMetasFamilia;
+  window.abrirModalNovaMetaFamilia = abrirModalNovaMetaFamilia;
+  window.salvarMetaFamiliaModal = salvarMetaFamiliaModal;
+  window.abrirModalAportarMeta = abrirModalAportarMeta;
+  window.confirmarAporteMetaModal = confirmarAporteMetaModal;
+  window.confirmarExcluirMetaFamiliaModal = confirmarExcluirMetaFamiliaModal;
+  window.renderTetosCategoriasModal = renderTetosCategoriasModal;
+  window.abrirModalTetosCategorias = abrirModalTetosCategorias;
+  window.fecharModalTetosCategorias = fecharModalTetosCategorias;
+  window.salvarTetoCategoriaModal = salvarTetoCategoriaModal;
+  window.removerTetoCategoriaModal = removerTetoCategoriaModal;
+  window.renderSimuladorDividasModal = renderSimuladorDividasModal;
+  window.abrirModalSimuladorDividas = abrirModalSimuladorDividas;
+  window.fecharModalSimuladorDividas = fecharModalSimuladorDividas;
+  window.calcularSimulacaoDividasModal = calcularSimulacaoDividasModal;
+  window.renderAssinaturasFixasModal = renderAssinaturasFixasModal;
+  window.abrirModalAssinaturasFixas = abrirModalAssinaturasFixas;
+  window.fecharModalAssinaturasFixas = fecharModalAssinaturasFixas;
 }
 
 // EXPORTAÇÃO PARA TESTES / NODE.JS
@@ -15130,6 +16370,37 @@ if (typeof module !== 'undefined' && module.exports) {
     editarItemGradeModal,
     salvarItemGradeModal,
     confirmarExcluirItemGradeModal,
+    // Super-App Familiar v2.0 (Etapa 8 - Agente Norte 2.0, Metas, Tetos, Simulador & Assinaturas)
+    construirContextoAgenteNorte,
+    gerarResumoSemanalNorte,
+    responderPerguntaNorteLocal,
+    salvarMetaFamilia,
+    aportarNaMetaFamilia,
+    excluirMetaFamilia,
+    definirTetoCategoria,
+    calcularStatusTetosCategorias,
+    simularQuitacaoDividas,
+    detectarAssinaturasEContasFixas,
+    renderMetasFamiliaModal,
+    abrirModalMetasFamilia,
+    fecharModalMetasFamilia,
+    abrirModalNovaMetaFamilia,
+    salvarMetaFamiliaModal,
+    abrirModalAportarMeta,
+    confirmarAporteMetaModal,
+    confirmarExcluirMetaFamiliaModal,
+    renderTetosCategoriasModal,
+    abrirModalTetosCategorias,
+    fecharModalTetosCategorias,
+    salvarTetoCategoriaModal,
+    removerTetoCategoriaModal,
+    renderSimuladorDividasModal,
+    abrirModalSimuladorDividas,
+    fecharModalSimuladorDividas,
+    calcularSimulacaoDividasModal,
+    renderAssinaturasFixasModal,
+    abrirModalAssinaturasFixas,
+    fecharModalAssinaturasFixas,
     getState: () => S,
     S
   };
