@@ -321,6 +321,48 @@
   .badge-cupom { background: rgba(59, 130, 246, 0.18); color: var(--blue); border: 1px solid rgba(59, 130, 246, 0.35); }
   .alerta-baixa-confianca { background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: var(--yellow); border-radius: var(--radius-sm); padding: 10px 12px; }
   .alerta-duplicado { background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; border-radius: var(--radius-sm); padding: 10px 12px; }
+
+  /* MENSAGENS DA FAMÍLIA & CONTATOS (Etapa 6) */
+  .chat-msg-row {
+    display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;
+  }
+  .chat-msg-row.minha {
+    flex-direction: row-reverse;
+  }
+  .chat-bubble {
+    max-width: 82%; border-radius: 14px; padding: 10px 14px; position: relative;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-size: 13px; line-height: 1.4;
+    word-break: break-word;
+  }
+  .chat-bubble-minha {
+    background: var(--primary); color: #ffffff; border-bottom-right-radius: 2px;
+  }
+  .chat-bubble-outra {
+    background: var(--bg2); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 2px;
+  }
+  .chat-recado-fixado-card {
+    background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 10px;
+    display: flex; gap: 10px; align-items: flex-start; justify-content: space-between;
+  }
+  .chat-reacao-badge {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 12px;
+    padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;
+    cursor: pointer; user-select: none; transition: transform 0.1s;
+  }
+  .chat-reacao-badge:hover { transform: scale(1.08); }
+  .chat-reacao-badge.minha { border-color: var(--primary); background: rgba(85, 129, 227, 0.15); }
+  .contato-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 12px; margin-bottom: 10px; transition: border-color 0.15s;
+  }
+  .contato-card.emergencia {
+    border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.05);
+  }
+  .badge-emergencia {
+    background: rgba(239, 68, 68, 0.16); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.35);
+    font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; letter-spacing: 0.5px;
+  }
 </style>
 </head>
 <body>
@@ -1108,6 +1150,14 @@
       <button type="button" class="card" id="btn-ler-cupom-fab" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirScannerCupom();">
         <div style="font-size:26px;margin-bottom:4px;">📷</div>
         <div style="font-size:13px;font-weight:700;">Ler Cupom / Nota</div>
+      </button>
+      <button type="button" class="card" id="btn-recado-mural-fab" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalChatFamilia();">
+        <div style="font-size:26px;margin-bottom:4px;">💬</div>
+        <div style="font-size:13px;font-weight:700;">Recado no Mural</div>
+      </button>
+      <button type="button" class="card" id="btn-contatos-familia-fab" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalContatosFamilia();">
+        <div style="font-size:26px;margin-bottom:4px;">📞</div>
+        <div style="font-size:13px;font-weight:700;">Contatos Úteis</div>
       </button>
       <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;grid-column:1 / -1;" onclick="closeM('m-fab-menu');go('explorar');">
         <div style="font-size:22px;margin-bottom:2px;">🧭</div>
@@ -2190,6 +2240,167 @@
     <p class="modal-title">🧾 Detalhes do Cupom Fiscal</p>
     <div id="detalhe-cupom-conteudo"></div>
     <button type="button" class="btn" id="btn-fechar-detalhe-cupom" style="margin-top:14px;" onclick="fecharDetalheCupomModal()">Fechar</button>
+  </div>
+</div>
+
+<!-- MODAL CHAT & MURAL DA FAMÍLIA (Etapa 6) -->
+<div class="modal-bg" id="m-chat-familia">
+  <div class="modal" style="max-width:540px; height:85vh; display:flex; flex-direction:column; padding:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:22px;">💬</span>
+        <div>
+          <h3 class="modal-title" style="margin:0; font-size:17px;">Mural & Chat da Família</h3>
+          <p style="margin:0; font-size:11px; color:var(--muted);">Recados instantâneos para todos no círculo</p>
+        </div>
+      </div>
+      <span class="modal-close" style="position:static; margin:0;" onclick="fecharModalChatFamilia()">×</span>
+    </div>
+
+    <!-- ÁREA DE RECADOS FIXADOS NO TOPO DO CHAT -->
+    <div id="chat-familia-fixados-container" style="display:none; max-height:130px; overflow-y:auto; margin-bottom:10px;"></div>
+
+    <!-- LISTA ROLANTE DE MENSAGENS -->
+    <div id="chat-familia-mensagens-container" style="flex:1; overflow-y:auto; padding-right:4px; margin-bottom:12px; display:flex; flex-direction:column;"></div>
+
+    <!-- PREVIEW DE FOTO ANEXADA -->
+    <div id="chat-familia-foto-preview-box" style="display:none; margin-bottom:8px; padding:6px 10px; background:var(--bg3); border-radius:8px; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <img id="chat-familia-foto-preview-img" src="" style="width:36px; height:36px; object-fit:cover; border-radius:4px;"/>
+        <span style="font-size:12px; color:var(--muted);">Foto anexada</span>
+      </div>
+      <button type="button" class="btn" style="padding:4px 8px; font-size:11px;" onclick="removerFotoAnexoChat()">✕ Remover</button>
+    </div>
+
+    <!-- BARRA INFERIOR DE ENVIO DE MENSAGEM -->
+    <div style="background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:8px 10px;">
+      <div style="display:flex; gap:8px; align-items:center;">
+        <textarea id="chat-familia-input-texto" rows="1" placeholder="Escreva um recado para a família..." style="flex:1; resize:none; padding:8px 10px; font-size:13px; border-radius:8px; border:1px solid var(--border); max-height:80px;" onkeydown="if(event.key === 'Enter' && !event.shiftKey){ event.preventDefault(); enviarMensagemChatModal(); }"></textarea>
+        
+        <label for="chat-familia-input-foto" class="btn" style="cursor:pointer; padding:8px 10px; font-size:14px; margin:0;" title="Anexar Foto">
+          📷
+          <input type="file" id="chat-familia-input-foto" accept="image/*" style="display:none;" onchange="aoSelecionarFotoChat(event)"/>
+        </label>
+
+        <button type="button" class="btn btn-g" id="chat-familia-btn-enviar" style="padding:8px 14px; font-weight:700; font-size:13px;" onclick="enviarMensagemChatModal()">
+          Enviar
+        </button>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--muted);">
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="checkbox" id="chat-familia-check-fixar" style="width:14px; height:14px; accent-color:var(--yellow);"/>
+          <span>📌 Fixar como recado no topo do Mural</span>
+        </label>
+        <span>Pressione Enter para enviar</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CONTATOS COMPARTILHADOS DA FAMÍLIA (Etapa 6) -->
+<div class="modal-bg" id="m-contatos-familia">
+  <div class="modal" style="max-width:540px; max-height:88vh; display:flex; flex-direction:column; padding:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:22px;">📞</span>
+        <div>
+          <h3 class="modal-title" style="margin:0; font-size:17px;">Contatos Compartilhados</h3>
+          <p style="margin:0; font-size:11px; color:var(--muted);">Agenda familiar e telefones úteis para todos</p>
+        </div>
+      </div>
+      <span class="modal-close" style="position:static; margin:0;" onclick="fecharModalContatosFamilia()">×</span>
+    </div>
+
+    <!-- BARRA DE BUSCA E AÇÃO NOVO CONTATO -->
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <input type="text" id="contatos-busca-input" placeholder="🔍 Buscar por nome, cargo ou fone..." style="flex:1; padding:8px 10px; font-size:13px; border-radius:8px; border:1px solid var(--border);" oninput="renderContatosFamiliaModal()"/>
+      <button type="button" class="btn btn-primary" style="padding:8px 12px; font-size:12px; font-weight:700; white-space:nowrap;" onclick="abrirModalNovoContato()">
+        + Novo Contato
+      </button>
+    </div>
+
+    <!-- PÍLULAS DE FILTRO POR CATEGORIA -->
+    <div id="contatos-filtros-pills" style="display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px;"></div>
+
+    <!-- LISTA ROLANTE DE CONTATOS -->
+    <div id="contatos-lista-container" style="flex:1; overflow-y:auto; padding-right:4px;"></div>
+  </div>
+</div>
+
+<!-- MODAL FORMULÁRIO DE CONTATO (ADICIONAR / EDITAR) (Etapa 6) -->
+<div class="modal-bg" id="m-form-contato">
+  <div class="modal" style="max-width:460px; max-height:85vh; overflow-y:auto; padding:16px;">
+    <span class="modal-close" onclick="closeM('m-form-contato')">×</span>
+    <h3 class="modal-title" id="form-contato-titulo" style="margin-bottom:12px;">✨ Novo Contato Compartilhado</h3>
+    
+    <input type="hidden" id="form-contato-id"/>
+
+    <div class="input-row">
+      <label>Nome Completo / Instituição *</label>
+      <input type="text" id="form-contato-nome" placeholder="Ex: Dra. Camila Pediatra ou SAMU"/>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Categoria</label>
+        <select id="form-contato-categoria" onchange="aoMudarCategoriaContatoForm()">
+          <option value="emergencia">🚨 Emergência</option>
+          <option value="saude">🏥 Saúde & Médicos</option>
+          <option value="escola">🎒 Escola & Filhos</option>
+          <option value="casa">🏠 Serviços da Casa</option>
+          <option value="familia">👨‍👩‍👧‍👦 Família & Pessoal</option>
+          <option value="outros" selected>📦 Outros</option>
+        </select>
+      </div>
+      <div>
+        <label>Especialidade / Relação</label>
+        <input type="text" id="form-contato-especialidade" placeholder="Ex: Pediatra, Eletricista"/>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Telefone Principal *</label>
+        <input type="tel" id="form-contato-telefone" placeholder="Ex: 192 ou (11) 98765-4321"/>
+      </div>
+      <div>
+        <label>WhatsApp (DDI+DDD+Núm)</label>
+        <input type="tel" id="form-contato-whatsapp" placeholder="Ex: 5511987654321"/>
+      </div>
+    </div>
+
+    <div class="input-row">
+      <label>E-mail</label>
+      <input type="email" id="form-contato-email" placeholder="contato@exemplo.com"/>
+    </div>
+
+    <div class="input-row">
+      <label>Endereço Físico</label>
+      <input type="text" id="form-contato-endereco" placeholder="Rua, número, bairro ou clínica"/>
+    </div>
+
+    <div class="input-row">
+      <label>Observações / Instruções Rápidas</label>
+      <textarea id="form-contato-observacoes" rows="2" placeholder="Ex: Atende 24h, informar convênio X, número da carteirinha..."></textarea>
+    </div>
+
+    <div class="input-row" style="background:var(--bg3); padding:8px 10px; border-radius:8px; margin-bottom:14px;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+        <input type="checkbox" id="form-contato-emergencia" style="width:16px; height:16px; accent-color:var(--red);"/>
+        <span style="font-weight:700; color:var(--red);">🚨 Destacar como Contato de Emergência</span>
+      </label>
+      <p style="font-size:11px; color:var(--muted); margin:4px 0 0 24px;">Contatos de emergência ficam fixados no topo para acesso rápido de qualquer membro (inclusive crianças).</p>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <button type="button" class="btn btn-g" style="padding:12px; font-weight:700;" onclick="salvarContatoModal()">
+        💾 Salvar Contato
+      </button>
+      <button type="button" class="btn" onclick="closeM('m-form-contato')">
+        Cancelar
+      </button>
+    </div>
   </div>
 </div>
 

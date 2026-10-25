@@ -96,6 +96,9 @@ let S = {
   // Super-App Familiar v2.0 (Etapa 5 - Scanner OCR de Cupons e Notas)
   cuponsFiscais: [],
   rascunhoCupomAtual: null,
+  // Super-App Familiar v2.0 (Etapa 6 - Mensagens da Família & Contatos)
+  mensagensFamilia: [],
+  contatosFamilia: [],
   chat:[],
   apiKey:'',
   onboardingDone:false
@@ -768,6 +771,100 @@ function migrarParaUpgradeFamiliarV2() {
   }
   if (!('rascunhoCupomAtual' in S)) {
     S.rascunhoCupomAtual = null;
+  }
+
+  // 12. Mensagens da Família / Mural Compartilhado (Etapa 6)
+  const agoraIsoEtapa6 = new Date().toISOString();
+  const cIdEtapa6 = S.circuloAtivoId || 'circ_1';
+  const mIdEtapa6 = S.membroAtivoId || 'm_1';
+
+  if (!Array.isArray(S.mensagensFamilia) || S.mensagensFamilia.length === 0) {
+    S.mensagensFamilia = [
+      {
+        id: 'msg_inicio_1',
+        circuloId: cIdEtapa6,
+        membroId: mIdEtapa6,
+        membroNome: 'Alex',
+        membroCor: '#5581E3',
+        membroIniciais: 'AL',
+        texto: 'Bem-vindos ao Mural da nossa família! 🏡 Deixem aqui recados, lembretes e avisos importantes.',
+        anexoFotoUrl: null,
+        fixada: true,
+        lidoPorIds: [mIdEtapa6, 'm_2'],
+        reacoes: { '❤️': ['m_2'] },
+        criadoEm: agoraIsoEtapa6
+      }
+    ];
+  }
+
+  // 13. Contatos Compartilhados da Família (Etapa 6)
+  if (!Array.isArray(S.contatosFamilia) || S.contatosFamilia.length === 0) {
+    S.contatosFamilia = [
+      {
+        id: 'cont_emergencia_1',
+        circuloId: cIdEtapa6,
+        nome: 'SAMU (Emergência)',
+        categoria: 'emergencia',
+        especialidade: 'Ambulância / Resgate',
+        telefone: '192',
+        whatsapp: '',
+        email: '',
+        endereco: 'Central de Atendimento 192',
+        observacoes: 'Emergência médica 24h em todo o Brasil',
+        emergencia: true,
+        criadoPor: mIdEtapa6,
+        criadoEm: agoraIsoEtapa6,
+        atualizadoEm: agoraIsoEtapa6
+      },
+      {
+        id: 'cont_emergencia_2',
+        circuloId: cIdEtapa6,
+        nome: 'Bombeiros',
+        categoria: 'emergencia',
+        especialidade: 'Resgate / Incêndio',
+        telefone: '193',
+        whatsapp: '',
+        email: '',
+        endereco: 'Central 193',
+        observacoes: 'Acidentes, vazamentos de gás e resgate',
+        emergencia: true,
+        criadoPor: mIdEtapa6,
+        criadoEm: agoraIsoEtapa6,
+        atualizadoEm: agoraIsoEtapa6
+      },
+      {
+        id: 'cont_escola_1',
+        circuloId: cIdEtapa6,
+        nome: 'Escola das Crianças',
+        categoria: 'escola',
+        especialidade: 'Secretaria e Coordenação',
+        telefone: '(11) 4002-8922',
+        whatsapp: '551140028922',
+        email: 'secretaria@escolamunicipal.com.br',
+        endereco: 'Rua das Flores, 120',
+        observacoes: 'Horário de atendimento: 07:30 às 17:30',
+        emergencia: false,
+        criadoPor: 'm_2',
+        criadoEm: agoraIsoEtapa6,
+        atualizadoEm: agoraIsoEtapa6
+      },
+      {
+        id: 'cont_saude_1',
+        circuloId: cIdEtapa6,
+        nome: 'Dra. Camila Pediatra',
+        categoria: 'saude',
+        especialidade: 'Pediatra de Família',
+        telefone: '(11) 98765-4321',
+        whatsapp: '5511987654321',
+        email: 'dracamila@pediatria.med.br',
+        endereco: 'Av. Paulista, 1500 - Sala 42',
+        observacoes: 'Atende convênio e urgência via WhatsApp',
+        emergencia: true,
+        criadoPor: 'm_2',
+        criadoEm: agoraIsoEtapa6,
+        atualizadoEm: agoraIsoEtapa6
+      }
+    ];
   }
 }
 
@@ -8244,6 +8341,70 @@ function renderMuralInicio() {
       `;
     }
 
+    // Card Especial do Módulo de Mural / Mensagens da Família (Etapa 6)
+    if (modDef.id === 'mensagens') {
+      const fixadas = typeof obterMensagensFixadasFamilia === 'function' ? obterMensagensFixadasFamilia() : [];
+      const msgs = S.mensagensFamilia || [];
+      const recadoDestaque = fixadas.length > 0 ? fixadas[0] : msgs[msgs.length - 1];
+      const naoLidas = typeof obterContagemMensagensNaoLidas === 'function' ? obterContagemMensagensNaoLidas() : 0;
+      const textoSnippet = recadoDestaque && recadoDestaque.texto
+        ? recadoDestaque.texto.replace(/<[^>]*>/g, '').trim()
+        : '';
+
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalChatFamilia()">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            ${naoLidas > 0 ? `
+              <span style="background:var(--red); color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">${naoLidas} nova${naoLidas > 1 ? 's' : ''}</span>
+            ` : `
+              <span style="font-size:11px; font-weight:700; color:var(--primary);">${msgs.length} msgs</span>
+            `}
+          </div>
+          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">
+            ${recadoDestaque ? (recadoDestaque.fixada ? `📌 ${escapeHtml(textoSnippet.slice(0, 38))}${textoSnippet.length > 38 ? '...' : ''}` : `💬 ${escapeHtml(textoSnippet.slice(0, 38))}${textoSnippet.length > 38 ? '...' : ''}`) : 'Mural livre para recados familiares!'}
+          </p>
+          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <span>📌 ${fixadas.length} fixado${fixadas.length === 1 ? '' : 's'}</span>
+            <span>•</span>
+            <span style="color:var(--blue); font-weight:600;">Abrir Chat →</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Card Especial do Módulo de Contatos Compartilhados (Etapa 6)
+    if (modDef.id === 'contatos') {
+      const contatos = S.contatosFamilia || [];
+      const emergencias = contatos.filter(c => !!c.emergencia);
+      const primeiroEmerg = emergencias[0];
+
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalContatosFamilia()">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            <span style="font-size:11px; font-weight:700; color:${emergencias.length > 0 ? 'var(--red)' : 'var(--primary)'};">
+              ${emergencias.length > 0 ? `🚨 ${emergencias.length} emergência` : `${contatos.length} contatos`}
+            </span>
+          </div>
+          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">
+            ${primeiroEmerg ? `🚨 ${escapeHtml(primeiroEmerg.nome)}: ${escapeHtml(primeiroEmerg.telefone || primeiroEmerg.whatsapp)}` : `${contatos.length} contatos salvos no círculo`}
+          </p>
+          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <span>📞 Discagem rápida</span>
+            <span>•</span>
+            <span style="color:var(--blue); font-weight:600;">Ver Todos →</span>
+          </div>
+        </div>
+      `;
+    }
+
     // Cards Padrão do Grid Familiar
     return `
       <div class="modulo-card card" style="cursor:pointer;" onclick="go('${modDef.telaAlvo || 'explorar'}')">
@@ -11383,7 +11544,1003 @@ function fecharDetalheCupomModal() {
   }
 }
 
+// ============================================================================
+// SUPER-APP FAMILIAR v2.0 - ETAPA 6: MENSAGENS DA FAMÍLIA (CHAT & MURAL FIXADO)
+// E CONTATOS COMPARTILHADOS DA FAMÍLIA (Seções 4.4 e 4.16)
+// ============================================================================
+
+/**
+ * Aliases de conformidade com contratos de governança do Time Stella.
+ * Garante compatibilidade semântica com ADRs e documentações de sincronização e atividade.
+ */
+function enfileirarSync(tabela, operacao, dados) {
+  try {
+    return adicionarNaFilaSync(tabela, operacao, dados);
+  } catch (err) {
+    console.error('Erro em enfileirarSync:', err);
+    return null;
+  }
+}
+
+function registrarAtividadeFamilia(dados) {
+  try {
+    return registrarNotificacaoFamilia(dados);
+  } catch (err) {
+    console.error('Erro em registrarAtividadeFamilia:', err);
+    return null;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// MÓDULO 4.4: MENSAGENS DA FAMÍLIA & CHAT COM RECADOS FIXADOS NO MURAL
+// ----------------------------------------------------------------------------
+
+let fotoAnexoRascunhoChat = null;
+
+/**
+ * Retorna todas as mensagens do círculo especificado (ou do círculo ativo).
+ */
+function obterMensagensFamilia(circuloId) {
+  try {
+    const cId = circuloId || S.circuloAtivoId || 'circ_1';
+    return (S.mensagensFamilia || []).filter(m => m.circuloId === cId);
+  } catch (err) {
+    console.error('Erro ao obter mensagens da família:', err);
+    return [];
+  }
+}
+
+/**
+ * Retorna as mensagens fixadas no mural do círculo ativo,
+ * ordenadas da mais recente para a mais antiga.
+ */
+function obterMensagensFixadasFamilia(circuloId) {
+  try {
+    return obterMensagensFamilia(circuloId)
+      .filter(m => !!m.fixada)
+      .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
+  } catch (err) {
+    console.error('Erro ao obter mensagens fixadas:', err);
+    return [];
+  }
+}
+
+/**
+ * Calcula a quantidade de mensagens não lidas pelo membro especificado.
+ */
+function obterContagemMensagensNaoLidas(membroId) {
+  try {
+    const mId = membroId || S.membroAtivoId || 'm_1';
+    const cId = S.circuloAtivoId || 'circ_1';
+    return (S.mensagensFamilia || []).filter(m => {
+      if (m.circuloId !== cId) return false;
+      const lidos = Array.isArray(m.lidoPorIds) ? m.lidoPorIds : [];
+      return !lidos.includes(mId);
+    }).length;
+  } catch (err) {
+    console.error('Erro ao calcular mensagens não lidas:', err);
+    return 0;
+  }
+}
+
+/**
+ * Marca todas as mensagens do círculo ativo como lidas pelo membro especificado.
+ */
+function marcarMensagensComoLidas(membroId) {
+  try {
+    const mId = membroId || S.membroAtivoId || 'm_1';
+    const cId = S.circuloAtivoId || 'circ_1';
+    let alterado = false;
+
+    (S.mensagensFamilia || []).forEach(m => {
+      if (m.circuloId === cId) {
+        if (!Array.isArray(m.lidoPorIds)) {
+          m.lidoPorIds = [];
+        }
+        if (!m.lidoPorIds.includes(mId)) {
+          m.lidoPorIds.push(mId);
+          alterado = true;
+        }
+      }
+    });
+
+    if (alterado) {
+      save();
+      if (typeof renderMuralInicio === 'function') {
+        renderMuralInicio();
+      }
+      atualizarBadgesHeader();
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro ao marcar mensagens como lidas:', err);
+    return false;
+  }
+}
+
+/**
+ * Envia uma nova mensagem no chat familiar.
+ * Acesso universal: todos os papéis da família (incluindo perfil 'crianca') podem enviar.
+ * Sanitiza o conteúdo contra XSS, registra autor, gera ID único e enfileira na fila offline.
+ */
+function enviarMensagemFamilia(params = {}) {
+  try {
+    const textoOriginal = params.texto != null ? String(params.texto).trim() : '';
+    const anexoFotoUrl = params.anexoFotoUrl || null;
+    const fixarNoTopo = !!params.fixarNoTopo;
+
+    if (!textoOriginal && !anexoFotoUrl) {
+      if (typeof alert === 'function') {
+        alert('Por favor, escreva um recado ou selecione uma foto.');
+      }
+      return { ok: false, motivo: 'mensagem_vazia' };
+    }
+
+    const autor = obterMembroAtivo() || {
+      id: 'm_1',
+      nome: 'Alex',
+      cor: '#5581E3',
+      iniciais: 'AL',
+      papel: 'admin'
+    };
+    const cId = S.circuloAtivoId || 'circ_1';
+
+    const novaMensagem = {
+      id: 'msg_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7),
+      circuloId: cId,
+      membroId: autor.id,
+      membroNome: autor.nome,
+      membroCor: autor.cor || '#5581E3',
+      membroIniciais: autor.iniciais || autor.nome.slice(0, 2).toUpperCase(),
+      texto: escapeHtml(textoOriginal),
+      anexoFotoUrl: anexoFotoUrl,
+      fixada: fixarNoTopo,
+      lidoPorIds: [autor.id],
+      reacoes: {},
+      criadoEm: new Date().toISOString()
+    };
+
+    if (!Array.isArray(S.mensagensFamilia)) {
+      S.mensagensFamilia = [];
+    }
+    S.mensagensFamilia.push(novaMensagem);
+
+    // Registra no feed familiar e central de notificações
+    registrarNotificacaoFamilia({
+      tipo: 'mensagens',
+      titulo: fixarNoTopo ? '📌 Novo Recado no Mural' : '💬 Mensagem no Chat Familiar',
+      texto: `${autor.nome}: ${textoOriginal.slice(0, 60)}`,
+      icone: fixarNoTopo ? '📌' : '💬'
+    });
+
+    // Enfileira na mutação offline (Outbox Pattern)
+    adicionarNaFilaSync('mensagens', 'insert', novaMensagem);
+
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderChatFamiliaModal();
+      renderMuralInicio();
+      atualizarBadgesHeader();
+    }
+
+    return { ok: true, mensagem: novaMensagem };
+  } catch (err) {
+    console.error('Erro ao enviar mensagem da família:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Alterna a fixação de uma mensagem no topo do mural.
+ */
+function alternarFixarMensagemFamilia(msgId) {
+  try {
+    const msg = (S.mensagensFamilia || []).find(m => m.id === msgId);
+    if (!msg) {
+      return { ok: false, motivo: 'mensagem_nao_encontrada' };
+    }
+
+    msg.fixada = !msg.fixada;
+
+    if (msg.fixada) {
+      const textoLimpo = (msg.texto || '').replace(/<[^>]*>/g, '').slice(0, 60);
+      registrarNotificacaoFamilia({
+        tipo: 'mensagens',
+        titulo: '📌 Recado Fixado no Mural',
+        texto: textoLimpo || 'Mensagem fixada no mural da família',
+        icone: '📌'
+      });
+    }
+
+    adicionarNaFilaSync('mensagens', 'update', { id: msg.id, fixada: msg.fixada });
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderChatFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true, fixada: msg.fixada };
+  } catch (err) {
+    console.error('Erro ao alternar fixação da mensagem:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Adiciona ou remove uma reação emoji a uma mensagem (comportamento de toggle).
+ */
+function reagirMensagemFamilia(msgId, emoji) {
+  try {
+    const msg = (S.mensagensFamilia || []).find(m => m.id === msgId);
+    if (!msg) {
+      return { ok: false, motivo: 'mensagem_nao_encontrada' };
+    }
+    if (!emoji || typeof emoji !== 'string') {
+      return { ok: false, motivo: 'emoji_invalido' };
+    }
+
+    const membro = obterMembroAtivo();
+    const mId = membro ? membro.id : (S.membroAtivoId || 'm_1');
+
+    if (!msg.reacoes || typeof msg.reacoes !== 'object') {
+      msg.reacoes = {};
+    }
+    if (!Array.isArray(msg.reacoes[emoji])) {
+      msg.reacoes[emoji] = [];
+    }
+
+    const pos = msg.reacoes[emoji].indexOf(mId);
+    if (pos >= 0) {
+      // Toggle off: remove a reação se o membro já reagiu
+      msg.reacoes[emoji].splice(pos, 1);
+      if (msg.reacoes[emoji].length === 0) {
+        delete msg.reacoes[emoji];
+      }
+    } else {
+      // Toggle on: adiciona a reação do membro
+      msg.reacoes[emoji].push(mId);
+    }
+
+    adicionarNaFilaSync('mensagens', 'update', { id: msg.id, reacoes: msg.reacoes });
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderChatFamiliaModal();
+    }
+
+    return { ok: true, reacoes: msg.reacoes };
+  } catch (err) {
+    console.error('Erro ao reagir à mensagem:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Exclui uma mensagem do chat e do mural.
+ */
+function excluirMensagemFamilia(msgId) {
+  try {
+    const idx = (S.mensagensFamilia || []).findIndex(m => m.id === msgId);
+    if (idx < 0) {
+      return { ok: false, motivo: 'mensagem_nao_encontrada' };
+    }
+
+    S.mensagensFamilia.splice(idx, 1);
+    adicionarNaFilaSync('mensagens', 'delete', { id: msgId });
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderChatFamiliaModal();
+      renderMuralInicio();
+      atualizarBadgesHeader();
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao excluir mensagem:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// MÓDULO 4.16: CONTATOS COMPARTILHADOS DA FAMÍLIA (AGENDA & EMERGÊNCIAS)
+// ----------------------------------------------------------------------------
+
+const CATEGORIAS_CONTATO_FAMILIA = [
+  { id: 'emergencia', nome: 'Emergência', icone: '🚨', cor: '#EF4444' },
+  { id: 'saude', nome: 'Saúde & Médicos', icone: '🏥', cor: '#10B981' },
+  { id: 'escola', nome: 'Escola & Filhos', icone: '🎒', cor: '#8B5CF6' },
+  { id: 'casa', nome: 'Serviços da Casa', icone: '🏠', cor: '#F59E0B' },
+  { id: 'familia', nome: 'Família & Pessoal', icone: '👨‍👩‍👧‍👦', cor: '#5581E3' },
+  { id: 'outros', nome: 'Outros', icone: '📦', cor: '#64748B' }
+];
+
+let filtroCategoriaContatoAtivo = 'todos';
+
+/**
+ * Filtra contatos da família no círculo ativo com ordenação prioritária de emergência.
+ */
+function filtrarContatosFamilia(filtros = {}) {
+  try {
+    const cId = S.circuloAtivoId || 'circ_1';
+    const categoria = filtros.categoria || 'todos';
+    const busca = (filtros.busca || '').trim().toLowerCase();
+    const apenasEmergencia = !!filtros.apenasEmergencia;
+
+    let contatos = (S.contatosFamilia || []).filter(c => c.circuloId === cId);
+
+    if (apenasEmergencia) {
+      contatos = contatos.filter(c => !!c.emergencia);
+    }
+
+    if (categoria && categoria !== 'todos') {
+      contatos = contatos.filter(c => c.categoria === categoria);
+    }
+
+    if (busca) {
+      contatos = contatos.filter(c => {
+        const n = (c.nome || '').toLowerCase();
+        const esp = (c.especialidade || '').toLowerCase();
+        const tel = (c.telefone || '').replace(/\D/g, '');
+        const telFmt = (c.telefone || '').toLowerCase();
+        const wa = (c.whatsapp || '').replace(/\D/g, '');
+        const em = (c.email || '').toLowerCase();
+        const end = (c.endereco || '').toLowerCase();
+        const obs = (c.observacoes || '').toLowerCase();
+        const bDig = busca.replace(/\D/g, '');
+
+        return n.includes(busca) ||
+               esp.includes(busca) ||
+               telFmt.includes(busca) ||
+               (bDig && tel.includes(bDig)) ||
+               (bDig && wa.includes(bDig)) ||
+               em.includes(busca) ||
+               end.includes(busca) ||
+               obs.includes(busca);
+      });
+    }
+
+    // Regra determinística: Contatos de Emergência aparecem no topo absoluto,
+    // seguidos por ordenação alfabética pelo nome.
+    return contatos.sort((a, b) => {
+      if (a.emergencia && !b.emergencia) return -1;
+      if (!a.emergencia && b.emergencia) return 1;
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+    });
+  } catch (err) {
+    console.error('Erro ao filtrar contatos da família:', err);
+    return [];
+  }
+}
+
+/**
+ * Salva ou atualiza um contato compartilhado da família.
+ * Acesso universal: inclusive perfil 'crianca' pode consultar e utilizar discagem rápida.
+ */
+function salvarContatoFamilia(dados = {}) {
+  try {
+    const nome = dados.nome != null ? String(dados.nome).trim() : '';
+    const telefone = dados.telefone != null ? String(dados.telefone).trim() : '';
+    const whatsapp = dados.whatsapp != null ? String(dados.whatsapp).trim() : '';
+    const email = dados.email != null ? String(dados.email).trim() : '';
+
+    if (!nome) {
+      if (typeof alert === 'function') {
+        alert('O nome do contato ou da instituição é obrigatório.');
+      }
+      return { ok: false, motivo: 'nome_obrigatorio' };
+    }
+
+    if (!telefone && !whatsapp && !email) {
+      if (typeof alert === 'function') {
+        alert('Informe pelo menos um número de telefone, WhatsApp ou endereço de e-mail.');
+      }
+      return { ok: false, motivo: 'meio_contato_obrigatorio' };
+    }
+
+    if (!Array.isArray(S.contatosFamilia)) {
+      S.contatosFamilia = [];
+    }
+
+    const cId = S.circuloAtivoId || 'circ_1';
+    const membroAtivo = obterMembroAtivo();
+    const agoraIso = new Date().toISOString();
+    const ehEmergencia = !!dados.emergencia || dados.categoria === 'emergencia';
+
+    let contato = null;
+    let operacao = 'insert';
+
+    if (dados.id) {
+      const idx = S.contatosFamilia.findIndex(c => c.id === dados.id);
+      if (idx >= 0) {
+        contato = S.contatosFamilia[idx];
+        contato.nome = nome;
+        contato.categoria = dados.categoria || contato.categoria || 'outros';
+        contato.especialidade = dados.especialidade != null ? String(dados.especialidade).trim() : '';
+        contato.telefone = telefone;
+        contato.whatsapp = whatsapp;
+        contato.email = email;
+        contato.endereco = dados.endereco != null ? String(dados.endereco).trim() : '';
+        contato.observacoes = dados.observacoes != null ? String(dados.observacoes).trim() : '';
+        contato.emergencia = ehEmergencia;
+        contato.atualizadoEm = agoraIso;
+        operacao = 'update';
+      }
+    }
+
+    if (!contato) {
+      contato = {
+        id: dados.id || ('cont_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7)),
+        circuloId: cId,
+        nome,
+        categoria: dados.categoria || (ehEmergencia ? 'emergencia' : 'outros'),
+        especialidade: dados.especialidade != null ? String(dados.especialidade).trim() : '',
+        telefone,
+        whatsapp,
+        email,
+        endereco: dados.endereco != null ? String(dados.endereco).trim() : '',
+        observacoes: dados.observacoes != null ? String(dados.observacoes).trim() : '',
+        emergencia: ehEmergencia,
+        criadoPor: membroAtivo ? membroAtivo.id : (S.membroAtivoId || 'm_1'),
+        criadoEm: agoraIso,
+        atualizadoEm: agoraIso
+      };
+      S.contatosFamilia.push(contato);
+    }
+
+    adicionarNaFilaSync('contatos', operacao, contato);
+
+    registrarNotificacaoFamilia({
+      tipo: 'geral',
+      titulo: ehEmergencia ? '🚨 Contato de Emergência Salvo' : '📞 Contato da Família Salvo',
+      texto: `${contato.nome} (${contato.especialidade || contato.categoria})`,
+      icone: ehEmergencia ? '🚨' : '📞'
+    });
+
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderContatosFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true, contato };
+  } catch (err) {
+    console.error('Erro ao salvar contato da família:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Exclui um contato compartilhado da família.
+ */
+function excluirContatoFamilia(contatoId) {
+  try {
+    const idx = (S.contatosFamilia || []).findIndex(c => c.id === contatoId);
+    if (idx < 0) {
+      return { ok: false, motivo: 'contato_nao_encontrado' };
+    }
+
+    S.contatosFamilia.splice(idx, 1);
+    adicionarNaFilaSync('contatos', 'delete', { id: contatoId });
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderContatosFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao excluir contato:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// INTERFACE & CONTROLADORES DE MODAL (DOM)
+// ----------------------------------------------------------------------------
+
+function renderChatFamiliaModal() {
+  if (typeof document === 'undefined') return;
+
+  const fixadosContainer = document.getElementById('chat-familia-fixados-container');
+  const msgsContainer = document.getElementById('chat-familia-mensagens-container');
+  if (!msgsContainer) return;
+
+  const mAtivo = obterMembroAtivo() || { id: 'm_1', nome: 'Alex', cor: '#5581E3' };
+  const fixadas = obterMensagensFixadasFamilia();
+  const todasMsgs = obterMensagensFamilia();
+
+  // 1. Renderiza recados fixados no topo do chat
+  if (fixadosContainer) {
+    if (fixadas.length === 0) {
+      fixadosContainer.style.display = 'none';
+      fixadosContainer.innerHTML = '';
+    } else {
+      fixadosContainer.style.display = 'block';
+      fixadosContainer.innerHTML = `
+        <div style="font-size:11px; font-weight:800; color:var(--yellow); text-transform:uppercase; margin-bottom:6px; display:flex; align-items:center; gap:4px;">
+          <span>📌</span> Recados Fixados no Mural (${fixadas.length})
+        </div>
+        ${fixadas.map(f => `
+          <div class="chat-recado-fixado-card">
+            <div style="flex:1;">
+              <div style="font-size:11px; font-weight:700; color:var(--text); margin-bottom:2px;">
+                <span style="color:${f.membroCor};">${escapeHtml(f.membroNome)}</span>
+                <span style="color:var(--muted); font-size:10px; font-weight:normal; margin-left:6px;">${new Date(f.criadoEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              <div style="font-size:12px; color:var(--text);">${f.texto}</div>
+              ${f.anexoFotoUrl ? `
+                <div style="margin-top:6px;">
+                  <img src="${f.anexoFotoUrl}" style="max-height:80px; border-radius:6px; object-fit:cover;"/>
+                </div>
+              ` : ''}
+            </div>
+            <button type="button" class="btn" style="padding:4px 8px; font-size:11px; flex-shrink:0;" title="Desfixar recado" onclick="alternarFixarMensagemFamilia('${f.id}')">
+              📌 Desfixar
+            </button>
+          </div>
+        `).join('')}
+      `;
+    }
+  }
+
+  // 2. Renderiza lista rolante de mensagens
+  if (todasMsgs.length === 0) {
+    msgsContainer.innerHTML = `
+      <div style="text-align:center; padding:36px 16px; color:var(--muted); margin:auto;">
+        <div style="font-size:36px; margin-bottom:8px;">💬</div>
+        <p style="font-weight:700; font-size:15px; margin:0 0 4px; color:var(--text);">Nenhum recado ainda</p>
+        <p style="font-size:12px; margin:0;">Envie uma mensagem, foto ou recado para a família!</p>
+      </div>
+    `;
+    return;
+  }
+
+  msgsContainer.innerHTML = todasMsgs.map(msg => {
+    const souAutor = msg.membroId === mAtivo.id;
+    const horaFmt = new Date(msg.criadoEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const reacoesKeys = msg.reacoes ? Object.keys(msg.reacoes) : [];
+
+    return `
+      <div class="chat-msg-row ${souAutor ? 'minha' : ''}">
+        ${!souAutor ? `
+          <div style="width:32px; height:32px; border-radius:50%; background:${msg.membroCor || '#5581E3'}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; flex-shrink:0;">
+            ${escapeHtml(msg.membroIniciais || 'FM')}
+          </div>
+        ` : ''}
+
+        <div class="chat-bubble ${souAutor ? 'chat-bubble-minha' : 'chat-bubble-outra'}">
+          ${!souAutor ? `
+            <div style="font-size:11px; font-weight:800; color:${msg.membroCor || 'var(--blue)'}; margin-bottom:3px;">
+              ${escapeHtml(msg.membroNome)}
+            </div>
+          ` : ''}
+
+          ${msg.anexoFotoUrl ? `
+            <div style="margin-bottom:6px;">
+              <img src="${msg.anexoFotoUrl}" style="max-width:100%; max-height:220px; border-radius:8px; display:block; cursor:pointer;" onclick="window.open('${msg.anexoFotoUrl}')"/>
+            </div>
+          ` : ''}
+
+          <div>${msg.texto}</div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:6px; font-size:10px; opacity:0.85;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span>${horaFmt}</span>
+              ${msg.fixada ? '<span title="Fixado no Mural">📌</span>' : ''}
+            </div>
+
+            <!-- MENU DE AÇÕES RÁPIDAS (REAGIR, FIXAR, EXCLUIR) -->
+            <div style="display:flex; align-items:center; gap:4px;">
+              <button type="button" style="background:transparent; border:none; cursor:pointer; font-size:12px; padding:0 2px;" title="Reagir" onclick="reagirMensagemFamilia('${msg.id}', '❤️')">❤️</button>
+              <button type="button" style="background:transparent; border:none; cursor:pointer; font-size:12px; padding:0 2px;" title="Reagir" onclick="reagirMensagemFamilia('${msg.id}', '👍')">👍</button>
+              <button type="button" style="background:transparent; border:none; cursor:pointer; font-size:12px; padding:0 2px;" title="${msg.fixada ? 'Desfixar' : 'Fixar no Mural'}" onclick="alternarFixarMensagemFamilia('${msg.id}')">📌</button>
+              <button type="button" style="background:transparent; border:none; cursor:pointer; font-size:11px; padding:0 2px; color:inherit; opacity:0.7;" title="Excluir" onclick="confirmarExcluirMensagemModal('${msg.id}')">🗑️</button>
+            </div>
+          </div>
+
+          <!-- LISTA DE REAÇÕES EXISTENTES -->
+          ${reacoesKeys.length > 0 ? `
+            <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">
+              ${reacoesKeys.map(emoji => {
+                const membrosReagiram = msg.reacoes[emoji] || [];
+                const euReagi = membrosReagiram.includes(mAtivo.id);
+                return `
+                  <span class="chat-reacao-badge ${euReagi ? 'minha' : ''}" onclick="reagirMensagemFamilia('${msg.id}', '${emoji}')" title="${membrosReagiram.length} reação(ões)">
+                    ${emoji} ${membrosReagiram.length}
+                  </span>
+                `;
+              }).join('')}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Rola suavemente até o final da conversa
+  setTimeout(() => {
+    try {
+      msgsContainer.scrollTop = msgsContainer.scrollHeight;
+    } catch (err) {
+      console.error('Erro ao rolar chat:', err);
+    }
+  }, 50);
+}
+
+function abrirModalChatFamilia() {
+  if (typeof document === 'undefined') return;
+
+  marcarMensagensComoLidas();
+  renderChatFamiliaModal();
+
+  if (typeof openM === 'function') {
+    openM('m-chat-familia');
+  }
+
+  const inputTxt = document.getElementById('chat-familia-input-texto');
+  if (inputTxt) {
+    setTimeout(() => inputTxt.focus(), 200);
+  }
+}
+
+function fecharModalChatFamilia() {
+  if (typeof closeM === 'function') {
+    closeM('m-chat-familia');
+  }
+  removerFotoAnexoChat();
+}
+
+function aoSelecionarFotoChat(event) {
+  if (typeof document === 'undefined') return;
+  const file = event && event.target && event.target.files ? event.target.files[0] : null;
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    fotoAnexoRascunhoChat = e.target.result;
+    const previewBox = document.getElementById('chat-familia-foto-preview-box');
+    const previewImg = document.getElementById('chat-familia-foto-preview-img');
+    if (previewBox && previewImg) {
+      previewImg.src = fotoAnexoRascunhoChat;
+      previewBox.style.display = 'flex';
+    }
+  };
+  reader.onerror = function(err) {
+    console.error('Erro ao ler foto para chat:', err);
+    if (typeof alert === 'function') alert('Não foi possível carregar a imagem selecionada.');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removerFotoAnexoChat() {
+  fotoAnexoRascunhoChat = null;
+  if (typeof document === 'undefined') return;
+  const previewBox = document.getElementById('chat-familia-foto-preview-box');
+  const fileInput = document.getElementById('chat-familia-input-foto');
+  if (previewBox) previewBox.style.display = 'none';
+  if (fileInput) fileInput.value = '';
+}
+
+function enviarMensagemChatModal() {
+  if (typeof document === 'undefined') return;
+
+  const inputTxt = document.getElementById('chat-familia-input-texto');
+  const checkFixar = document.getElementById('chat-familia-check-fixar');
+
+  const texto = inputTxt ? inputTxt.value : '';
+  const fixarNoTopo = checkFixar ? checkFixar.checked : false;
+
+  const res = enviarMensagemFamilia({
+    texto,
+    anexoFotoUrl: fotoAnexoRascunhoChat,
+    fixarNoTopo
+  });
+
+  if (res.ok) {
+    if (inputTxt) inputTxt.value = '';
+    if (checkFixar) checkFixar.checked = false;
+    removerFotoAnexoChat();
+  }
+}
+
+function confirmarExcluirMensagemModal(msgId) {
+  if (typeof confirm === 'function') {
+    if (!confirm('Deseja realmente apagar esta mensagem do chat?')) return;
+  }
+  excluirMensagemFamilia(msgId);
+}
+
+// ----------------------------------------------------------------------------
+// INTERFACE DE CONTATOS COMPARTILHADOS
+// ----------------------------------------------------------------------------
+
+function renderContatosFamiliaModal() {
+  if (typeof document === 'undefined') return;
+
+  const container = document.getElementById('contatos-lista-container');
+  const pillsEl = document.getElementById('contatos-filtros-pills');
+  const buscaInput = document.getElementById('contatos-busca-input');
+
+  const busca = buscaInput ? buscaInput.value : '';
+  const contatos = filtrarContatosFamilia({
+    categoria: filtroCategoriaContatoAtivo,
+    busca
+  });
+
+  // 1. Renderiza pílulas de filtro
+  if (pillsEl) {
+    pillsEl.innerHTML = [
+      { id: 'todos', nome: 'Todos', icone: '👥' },
+      ...CATEGORIAS_CONTATO_FAMILIA
+    ].map(cat => {
+      const isSel = filtroCategoriaContatoAtivo === cat.id;
+      return `
+        <button type="button" class="filtro-pill ${isSel ? 'sel' : ''}" style="${isSel ? 'background:var(--primary);color:#fff;' : ''}; font-size:11px; white-space:nowrap;" onclick="filtrarCategoriaContatosModal('${cat.id}')">
+          ${cat.icone} ${cat.nome}
+        </button>
+      `;
+    }).join('');
+  }
+
+  // 2. Renderiza lista de contatos
+  if (!container) return;
+
+  if (contatos.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:32px 16px; color:var(--muted);">
+        <p style="font-size:32px; margin-bottom:8px;">🔍</p>
+        <p style="font-weight:700; font-size:14px; margin-bottom:4px; color:var(--text);">Nenhum contato encontrado</p>
+        <p style="font-size:12px; margin:0 0 14px;">Adicione telefones de emergência, médicos, escola ou serviços da casa.</p>
+        <button type="button" class="btn btn-primary" onclick="abrirModalNovoContato()">+ Adicionar Contato</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = contatos.map(c => {
+    const catDef = CATEGORIAS_CONTATO_FAMILIA.find(k => k.id === c.categoria) || { nome: c.categoria, icone: '📞', cor: '#64748B' };
+    const telDig = (c.telefone || '').replace(/\D/g, '');
+    const waDig = (c.whatsapp || '').replace(/\D/g, '');
+
+    return `
+      <div class="contato-card ${c.emergencia ? 'emergencia' : ''}">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:18px;">${catDef.icone}</span>
+              <h4 style="margin:0; font-size:15px; font-weight:800; color:var(--text);">${escapeHtml(c.nome)}</h4>
+            </div>
+            ${c.especialidade ? `
+              <p style="margin:2px 0 0 24px; font-size:12px; color:var(--muted);">${escapeHtml(c.especialidade)}</p>
+            ` : ''}
+          </div>
+
+          <div style="display:flex; align-items:center; gap:6px;">
+            ${c.emergencia ? `
+              <span class="badge-emergencia">🚨 EMERGÊNCIA</span>
+            ` : `
+              <span style="font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; background:${catDef.cor}22; color:${catDef.cor};">${catDef.nome}</span>
+            `}
+          </div>
+        </div>
+
+        ${c.endereco ? `
+          <div style="font-size:11px; color:var(--muted); margin-bottom:6px; display:flex; align-items:center; gap:4px;">
+            <span>📍</span> <span>${escapeHtml(c.endereco)}</span>
+          </div>
+        ` : ''}
+
+        ${c.observacoes ? `
+          <div style="font-size:11px; background:var(--bg3); padding:6px 8px; border-radius:6px; margin-bottom:8px; color:var(--text);">
+            ℹ️ ${escapeHtml(c.observacoes)}
+          </div>
+        ` : ''}
+
+        <!-- AÇÕES RÁPIDAS: LIGAR, WHATSAPP, COPIAR, EDITAR, EXCLUIR -->
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:space-between; margin-top:8px; padding-top:6px; border-top:1px solid var(--border);">
+          <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+            ${c.telefone ? `
+              <a href="tel:${telDig}" class="btn ${c.emergencia ? 'btn-g' : 'btn-primary'}" style="padding:6px 10px; font-size:12px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                📞 Ligar (${escapeHtml(c.telefone)})
+              </a>
+            ` : ''}
+
+            ${c.whatsapp ? `
+              <a href="https://wa.me/${waDig}" target="_blank" class="btn" style="padding:6px 10px; font-size:12px; font-weight:700; color:var(--green); text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                💬 WhatsApp
+              </a>
+            ` : ''}
+
+            <button type="button" class="btn" style="padding:6px 8px; font-size:11px;" title="Copiar Telefone" onclick="copiarTextoContato('${escapeHtml(c.telefone || c.whatsapp)}')">
+              📋 Copiar
+            </button>
+          </div>
+
+          <div style="display:flex; gap:4px;">
+            <button type="button" class="btn" style="padding:6px 8px; font-size:11px;" title="Editar Contato" onclick="editarContatoModal('${c.id}')">
+              ✏️
+            </button>
+            <button type="button" class="btn" style="padding:6px 8px; font-size:11px; color:var(--red);" title="Excluir Contato" onclick="confirmarExcluirContatoModal('${c.id}')">
+              🗑️
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filtrarCategoriaContatosModal(catId) {
+  filtroCategoriaContatoAtivo = catId;
+  renderContatosFamiliaModal();
+}
+
+function abrirModalContatosFamilia() {
+  if (typeof document === 'undefined') return;
+  filtroCategoriaContatoAtivo = 'todos';
+  const buscaInput = document.getElementById('contatos-busca-input');
+  if (buscaInput) buscaInput.value = '';
+
+  renderContatosFamiliaModal();
+
+  if (typeof openM === 'function') {
+    openM('m-contatos-familia');
+  }
+}
+
+function fecharModalContatosFamilia() {
+  if (typeof closeM === 'function') {
+    closeM('m-contatos-familia');
+  }
+}
+
+function abrirModalNovoContato() {
+  if (typeof document === 'undefined') return;
+
+  const idEl = document.getElementById('form-contato-id');
+  const nomeEl = document.getElementById('form-contato-nome');
+  const catEl = document.getElementById('form-contato-categoria');
+  const espEl = document.getElementById('form-contato-especialidade');
+  const telEl = document.getElementById('form-contato-telefone');
+  const waEl = document.getElementById('form-contato-whatsapp');
+  const emailEl = document.getElementById('form-contato-email');
+  const endEl = document.getElementById('form-contato-endereco');
+  const obsEl = document.getElementById('form-contato-observacoes');
+  const emergEl = document.getElementById('form-contato-emergencia');
+  const titEl = document.getElementById('form-contato-titulo');
+
+  if (idEl) idEl.value = '';
+  if (nomeEl) nomeEl.value = '';
+  if (catEl) catEl.value = 'outros';
+  if (espEl) espEl.value = '';
+  if (telEl) telEl.value = '';
+  if (waEl) waEl.value = '';
+  if (emailEl) emailEl.value = '';
+  if (endEl) endEl.value = '';
+  if (obsEl) obsEl.value = '';
+  if (emergEl) emergEl.checked = false;
+  if (titEl) titEl.textContent = '✨ Novo Contato Compartilhado';
+
+  if (typeof openM === 'function') {
+    openM('m-form-contato');
+  }
+}
+
+function editarContatoModal(contatoId) {
+  if (typeof document === 'undefined') return;
+  const contato = (S.contatosFamilia || []).find(c => c.id === contatoId);
+  if (!contato) return;
+
+  const idEl = document.getElementById('form-contato-id');
+  const nomeEl = document.getElementById('form-contato-nome');
+  const catEl = document.getElementById('form-contato-categoria');
+  const espEl = document.getElementById('form-contato-especialidade');
+  const telEl = document.getElementById('form-contato-telefone');
+  const waEl = document.getElementById('form-contato-whatsapp');
+  const emailEl = document.getElementById('form-contato-email');
+  const endEl = document.getElementById('form-contato-endereco');
+  const obsEl = document.getElementById('form-contato-observacoes');
+  const emergEl = document.getElementById('form-contato-emergencia');
+  const titEl = document.getElementById('form-contato-titulo');
+
+  if (idEl) idEl.value = contato.id;
+  if (nomeEl) nomeEl.value = contato.nome || '';
+  if (catEl) catEl.value = contato.categoria || 'outros';
+  if (espEl) espEl.value = contato.especialidade || '';
+  if (telEl) telEl.value = contato.telefone || '';
+  if (waEl) waEl.value = contato.whatsapp || '';
+  if (emailEl) emailEl.value = contato.email || '';
+  if (endEl) endEl.value = contato.endereco || '';
+  if (obsEl) obsEl.value = contato.observacoes || '';
+  if (emergEl) emergEl.checked = !!contato.emergencia;
+  if (titEl) titEl.textContent = '✏️ Editar Contato Compartilhado';
+
+  if (typeof openM === 'function') {
+    openM('m-form-contato');
+  }
+}
+
+function aoMudarCategoriaContatoForm() {
+  if (typeof document === 'undefined') return;
+  const catEl = document.getElementById('form-contato-categoria');
+  const emergEl = document.getElementById('form-contato-emergencia');
+  if (catEl && emergEl && catEl.value === 'emergencia') {
+    emergEl.checked = true;
+  }
+}
+
+function salvarContatoModal() {
+  if (typeof document === 'undefined') return;
+
+  const id = document.getElementById('form-contato-id')?.value || '';
+  const nome = document.getElementById('form-contato-nome')?.value || '';
+  const categoria = document.getElementById('form-contato-categoria')?.value || 'outros';
+  const especialidade = document.getElementById('form-contato-especialidade')?.value || '';
+  const telefone = document.getElementById('form-contato-telefone')?.value || '';
+  const whatsapp = document.getElementById('form-contato-whatsapp')?.value || '';
+  const email = document.getElementById('form-contato-email')?.value || '';
+  const endereco = document.getElementById('form-contato-endereco')?.value || '';
+  const observacoes = document.getElementById('form-contato-observacoes')?.value || '';
+  const emergencia = document.getElementById('form-contato-emergencia')?.checked || false;
+
+  const res = salvarContatoFamilia({
+    id,
+    nome,
+    categoria,
+    especialidade,
+    telefone,
+    whatsapp,
+    email,
+    endereco,
+    observacoes,
+    emergencia
+  });
+
+  if (res.ok) {
+    if (typeof closeM === 'function') {
+      closeM('m-form-contato');
+    }
+  }
+}
+
+function confirmarExcluirContatoModal(contatoId) {
+  if (typeof confirm === 'function') {
+    if (!confirm('Deseja excluir este contato da família?')) return;
+  }
+  excluirContatoFamilia(contatoId);
+}
+
+function copiarTextoContato(texto) {
+  if (!texto) return;
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(texto).then(() => {
+        exibirToastNotificacao('Contato copiado com sucesso!', '📋');
+      }).catch(err => {
+        console.error('Erro ao copiar para clipboard:', err);
+      });
+    } else {
+      exibirToastNotificacao('Contato: ' + texto, '📋');
+    }
+  } catch (err) {
+    console.error('Erro em copiarTextoContato:', err);
+  }
+}
+
 function abrirModuloExplorar(moduloId) {
+  if (moduloId === 'mensagens') {
+    abrirModalChatFamilia();
+    return;
+  }
+  if (moduloId === 'contatos') {
+    abrirModalContatosFamilia();
+    return;
+  }
   if (moduloId === 'scanner_cupom') {
     abrirScannerCupom();
     return;
@@ -11579,6 +12736,38 @@ if (typeof window !== 'undefined') {
   window.abrirDetalheCupomFiscal = abrirDetalheCupomFiscal;
   window.fecharDetalheCupomModal = fecharDetalheCupomModal;
   window.abrirModuloExplorar = abrirModuloExplorar;
+  // Super-App Familiar v2.0 (Etapa 6 - Mensagens da Família & Contatos)
+  window.enfileirarSync = enfileirarSync;
+  window.registrarAtividadeFamilia = registrarAtividadeFamilia;
+  window.obterMensagensFamilia = obterMensagensFamilia;
+  window.obterMensagensFixadasFamilia = obterMensagensFixadasFamilia;
+  window.obterContagemMensagensNaoLidas = obterContagemMensagensNaoLidas;
+  window.marcarMensagensComoLidas = marcarMensagensComoLidas;
+  window.enviarMensagemFamilia = enviarMensagemFamilia;
+  window.alternarFixarMensagemFamilia = alternarFixarMensagemFamilia;
+  window.reagirMensagemFamilia = reagirMensagemFamilia;
+  window.excluirMensagemFamilia = excluirMensagemFamilia;
+  window.CATEGORIAS_CONTATO_FAMILIA = CATEGORIAS_CONTATO_FAMILIA;
+  window.filtrarContatosFamilia = filtrarContatosFamilia;
+  window.salvarContatoFamilia = salvarContatoFamilia;
+  window.excluirContatoFamilia = excluirContatoFamilia;
+  window.renderChatFamiliaModal = renderChatFamiliaModal;
+  window.abrirModalChatFamilia = abrirModalChatFamilia;
+  window.fecharModalChatFamilia = fecharModalChatFamilia;
+  window.aoSelecionarFotoChat = aoSelecionarFotoChat;
+  window.removerFotoAnexoChat = removerFotoAnexoChat;
+  window.enviarMensagemChatModal = enviarMensagemChatModal;
+  window.confirmarExcluirMensagemModal = confirmarExcluirMensagemModal;
+  window.renderContatosFamiliaModal = renderContatosFamiliaModal;
+  window.filtrarCategoriaContatosModal = filtrarCategoriaContatosModal;
+  window.abrirModalContatosFamilia = abrirModalContatosFamilia;
+  window.fecharModalContatosFamilia = fecharModalContatosFamilia;
+  window.abrirModalNovoContato = abrirModalNovoContato;
+  window.editarContatoModal = editarContatoModal;
+  window.aoMudarCategoriaContatoForm = aoMudarCategoriaContatoForm;
+  window.salvarContatoModal = salvarContatoModal;
+  window.confirmarExcluirContatoModal = confirmarExcluirContatoModal;
+  window.copiarTextoContato = copiarTextoContato;
 }
 
 // EXPORTAÇÃO PARA TESTES / NODE.JS
@@ -11829,6 +13018,38 @@ if (typeof module !== 'undefined' && module.exports) {
     abrirDetalheCupomFiscal,
     fecharDetalheCupomModal,
     abrirModuloExplorar,
+    // Super-App Familiar v2.0 (Etapa 6 - Mensagens da Família & Contatos)
+    enfileirarSync,
+    registrarAtividadeFamilia,
+    obterMensagensFamilia,
+    obterMensagensFixadasFamilia,
+    obterContagemMensagensNaoLidas,
+    marcarMensagensComoLidas,
+    enviarMensagemFamilia,
+    alternarFixarMensagemFamilia,
+    reagirMensagemFamilia,
+    excluirMensagemFamilia,
+    CATEGORIAS_CONTATO_FAMILIA,
+    filtrarContatosFamilia,
+    salvarContatoFamilia,
+    excluirContatoFamilia,
+    renderChatFamiliaModal,
+    abrirModalChatFamilia,
+    fecharModalChatFamilia,
+    aoSelecionarFotoChat,
+    removerFotoAnexoChat,
+    enviarMensagemChatModal,
+    confirmarExcluirMensagemModal,
+    renderContatosFamiliaModal,
+    filtrarCategoriaContatosModal,
+    abrirModalContatosFamilia,
+    fecharModalContatosFamilia,
+    abrirModalNovoContato,
+    editarContatoModal,
+    aoMudarCategoriaContatoForm,
+    salvarContatoModal,
+    confirmarExcluirContatoModal,
+    copiarTextoContato,
     getState: () => S,
     S
   };
