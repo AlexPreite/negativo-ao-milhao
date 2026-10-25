@@ -44,7 +44,8 @@ const MODULOS_INICIO_CATALOGO = [
   { id: 'contatos', nome: 'Contatos Úteis', desc: 'Telefones de emergência e médicos', icone: '📞', cor: '#64748B', bgIcon: 'rgba(100,116,139,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
   { id: 'beneficios', nome: 'Vales VA / VR', desc: 'Carteiras de alimentação e refeição', icone: '🥗', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'gastos' },
   { id: 'scanner_cupom', nome: 'Scanner de Cupom', desc: 'Leitura inteligente de notas fiscais com IA', icone: '📷', cor: '#3B82F6', bgIcon: 'rgba(59,130,246,0.14)', categoria: 'avancado', telaAlvo: 'gastos' },
-  { id: 'metas_fam', nome: 'Metas & Sonhos', desc: 'Objetivos e poupança da família', icone: '🎯', cor: '#EC4899', bgIcon: 'rgba(236,72,153,0.14)', categoria: 'avancado', telaAlvo: 'explorar' }
+  { id: 'metas_fam', nome: 'Metas & Sonhos', desc: 'Objetivos e poupança da família', icone: '🎯', cor: '#EC4899', bgIcon: 'rgba(236,72,153,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
+  { id: 'escritorio_3d', nome: 'Escritório 3D da Squad', desc: 'Ver a equipe de agentes interagindo em 3D', icone: '🏢', cor: '#8B5CF6', bgIcon: 'rgba(139,92,246,0.14)', categoria: 'avancado', telaAlvo: 'escritorio_3d' }
 ];
 
 let S = {
@@ -5903,6 +5904,10 @@ const SECS = ['inicio', 'calendario', 'listas', 'explorar', 'familia', 'atividad
 const ROTAS_FINANCEIRAS = ['resumo', 'receitas', 'gastos', 'dividas', 'metas'];
 
 function go(id) {
+  if (id === 'escritorio_3d') {
+    if (typeof window !== 'undefined') window.open('office-3d.html', '_blank');
+    return;
+  }
   if (!id) id = 'inicio';
   if (id === 'norte') id = 'agente';
 
@@ -15815,6 +15820,10 @@ function confirmarExcluirItemGradeModal(itemId) {
 }
 
 function abrirModuloExplorar(moduloId) {
+  if (moduloId === 'escritorio_3d') {
+    if (typeof window !== 'undefined') window.open('office-3d.html', '_blank');
+    return;
+  }
   if (moduloId === 'mensagens') {
     abrirModalChatFamilia();
     return;

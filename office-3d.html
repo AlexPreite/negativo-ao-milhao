@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>🏢 Squad Office 3D — Negativo ao Milhão</title>
+  <meta name="theme-color" content="#0a0d14"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body, html {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #0a0d14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #f1f5f9;
+    }
+
+    #canvas-container {
+      width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
+    }
+
+    /* TOP BAR FUTURISTA */
+    #top-bar {
+      position: absolute; top: 12px; left: 16px; right: 16px; z-index: 20;
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px;
+      padding: 10px 18px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+    .top-brand { display: flex; align-items: center; gap: 10px; }
+    .top-brand h1 { font-size: 15px; font-weight: 800; letter-spacing: 0.5px; margin: 0; }
+    .top-brand span { font-size: 10px; background: rgba(139, 92, 246, 0.25); color: #c084fc; padding: 3px 8px; border-radius: 8px; font-weight: 700; border: 1px solid rgba(139, 92, 246, 0.4); }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .btn-hud {
+      background: rgba(30, 41, 59, 0.85); color: #e2e8f0; border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 7px 12px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease; text-decoration: none;
+    }
+    .btn-hud:hover { background: rgba(51, 65, 85, 0.9); border-color: rgba(255, 255, 255, 0.3); transform: translateY(-1px); }
+    .btn-hud.primary { background: #8B5CF6; color: #fff; border-color: #8B5CF6; }
+    .btn-hud.primary:hover { background: #7C3AED; }
+
+    /* OVERLAYS 2D SINCRONIZADOS COM AGENTES 3D */
+    #overlays-layer {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 10;
+    }
+    .agent-overlay {
+      position: absolute; top: 0; left: 0; pointer-events: auto;
+      background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 12px;
+      padding: 8px 12px; width: 210px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+      transition: transform 0.08s ease-out, opacity 0.2s ease; cursor: pointer;
+    }
+    .agent-overlay:hover {
+      border-color: #8B5CF6; transform: translate(-50%, -105%) scale(1.03) !important;
+    }
+    .ag-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .ag-name { font-size: 12px; font-weight: 800; color: #ffffff; display: flex; align-items: center; gap: 5px; }
+    .ag-badge { font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 6px; text-transform: uppercase; }
+    .ag-task { font-size: 10.5px; color: #cbd5e1; margin-bottom: 6px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .ag-progress-bar { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 2px; overflow: hidden; }
+    .ag-progress-fill { height: 100%; width: 100%; border-radius: 2px; transition: width 0.3s ease; }
+
+    /* HUD INFERIOR: CÂMERA & CONTROLE DE MISSÕES */
+    #bottom-hud {
+      position: absolute; bottom: 14px; left: 16px; right: 16px; z-index: 20;
+      display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+    }
+    .hud-card {
+      pointer-events: auto; background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+    .camera-pills { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+    .cam-btn {
+      background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #94a3b8; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 8px;
+      cursor: pointer; white-space: nowrap; transition: all 0.15s ease;
+    }
+    .cam-btn:hover, .cam-btn.active {
+      background: #8B5CF6; color: #fff; border-color: #8B5CF6;
+    }
+
+    .mission-row {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: space-between;
+    }
+    .mission-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mission-btn {
+      background: rgba(30, 41, 59, 0.9); border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1; font-size: 11px; font-weight: 600; padding: 6px 10px; border-radius: 8px;
+      cursor: pointer; transition: all 0.15s ease;
+    }
+    .mission-btn:hover { background: rgba(139, 92, 246, 0.25); border-color: #8B5CF6; color: #fff; }
+
+    /* PAINEL LATERAL INSPETOR (DRAWER RETRÁTIL) */
+    #inspector-drawer {
+      position: absolute; top: 72px; right: 16px; bottom: 84px; width: 330px; z-index: 25;
+      background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px;
+      padding: 16px; display: flex; flex-direction: column; gap: 12px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); overflow-y: auto;
+      transition: transform 0.25s ease;
+    }
+    #inspector-drawer.closed { transform: translateX(360px); }
+    .drawer-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 8px; }
+    .drawer-close { cursor: pointer; font-size: 18px; color: #94a3b8; }
+    .drawer-close:hover { color: #fff; }
+    .info-group { background: rgba(30, 41, 59, 0.5); border-radius: 10px; padding: 10px; border: 1px solid rgba(255, 255, 255, 0.06); }
+    .info-label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }
+    .info-val { font-size: 12px; color: #e2e8f0; font-weight: 600; }
+
+    /* LOG DA MISSÃO EM TEMPO REAL */
+    #mission-status-box {
+      display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 6px 10px; border-radius: 8px; width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 3D WEBGL CANVAS -->
+  <div id="canvas-container"></div>
+
+  <!-- TOP BAR -->
+  <header id="top-bar">
+    <div class="top-brand">
+      <span style="font-size:18px;">🏢</span>
+      <div>
+        <h1>Squad Office 3D</h1>
+        <div style="font-size:10px; color:#94a3b8;">Sistema de Visualização da Equipe de Agentes • Estilo OpenClaw 3D</div>
+      </div>
+      <span>6 AGENTES CONECTADOS</span>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn-hud" id="btn-toggle-som" onclick="alternarSom()" title="Efeitos Sonoros Sintetizados">🔊 Som</button>
+      <button type="button" class="btn-hud" id="btn-toggle-inspector" onclick="toggleInspector()" title="Abrir/Fechar Painel de Métricas">📊 Inspetor</button>
+      <a href="index.html" class="btn-hud primary" title="Voltar ao App Principal">← App Principal</a>
+    </div>
+  </header>
+
+  <!-- OVERLAYS 2D SINCRONIZADOS SOBRE AS CABEÇAS DOS 6 AGENTES -->
+  <div id="overlays-layer">
+    <!-- 1. STELLA -->
+    <div class="agent-overlay" id="overlay-card-stella" onclick="selecionarAgenteNoPainel('stella')">
+      <div class="ag-head">
+        <span class="ag-name">👩‍💼 Stella</span>
+        <span class="ag-badge" id="overlay-badge-stella" style="background:rgba(139,92,246,0.25);color:#c084fc;">🟣 ORQUESTRANDO</span>
+      </div>
+      <div class="ag-task" id="overlay-tarefa-stella">Coordenando entrega do Escritório 3D</div>
+      <div class="ag-progress-bar"><div class="ag-progress-fill" id="overlay-prog-stella" style="background:#8B5CF6;width:100%;"></div></div>
+    </div>
+
+    <!-- 2. ARQUITETO -->
+    <div class="agent-overlay" id="overlay-card-arquiteto" onclick="selecionarAgenteNoPainel('arquiteto')">
+      <div class="ag-head">
+        <span class="ag-name">📐 Arquiteto</span>
+        <span class="ag-badge" id="overlay-badge-arquiteto" style="background:rgba(6,182,212,0.25);color:#22d3ee;">📐 PROJETANDO</span>
+      </div>
+      <div class="ag-task" id="overlay-tarefa-arquiteto">Definindo schema e contratos 3D</div>
+      <div class="ag-progress-bar"><div class="ag-progress-fill" id="overlay-prog-arquiteto" style="background:#06B6D4;width:100%;"></div></div>
+    </div>
+
+    <!-- 3. DEV FULL STACK -->
+    <div class="agent-overlay" id="overlay-card-dev_fullstack" onclick="selecionarAgenteNoPainel('dev_fullstack')">
+      <div class="ag-head">
+        <span class="ag-name">💻 Dev Full Stack</span>
+        <span class="ag-badge" id="overlay-badge-dev_fullstack" style="background:rgba(59,130,246,0.25);color:#60a5fa;">🟢 CODIFICANDO</span>
+      </div>
+      <div class="ag-task" id="overlay-tarefa-dev_fullstack">Renderizador WebGL Three.js e HUD</div>
+      <div class="ag-progress-bar"><div class="ag-progress-fill" id="overlay-prog-dev_fullstack" style="background:#3B82F6;width:100%;"></div></div>
+    </div>
+
+    <!-- 4. QA & SEGURANÇA -->
+    <div class="agent-overlay" id="overlay-card-qa_seguranca" onclick="selecionarAgenteNoPainel('qa_seguranca')">
+      <div class="ag-head">
+        <span class="ag-name">🛡️ QA & Segurança</span>
+        <span class="ag-badge" id="overlay-badge-qa_seguranca" style="background:rgba(16,185,129,0.25);color:#34d399;">🛡️ APROVADO</span>
+      </div>
+      <div class="ag-task" id="overlay-tarefa-qa_seguranca">Auditoria de 378 asserts da squad</div>
+      <div class="ag-progress-bar"><div class="ag-progress-fill" id="overlay-prog-qa_seguranca" style="background:#10B981;width:100%;"></div></div>
+    </div>
+
+    <!-- 5. DEVOPS -->
+    <div class="agent-overlay" id="overlay-card-devops" onclick="selecionarAgenteNoPainel('devops')">
+      <div class="ag-head">
+        <span class="ag-name">🚀 DevOps</span>
+        <span class="ag-badge" id="overlay-badge-devops" style="background:rgba(245,158,11,0.25);color:#fbbf24;">🚀 DEPLOY ATIVO</span>
+      </div>
+      <div class="ag-task" id="overlay-tarefa-devops">Servidores 3D & Sincronização PWA</div>
+      <div class="ag-progress-bar"><div class="ag-progress-fill" id="overlay-prog-devops" style="background:#F59E0B;width:100%;"></div></div>
+    </div>
+
+    <!-- 6. AGENTE NORTE 2.0 -->
+    <div class="agent-overlay" id="overlay-card-norte" onclick="selecionarAgenteNoPainel('norte')">
+      <div class="ag-head">
+        <span class="ag-name">🧭 Agente Norte</span>
+        <span class="ag-badge" id="overlay-badge-norte" style="background:rgba(236,72,153,0.25);color:#f472b6;">✨ OMNISCIENTE</span>
+      </div>
+      <div class="ag-task" id="overlay-tarefa-norte">Monitorando finanças e rotina familiar</div>
+      <div class="ag-progress-bar"><div class="ag-progress-fill" id="overlay-prog-norte" style="background:#EC4899;width:100%;"></div></div>
+    </div>
+  </div>
+
+  <!-- HUD INFERIOR: CÂMERA & SIMULADOR DE MISSÕES -->
+  <footer id="bottom-hud">
+    <!-- CÂMERAS -->
+    <div class="hud-card">
+      <div style="font-size:10px; font-weight:800; color:#94a3b8; margin-bottom:6px; text-transform:uppercase;">🎥 Controles de Câmera 360°</div>
+      <div class="camera-pills">
+        <button type="button" class="cam-btn active" onclick="setCam(this, 'visao_geral')">🎥 Geral</button>
+        <button type="button" class="cam-btn" onclick="setCam(this, 'stella')">👩‍💼 Stella</button>
+        <button type="button" class="cam-btn" onclick="setCam(this, 'arquiteto')">📐 Arquiteto</button>
+        <button type="button" class="cam-btn" onclick="setCam(this, 'dev_fullstack')">💻 Dev</button>
+        <button type="button" class="cam-btn" onclick="setCam(this, 'qa_seguranca')">🛡️ QA</button>
+        <button type="button" class="cam-btn" onclick="setCam(this, 'devops')">🚀 DevOps</button>
+        <button type="button" class="cam-btn" onclick="setCam(this, 'norte')">🧭 Norte</button>
+        <button type="button" class="cam-btn" onclick="setCam(this, 'war_room')">🤝 War Room</button>
+      </div>
+    </div>
+
+    <!-- SIMULADOR DE MISSÕES AO VIVO -->
+    <div class="hud-card">
+      <div class="mission-row">
+        <div>
+          <span style="font-size:11px; font-weight:800; color:#fff;">🎯 Simular Missão da Squad em Tempo Real:</span>
+        </div>
+        <div class="mission-presets">
+          <button type="button" class="mission-btn" onclick="dispararMissao('ciclo_completo')">🚀 Ciclo Completo</button>
+          <button type="button" class="mission-btn" onclick="dispararMissao('war_room')">🤝 War Room</button>
+          <button type="button" class="mission-btn" onclick="dispararMissao('auditoria_qa')">🛡️ Auditoria QA</button>
+          <button type="button" class="mission-btn" onclick="dispararMissao('deploy_prod')">⚡ Deploy Prod</button>
+          <button type="button" class="btn-hud primary" style="padding:5px 10px; font-size:11px;" id="btn-proximo-passo" onclick="proximoPassoMissao()" style="display:none;">▶ Próximo Passo</button>
+        </div>
+      </div>
+      <div id="mission-status-box" style="margin-top:8px;">
+        <span>⚡</span>
+        <span id="mission-status-text">Squad conectada e operando com 100% de conformidade. Selecione uma missão acima para assistir à interação 3D!</span>
+      </div>
+    </footer>
+
+  <!-- DRAWER LATERAL INSPETOR DO AGENTE -->
+  <aside id="inspector-drawer">
+    <div class="drawer-header">
+      <h3 style="font-size:14px; font-weight:800;" id="insp-titulo">👩‍💼 Inspetor do Agente</h3>
+      <span class="drawer-close" onclick="toggleInspector()">✕</span>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Papel & Especialidade</div>
+      <div class="info-val" id="insp-papel">Tech Lead & Orquestradora</div>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Status em Tempo Real</div>
+      <div class="info-val" id="insp-status" style="color:#c084fc;">🟣 ORQUESTRANDO</div>
+      <div style="font-size:11px; color:#94a3b8; margin-top:2px;" id="insp-tarefa">Coordenando entregas e alinhamento com Alexsander</div>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Arquivo em Edição / Contexto</div>
+      <div class="info-val" id="insp-arquivo" style="font-family:monospace; color:#38bdf8;">app.js</div>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Métricas de Qualidade</div>
+      <div class="info-val" id="insp-metricas">378/378 asserts aprovados • Zero Regressão</div>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Dados do App Familiar (localStorage)</div>
+      <div style="font-size:11px; color:#cbd5e1; line-height:1.4;" id="insp-dados-app">
+        Carregando dados da família...
+      </div>
+    </div>
+
+    <div>
+      <div class="info-label" style="margin-bottom:6px;">Histórico Real de Entregas</div>
+      <div id="insp-historico-lista" style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow-y:auto;">
+        <!-- Preenchido via office-3d.js -->
+      </div>
+    </div>
+  </aside>
+
+  <!-- SCRIPTS -->
+  <!-- Three.js r128 via CDN com fallback nativo -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="office-3d.js"></script>
+  <script>
+    // Inicialização da interface e Web Audio API Synth
+    let somAtivo = true;
+    let audioCtx = null;
+
+    function alternarSom() {
+      somAtivo = !somAtivo;
+      const btn = document.getElementById('btn-toggle-som');
+      if (btn) btn.textContent = somAtivo ? '🔊 Som' : '🔇 Mudo';
+    }
+
+    function tocarSomSintetizador(tipo) {
+      if (!somAtivo) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (tipo === 'feixe') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(580, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(1180, audioCtx.currentTime + 0.18);
+          gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.18);
+        } else if (tipo === 'sucesso') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1);
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
+          gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.4);
+        }
+      } catch (e) {
+        // Tratamento explícito de bloqueio de autoplay de áudio no navegador
+        console.warn('Web Audio sintetizador indisponível ou bloqueado por política de áudio:', e);
+      }
+    }
+    window.tocarSomSintetizador = tocarSomSintetizador;
+
+    function setCam(btn, alvo) {
+      document.querySelectorAll('.cam-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      if (typeof window.focarCameraEm === 'function') {
+        window.focarCameraEm(alvo);
+      }
+    }
+
+    function toggleInspector() {
+      const drawer = document.getElementById('inspector-drawer');
+      if (drawer) drawer.classList.toggle('closed');
+    }
+
+    function selecionarAgenteNoPainel(agId) {
+      const drawer = document.getElementById('inspector-drawer');
+      if (drawer) drawer.classList.remove('closed');
+
+      const ag = AGENTES_SQUAD_3D[agId];
+      if (!ag) return;
+
+      document.getElementById('insp-titulo').textContent = `${ag.icone} ${ag.nome}`;
+      document.getElementById('insp-papel').textContent = ag.papel;
+      document.getElementById('insp-status').textContent = ag.statusBadge;
+      document.getElementById('insp-status').style.color = ag.cor;
+      document.getElementById('insp-tarefa').textContent = ag.tarefaAtual;
+      document.getElementById('insp-arquivo').textContent = ag.arquivoAtivo;
+      document.getElementById('insp-metricas').textContent = ag.metricas;
+
+      // Foca câmera no agente
+      if (typeof window.focarCameraEm === 'function') {
+        window.focarCameraEm(agId);
+      }
+    }
+
+    function dispararMissao(tipo) {
+      const missao = iniciarMissaoSquad3D(tipo);
+      const btnPasso = document.getElementById('btn-proximo-passo');
+      if (btnPasso) btnPasso.style.display = 'inline-flex';
+      proximoPassoMissao();
+    }
+
+    function proximoPassoMissao() {
+      const res = avancarEtapaMissao3D();
+      const txt = document.getElementById('mission-status-text');
+      const btnPasso = document.getElementById('btn-proximo-passo');
+
+      if (res.concluida) {
+        if (txt) txt.textContent = '🎉 Missão concluída com sucesso pela Squad! 100% de conformidade.';
+        if (btnPasso) btnPasso.style.display = 'none';
+        tocarSomSintetizador('sucesso');
+      } else if (res.etapa && txt) {
+        txt.textContent = `▶ [${res.etapa.de.toUpperCase()} → ${res.etapa.para.toUpperCase()}]: ${res.etapa.acao}`;
+      }
+    }
+
+    // Inicialização ao carregar a página
+    window.addEventListener('DOMContentLoaded', () => {
+      iniciarCenaEscritorio3D('canvas-container');
+
+      // Popula dados reais do app familiar
+      const dadosApp = obterDadosReaisAppFamilia();
+      const elDados = document.getElementById('insp-dados-app');
+      if (elDados) {
+        elDados.innerHTML = `
+          <strong>Círculo:</strong> ${dadosApp.circuloNome}<br>
+          <strong>Membros:</strong> ${dadosApp.totalMembros} pessoas<br>
+          <strong>Eventos no Calendário:</strong> ${dadosApp.totalEventos}<br>
+          <strong>Listas Colaborativas:</strong> ${dadosApp.totalListas}<br>
+          <strong>Lançamentos Financeiros:</strong> ${dadosApp.totalGastos}
+        `;
+      }
+
+      // Popula histórico de entregas
+      const elHist = document.getElementById('insp-historico-lista');
+      if (elHist) {
+        elHist.innerHTML = HISTORICO_ENTREGAS_REAIS.map(h => `
+          <div style="background:rgba(255,255,255,0.04);padding:6px 8px;border-radius:6px;font-size:11px;">
+            <div style="display:flex;justify-content:space-between;font-weight:700;">
+              <span>${h.etapa}: ${h.nome}</span>
+              <span style="color:#34d399;">✓ ${h.status}</span>
+            </div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${h.data} • ${h.autor}</div>
+          </div>
+        `).join('');
+      }
+
+      // Inicia selecionando a Stella
+      selecionarAgenteNoPainel('stella');
+    });
+  </script>
+</body>
+</html>
