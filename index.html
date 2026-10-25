@@ -363,6 +363,23 @@
     background: rgba(239, 68, 68, 0.16); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.35);
     font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; letter-spacing: 0.5px;
   }
+
+  /* REFEIÇÕES, DOCUMENTOS & GRADE HORÁRIA (Etapa 7) */
+  .receita-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 12px; margin-bottom: 10px; transition: border-color 0.15s;
+  }
+  .doc-pasta-tab {
+    padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 8px; cursor: pointer;
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+  }
+  .doc-pasta-tab.sel {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+  }
+  .grade-slot-item {
+    background: var(--bg3); border-radius: 6px; padding: 6px 8px; margin-bottom: 4px;
+    font-size: 11px; display: flex; justify-content: space-between; align-items: center;
+  }
 </style>
 </head>
 <body>
@@ -2398,6 +2415,357 @@
         💾 Salvar Contato
       </button>
       <button type="button" class="btn" onclick="closeM('m-form-contato')">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================= -->
+<!-- MODAIS DA ETAPA 7: REFEIÇÕES, DOCUMENTOS & GRADE HORÁRIA                -->
+<!-- ======================================================================= -->
+
+<!-- MODAL REFEIÇÕES & CARDÁPIO FAMILIAR (Etapa 7) -->
+<div class="modal-bg" id="m-refeicoes-familia">
+  <div class="modal" style="max-width:580px; max-height:88vh; display:flex; flex-direction:column; padding:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:22px;">🍲</span>
+        <div>
+          <h3 class="modal-title" style="margin:0; font-size:17px;">Refeições & Caixa de Receitas</h3>
+          <p style="margin:0; font-size:11px; color:var(--muted);">Cardápio semanal, receitas da casa e lista automática</p>
+        </div>
+      </div>
+      <span class="modal-close" style="position:static; margin:0;" onclick="fecharModalRefeicoesFamilia()">×</span>
+    </div>
+
+    <!-- ABAS DO MÓDULO -->
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button type="button" class="btn btn-primary" id="tab-btn-cardapio-semanal" style="flex:1; padding:8px; font-size:12px; font-weight:700;" onclick="renderRefeicoesFamiliaModal('cardapio')">
+        🍽️ Cardápio Semanal
+      </button>
+      <button type="button" class="btn" id="tab-btn-caixa-receitas" style="flex:1; padding:8px; font-size:12px; font-weight:700;" onclick="renderRefeicoesFamiliaModal('receitas')">
+        📖 Caixa de Receitas
+      </button>
+    </div>
+
+    <!-- BOTÃO DE AÇÃO: GERAR LISTA DE COMPRAS A PARTIR DO CARDÁPIO -->
+    <div style="margin-bottom:12px;">
+      <button type="button" class="btn btn-g" style="width:100%; padding:10px 12px; font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="gerarListaComprasCardapioModal()">
+        <span>🛒 Gerar Lista de Compras do Cardápio</span>
+        <span id="cardapio-btn-faltantes-count" style="font-size:11px; font-weight:normal; opacity:0.9;"></span>
+      </button>
+    </div>
+
+    <!-- ABA 1: CARDÁPIO SEMANAL -->
+    <div id="sec-tab-cardapio-semanal" style="flex:1; overflow-y:auto; padding-right:4px;">
+      <div id="cardapio-semanal-grid-container"></div>
+    </div>
+
+    <!-- ABA 2: CAIXA DE RECEITAS -->
+    <div id="sec-tab-caixa-receitas" style="flex:1; overflow-y:auto; padding-right:4px; display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase;">Receitas da Família</span>
+        <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:11px; font-weight:700;" onclick="abrirModalNovaReceita()">
+          + Nova Receita
+        </button>
+      </div>
+      <div id="caixa-receitas-grid-container"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FORMULÁRIO DE RECEITA (Etapa 7) -->
+<div class="modal-bg" id="m-form-receita">
+  <div class="modal" style="max-width:480px; max-height:85vh; overflow-y:auto; padding:16px;">
+    <span class="modal-close" onclick="closeM('m-form-receita')">×</span>
+    <h3 class="modal-title" id="form-rec-modal-title" style="margin-bottom:12px;">✨ Nova Receita da Família</h3>
+    
+    <input type="hidden" id="form-rec-id"/>
+
+    <div class="input-row">
+      <label>Título do Prato *</label>
+      <input type="text" id="form-rec-titulo" placeholder="Ex: Strogonoff de Frango, Panqueca Fit..."/>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Categoria</label>
+        <select id="form-rec-categoria">
+          <option value="cafe">☕ Café da Manhã</option>
+          <option value="almoco" selected>🍽️ Almoço</option>
+          <option value="jantar">🍲 Jantar</option>
+          <option value="lanche">🥪 Lanche</option>
+          <option value="sobremesa">🍰 Sobremesa</option>
+        </select>
+      </div>
+      <div>
+        <label>Tempo de Preparo (min)</label>
+        <input type="number" id="form-rec-tempo" placeholder="30" value="30"/>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Porções</label>
+        <input type="number" id="form-rec-porcoes" placeholder="4" value="4"/>
+      </div>
+      <div>
+        <label>Custo Estimado (R$)</label>
+        <input type="number" id="form-rec-custo" step="0.01" placeholder="35.00"/>
+      </div>
+    </div>
+
+    <div class="input-row">
+      <label>Ingredientes (1 por linha, ex: 1 kg Peito de Frango (carnes))</label>
+      <textarea id="form-rec-ingredientes" rows="4" placeholder="1 kg Peito de Frango (carnes)&#10;2 cx Creme de Leite (laticinios)&#10;1 sachê Molho de Tomate (mercearia)"></textarea>
+    </div>
+
+    <div class="input-row">
+      <label>Modo de Preparo</label>
+      <textarea id="form-rec-modo" rows="3" placeholder="Passo a passo simples para quem for cozinhar na família..."></textarea>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <button type="button" class="btn btn-g" style="padding:12px; font-weight:700;" onclick="salvarReceitaModal()">
+        💾 Salvar Receita
+      </button>
+      <button type="button" class="btn" onclick="closeM('m-form-receita')">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DEFINIR REFEIÇÃO NO CARDÁPIO (Etapa 7) -->
+<div class="modal-bg" id="m-definir-refeicao">
+  <div class="modal" style="max-width:440px; max-height:85vh; overflow-y:auto; padding:16px;">
+    <span class="modal-close" onclick="closeM('m-definir-refeicao')">×</span>
+    <h3 class="modal-title" id="def-ref-modal-title" style="margin-bottom:12px;">🍽️ Definir Refeição</h3>
+
+    <input type="hidden" id="def-ref-dia"/>
+    <input type="hidden" id="def-ref-turno"/>
+
+    <div class="input-row">
+      <label>Escolher da Caixa de Receitas</label>
+      <select id="def-ref-receita-select"></select>
+    </div>
+
+    <div class="input-row">
+      <label>Ou Digitar Prato Personalizado</label>
+      <input type="text" id="def-ref-prato-livre" placeholder="Ex: Omelete de Queijo com Tomate"/>
+    </div>
+
+    <div class="input-row">
+      <label>Ingredientes Extras para Comprar (separados por vírgula)</label>
+      <input type="text" id="def-ref-extras" placeholder="Ex: Queijo Minas, Tomate, Orégano"/>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <button type="button" class="btn btn-g" style="padding:12px; font-weight:700;" onclick="salvarDefinicaoRefeicaoModal()">
+        ✅ Confirmar no Cardápio
+      </button>
+      <button type="button" class="btn" onclick="closeM('m-definir-refeicao')">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COFRE DE DOCUMENTOS DA FAMÍLIA (Etapa 7) -->
+<div class="modal-bg" id="m-documentos-familia">
+  <div class="modal" style="max-width:560px; max-height:88vh; display:flex; flex-direction:column; padding:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:22px;">📂</span>
+        <div>
+          <h3 class="modal-title" style="margin:0; font-size:17px;">Cofre de Documentos</h3>
+          <p style="margin:0; font-size:11px; color:var(--muted);">4 pastas protegidas com controle de privacidade e alertas</p>
+        </div>
+      </div>
+      <span class="modal-close" style="position:static; margin:0;" onclick="fecharModalDocumentosFamilia()">×</span>
+    </div>
+
+    <!-- BARRA DE BUSCA E AÇÃO NOVO DOCUMENTO -->
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <input type="text" id="docs-busca-input" placeholder="🔍 Buscar documento por título ou número..." style="flex:1; padding:8px 10px; font-size:13px; border-radius:8px; border:1px solid var(--border);" oninput="renderDocumentosFamiliaModal(pastaDocumentosAtiva)"/>
+      <button type="button" class="btn btn-primary" style="padding:8px 12px; font-size:12px; font-weight:700; white-space:nowrap;" onclick="abrirModalNovoDocumento()">
+        + Novo Doc
+      </button>
+    </div>
+
+    <!-- PÍLULAS DAS 4 PASTAS PADRÃO -->
+    <div id="docs-pastas-pills" style="display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px;"></div>
+
+    <!-- BANNER DE ALERTAS DE VENCIMENTO -->
+    <div id="docs-banner-alertas" style="display:none;"></div>
+
+    <!-- LISTA ROLANTE DE DOCUMENTOS -->
+    <div id="docs-lista-container" style="flex:1; overflow-y:auto; padding-right:4px;"></div>
+  </div>
+</div>
+
+<!-- MODAL FORMULÁRIO DE DOCUMENTO (Etapa 7) -->
+<div class="modal-bg" id="m-form-documento">
+  <div class="modal" style="max-width:460px; max-height:85vh; overflow-y:auto; padding:16px;">
+    <span class="modal-close" onclick="closeM('m-form-documento')">×</span>
+    <h3 class="modal-title" id="form-doc-modal-title" style="margin-bottom:12px;">✨ Novo Documento Familiar</h3>
+
+    <input type="hidden" id="form-doc-id"/>
+
+    <div class="input-row">
+      <label>Título do Documento *</label>
+      <input type="text" id="form-doc-titulo" placeholder="Ex: Certidão de Nascimento, Apólice do Seguro"/>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Pasta Padrão</label>
+        <select id="form-doc-pasta">
+          <option value="privado">🔒 Privado (Dono & Admin)</option>
+          <option value="educacao">🎓 Educação & Escola</option>
+          <option value="casa">🏠 Casa & Veículos</option>
+          <option value="familia" selected>👨‍👩‍👧 Saúde & Família</option>
+        </select>
+      </div>
+      <div>
+        <label>Tipo de Arquivo</label>
+        <select id="form-doc-tipo">
+          <option value="pdf">PDF</option>
+          <option value="imagem">Imagem / Foto</option>
+          <option value="texto">Texto / Certificado</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Número do Doc (Opcional)</label>
+        <input type="text" id="form-doc-numero" placeholder="Ex: RG, CPF, Nº Apólice"/>
+      </div>
+      <div>
+        <label>Data de Validade (Opcional)</label>
+        <input type="date" id="form-doc-validade"/>
+      </div>
+    </div>
+
+    <div class="input-row">
+      <label>Anexar Arquivo (Simulação Local)</label>
+      <input type="file" id="form-doc-arquivo" style="font-size:12px;" onchange="aoSelecionarArquivoDocumento(event)"/>
+    </div>
+
+    <div class="input-row">
+      <label>Observações / Onde está a via física?</label>
+      <textarea id="form-doc-observacoes" rows="2" placeholder="Ex: Guardado no cofre da gaveta, via original física..."></textarea>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <button type="button" class="btn btn-g" style="padding:12px; font-weight:700;" onclick="salvarDocumentoModal()">
+        💾 Arquivar Documento
+      </button>
+      <button type="button" class="btn" onclick="closeM('m-form-documento')">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GRADE HORÁRIA SEMANAL (Etapa 7) -->
+<div class="modal-bg" id="m-grade-horaria">
+  <div class="modal" style="max-width:560px; max-height:88vh; display:flex; flex-direction:column; padding:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:22px;">🕒</span>
+        <div>
+          <h3 class="modal-title" style="margin:0; font-size:17px;">Grade Horária Semanal</h3>
+          <p style="margin:0; font-size:11px; color:var(--muted);">Aulas, idiomas, esportes e semanas alternadas (A/B)</p>
+        </div>
+      </div>
+      <span class="modal-close" style="position:static; margin:0;" onclick="fecharModalGradeHoraria()">×</span>
+    </div>
+
+    <!-- BARRA DE AÇÃO E NOVO ITEM -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <span style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase;">Rotina Recorrente</span>
+      <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:11px; font-weight:700;" onclick="abrirModalNovoItemGrade()">
+        + Nova Atividade
+      </button>
+    </div>
+
+    <!-- PÍLULAS DE FILTRO POR MEMBRO -->
+    <div id="grade-membros-pills" style="display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:6px;"></div>
+
+    <!-- PÍLULAS DE FILTRO POR SEMANA ALTERNADA -->
+    <div id="grade-semanas-pills" style="display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px;"></div>
+
+    <!-- CONTAINER DA GRADE -->
+    <div id="grade-horaria-container" style="flex:1; overflow-y:auto; padding-right:4px;"></div>
+  </div>
+</div>
+
+<!-- MODAL FORMULÁRIO DE ITEM DA GRADE (Etapa 7) -->
+<div class="modal-bg" id="m-form-grade-horaria">
+  <div class="modal" style="max-width:440px; max-height:85vh; overflow-y:auto; padding:16px;">
+    <span class="modal-close" onclick="closeM('m-form-grade-horaria')">×</span>
+    <h3 class="modal-title" id="form-grade-modal-title" style="margin-bottom:12px;">✨ Nova Atividade na Grade</h3>
+
+    <input type="hidden" id="form-grade-id"/>
+
+    <div class="input-row">
+      <label>Título da Atividade / Matéria *</label>
+      <input type="text" id="form-grade-titulo" placeholder="Ex: Aula de Robótica, Natação Infantil, Inglês"/>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Membro da Família</label>
+        <select id="form-grade-membro"></select>
+      </div>
+      <div>
+        <label>Dia da Semana</label>
+        <select id="form-grade-dia">
+          <option value="segunda" selected>Segunda-feira</option>
+          <option value="terca">Terça-feira</option>
+          <option value="quarta">Quarta-feira</option>
+          <option value="quinta">Quinta-feira</option>
+          <option value="sexta">Sexta-feira</option>
+          <option value="sabado">Sábado</option>
+          <option value="domingo">Domingo</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Hora Início *</label>
+        <input type="time" id="form-grade-inicio" value="08:00"/>
+      </div>
+      <div>
+        <label>Hora Fim</label>
+        <input type="time" id="form-grade-fim" value="09:00"/>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" class="input-row">
+      <div>
+        <label>Local / Sala (Opcional)</label>
+        <input type="text" id="form-grade-local" placeholder="Ex: Sala Maker, Quadra 2"/>
+      </div>
+      <div>
+        <label>Semana Alternada</label>
+        <select id="form-grade-semana">
+          <option value="todas" selected>Todas as Semanas</option>
+          <option value="semana_a">Apenas Semana A</option>
+          <option value="semana_b">Apenas Semana B</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <button type="button" class="btn btn-g" style="padding:12px; font-weight:700;" onclick="salvarItemGradeModal()">
+        💾 Salvar Atividade
+      </button>
+      <button type="button" class="btn" onclick="closeM('m-form-grade-horaria')">
         Cancelar
       </button>
     </div>

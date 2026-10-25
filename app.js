@@ -99,6 +99,11 @@ let S = {
   // Super-App Familiar v2.0 (Etapa 6 - Mensagens da Família & Contatos)
   mensagensFamilia: [],
   contatosFamilia: [],
+  // Super-App Familiar v2.0 (Etapa 7 - Refeições, Receitas, Documentos & Grade Horária)
+  receitasCulinarias: [],
+  cardapioSemanal: [],
+  documentosFamilia: [],
+  gradeHoraria: [],
   chat:[],
   apiKey:'',
   onboardingDone:false
@@ -863,6 +868,257 @@ function migrarParaUpgradeFamiliarV2() {
         criadoPor: 'm_2',
         criadoEm: agoraIsoEtapa6,
         atualizadoEm: agoraIsoEtapa6
+      }
+    ];
+  }
+
+  // 14. Caixa de Receitas Culinárias da Família (Etapa 7)
+  const agoraIsoEtapa7 = new Date().toISOString();
+  const cIdEtapa7 = S.circuloAtivoId || 'circ_1';
+  const mIdEtapa7 = S.membroAtivoId || 'm_1';
+
+  if (!Array.isArray(S.receitasCulinarias) || S.receitasCulinarias.length === 0) {
+    S.receitasCulinarias = [
+      {
+        id: 'rec_padrao_1',
+        circuloId: cIdEtapa7,
+        titulo: 'Strogonoff de Frango Especial',
+        categoria: 'almoco',
+        tempoPreparoMin: 35,
+        porcoes: 4,
+        ingredientes: [
+          { nome: 'Peito de Frango', quantidade: '1', unidade: 'kg', corredor: 'carnes' },
+          { nome: 'Creme de Leite', quantidade: '2', unidade: 'cx', corredor: 'laticinios' },
+          { nome: 'Molho de Tomate', quantidade: '1', unidade: 'sachê', corredor: 'mercearia' },
+          { nome: 'Champignon', quantidade: '100', unidade: 'g', corredor: 'mercearia' },
+          { nome: 'Batata Palha', quantidade: '1', unidade: 'pct', corredor: 'mercearia' }
+        ],
+        modoPreparo: 'Corte o frango em cubos, doure com cebola e alho. Adicione o molho, champignon e por fim o creme de leite em fogo baixo.',
+        custoEstimado: 45.0,
+        criadoPor: mIdEtapa7,
+        criadoEm: agoraIsoEtapa7
+      },
+      {
+        id: 'rec_padrao_2',
+        circuloId: cIdEtapa7,
+        titulo: 'Panqueca de Banana com Aveia',
+        categoria: 'cafe',
+        tempoPreparoMin: 15,
+        porcoes: 2,
+        ingredientes: [
+          { nome: 'Banana Prata', quantidade: '2', unidade: 'un', corredor: 'hortifruti' },
+          { nome: 'Ovo', quantidade: '2', unidade: 'un', corredor: 'laticinios' },
+          { nome: 'Farinha de Aveia', quantidade: '4', unidade: 'colheres', corredor: 'mercearia' },
+          { nome: 'Canela em Pó', quantidade: '1', unidade: 'pitada', corredor: 'mercearia' }
+        ],
+        modoPreparo: 'Amasse as bananas, misture os ovos batidos e a aveia. Asse em frigideira antiaderente levemente untada.',
+        custoEstimado: 8.5,
+        criadoPor: 'm_2',
+        criadoEm: agoraIsoEtapa7
+      },
+      {
+        id: 'rec_padrao_3',
+        circuloId: cIdEtapa7,
+        titulo: 'Sopa Reconfortante de Legumes',
+        categoria: 'jantar',
+        tempoPreparoMin: 40,
+        porcoes: 4,
+        ingredientes: [
+          { nome: 'Batata Inglesa', quantidade: '3', unidade: 'un', corredor: 'hortifruti' },
+          { nome: 'Cenoura', quantidade: '2', unidade: 'un', corredor: 'hortifruti' },
+          { nome: 'Abobrinha', quantidade: '1', unidade: 'un', corredor: 'hortifruti' },
+          { nome: 'Macarrão Padre Nosso', quantidade: '200', unidade: 'g', corredor: 'mercearia' }
+        ],
+        modoPreparo: 'Cozinhe os legumes picados até ficarem macios. Adicione o macarrão nos minutos finais e acerte o sal.',
+        custoEstimado: 18.0,
+        criadoPor: mIdEtapa7,
+        criadoEm: agoraIsoEtapa7
+      }
+    ];
+  }
+
+  // 15. Cardápio Semanal Familiar (Etapa 7)
+  if (!Array.isArray(S.cardapioSemanal) || S.cardapioSemanal.length === 0) {
+    S.cardapioSemanal = [
+      {
+        id: 'refeicao_segunda_cafe',
+        circuloId: cIdEtapa7,
+        diaSemana: 'segunda',
+        tipoRefeicao: 'cafe',
+        receitaId: 'rec_padrao_2',
+        pratoLivre: 'Panqueca de Banana com Aveia',
+        ingredientesExtras: [],
+        criadoEm: agoraIsoEtapa7,
+        atualizadoEm: agoraIsoEtapa7
+      },
+      {
+        id: 'refeicao_segunda_almoco',
+        circuloId: cIdEtapa7,
+        diaSemana: 'segunda',
+        tipoRefeicao: 'almoco',
+        receitaId: 'rec_padrao_1',
+        pratoLivre: 'Strogonoff de Frango Especial',
+        ingredientesExtras: [
+          { nome: 'Arroz Branco', quantidade: '2', unidade: 'xícara', corredor: 'mercearia' }
+        ],
+        criadoEm: agoraIsoEtapa7,
+        atualizadoEm: agoraIsoEtapa7
+      },
+      {
+        id: 'refeicao_segunda_jantar',
+        circuloId: cIdEtapa7,
+        diaSemana: 'segunda',
+        tipoRefeicao: 'jantar',
+        receitaId: 'rec_padrao_3',
+        pratoLivre: 'Sopa Reconfortante de Legumes',
+        ingredientesExtras: [],
+        criadoEm: agoraIsoEtapa7,
+        atualizadoEm: agoraIsoEtapa7
+      },
+      {
+        id: 'refeicao_quarta_almoco',
+        circuloId: cIdEtapa7,
+        diaSemana: 'quarta',
+        tipoRefeicao: 'almoco',
+        receitaId: null,
+        pratoLivre: 'Peixe Grelhado com Salada Verde',
+        ingredientesExtras: [
+          { nome: 'Filé de Tilápia', quantidade: '800', unidade: 'g', corredor: 'carnes' },
+          { nome: 'Alface Americana', quantidade: '1', unidade: 'maço', corredor: 'hortifruti' },
+          { nome: 'Tomate Cereja', quantidade: '1', unidade: 'cx', corredor: 'hortifruti' }
+        ],
+        criadoEm: agoraIsoEtapa7,
+        atualizadoEm: agoraIsoEtapa7
+      }
+    ];
+  }
+
+  // 16. Cofre de Documentos da Família (Etapa 7)
+  if (!Array.isArray(S.documentosFamilia) || S.documentosFamilia.length === 0) {
+    const dataHoje = new Date();
+    // Gera data de validade daqui a 20 dias (para testar alerta de <= 30 dias)
+    const dataVencendoEmBreve = new Date(dataHoje.getTime() + 20 * 86400000).toISOString().slice(0, 10);
+    // Gera data de validade daqui a 180 dias
+    const dataValidadeLonga = new Date(dataHoje.getTime() + 180 * 86400000).toISOString().slice(0, 10);
+
+    S.documentosFamilia = [
+      {
+        id: 'doc_padrao_1',
+        circuloId: cIdEtapa7,
+        titulo: 'Certidão de Nascimento Dudu',
+        pasta: 'familia',
+        tipoArquivo: 'imagem',
+        conteudoUrlOuBase64: '',
+        numeroDocumento: '123456.01.55.2018.1.0001',
+        dataValidade: '',
+        membroDonoId: mIdEtapa7,
+        visivelParaIds: 'todos',
+        observacoes: 'Via original no cofre físico da gaveta do quarto',
+        criadoEm: agoraIsoEtapa7
+      },
+      {
+        id: 'doc_padrao_2',
+        circuloId: cIdEtapa7,
+        titulo: 'Apólice do Seguro do Carro',
+        pasta: 'casa',
+        tipoArquivo: 'pdf',
+        conteudoUrlOuBase64: '',
+        numeroDocumento: 'AP-987654-BR',
+        dataValidade: dataVencendoEmBreve,
+        membroDonoId: mIdEtapa7,
+        visivelParaIds: 'todos',
+        observacoes: 'Seguradora Porto Seguro - Cobertura completa e guincho 24h',
+        criadoEm: agoraIsoEtapa7
+      },
+      {
+        id: 'doc_padrao_3',
+        circuloId: cIdEtapa7,
+        titulo: 'Matrícula Escolar e Calendário Letivo',
+        pasta: 'educacao',
+        tipoArquivo: 'pdf',
+        conteudoUrlOuBase64: '',
+        numeroDocumento: 'ESC-2026-DUDU',
+        dataValidade: dataValidadeLonga,
+        membroDonoId: 'm_2',
+        visivelParaIds: 'todos',
+        observacoes: 'Ano letivo 2026 - Escola Municipal das Flores',
+        criadoEm: agoraIsoEtapa7
+      },
+      {
+        id: 'doc_padrao_4',
+        circuloId: cIdEtapa7,
+        titulo: 'Contrato de Investimentos / Confidencial',
+        pasta: 'privado',
+        tipoArquivo: 'texto',
+        conteudoUrlOuBase64: '',
+        numeroDocumento: 'INV-PRIV-001',
+        dataValidade: '',
+        membroDonoId: mIdEtapa7,
+        visivelParaIds: [mIdEtapa7],
+        observacoes: 'Documento confidencial do administrador familiar',
+        criadoEm: agoraIsoEtapa7
+      }
+    ];
+  }
+
+  // 17. Grade Horária Semanal / Timetable (Etapa 7)
+  if (!Array.isArray(S.gradeHoraria) || S.gradeHoraria.length === 0) {
+    S.gradeHoraria = [
+      {
+        id: 'grade_padrao_1',
+        circuloId: cIdEtapa7,
+        membroId: 'm_crianca_1',
+        membroNome: 'Dudu',
+        membroCor: '#10B981',
+        titulo: 'Aulas do Ensino Fundamental',
+        diaSemana: 'segunda',
+        horaInicio: '07:30',
+        horaFim: '12:00',
+        local: 'Escola Municipal',
+        semanaAlternada: 'todas',
+        cor: '#10B981'
+      },
+      {
+        id: 'grade_padrao_2',
+        circuloId: cIdEtapa7,
+        membroId: 'm_crianca_1',
+        membroNome: 'Dudu',
+        membroCor: '#10B981',
+        titulo: 'Natação Infantil',
+        diaSemana: 'terca',
+        horaInicio: '15:30',
+        horaFim: '16:30',
+        local: 'Academia Aquática',
+        semanaAlternada: 'todas',
+        cor: '#10B981'
+      },
+      {
+        id: 'grade_padrao_3',
+        circuloId: cIdEtapa7,
+        membroId: 'm_crianca_1',
+        membroNome: 'Dudu',
+        membroCor: '#10B981',
+        titulo: 'Aulas de Robótica & Inglês',
+        diaSemana: 'quarta',
+        horaInicio: '14:00',
+        horaFim: '15:30',
+        local: 'Sala Maker',
+        semanaAlternada: 'semana_a',
+        cor: '#8B5CF6'
+      },
+      {
+        id: 'grade_padrao_4',
+        circuloId: cIdEtapa7,
+        membroId: mIdEtapa7,
+        membroNome: 'Alex',
+        membroCor: '#5581E3',
+        titulo: 'Treino Funcional',
+        diaSemana: 'segunda',
+        horaInicio: '06:30',
+        horaFim: '07:30',
+        local: 'Parque Central',
+        semanaAlternada: 'todas',
+        cor: '#5581E3'
       }
     ];
   }
@@ -8405,6 +8661,107 @@ function renderMuralInicio() {
       `;
     }
 
+    // Card Especial do Módulo de Refeições & Cardápio da Semana (Etapa 7)
+    if (modDef.id === 'refeicoes' || modDef.id === 'receitas_cul') {
+      const diasSemanaArray = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+      const hojeDiaNome = diasSemanaArray[new Date().getDay()] || 'segunda';
+      const refeicoesHoje = (S.cardapioSemanal || []).filter(r => r.diaSemana === hojeDiaNome && r.circuloId === (S.circuloAtivoId || 'circ_1'));
+      const faltantes = typeof obterIngredientesFaltantesCardapio === 'function' ? obterIngredientesFaltantesCardapio() : [];
+
+      const almocoHoje = refeicoesHoje.find(r => r.tipoRefeicao === 'almoco');
+      const jantarHoje = refeicoesHoje.find(r => r.tipoRefeicao === 'jantar');
+      const destaqueRefeicao = almocoHoje ? `Almoço: ${almocoHoje.pratoLivre || 'Receita da Casa'}` : (jantarHoje ? `Jantar: ${jantarHoje.pratoLivre || 'Receita da Casa'}` : 'Planeje as refeições de hoje');
+
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalRefeicoesFamilia()">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            <span style="font-size:11px; font-weight:700; color:var(--primary);">
+              ${(S.cardapioSemanal || []).length} planejadas
+            </span>
+          </div>
+          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">
+            🍲 ${escapeHtml(destaqueRefeicao)}
+          </p>
+          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <span>🛒 ${faltantes.length > 0 ? `${faltantes.length} itens a comprar` : 'Lista em dia!'}</span>
+            <span>•</span>
+            <span style="color:var(--blue); font-weight:600;">Ver Cardápio →</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Card Especial do Módulo de Cofre de Documentos (Etapa 7)
+    if (modDef.id === 'documentos') {
+      const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+      const mId = mAtivo ? mAtivo.id : (S.membroAtivoId || 'm_1');
+      const docsVisiveis = typeof listarDocumentosVisiveisParaMembro === 'function'
+        ? listarDocumentosVisiveisParaMembro(mId)
+        : (S.documentosFamilia || []);
+      const alertasVencendo = typeof obterAlertasDocumentosVencendo === 'function'
+        ? obterAlertasDocumentosVencendo(30)
+        : [];
+
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalDocumentosFamilia()">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            ${alertasVencendo.length > 0 ? `
+              <span style="background:var(--red); color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">
+                ⚠️ ${alertasVencendo.length} vencendo
+              </span>
+            ` : `
+              <span style="font-size:11px; font-weight:700; color:var(--primary);">${docsVisiveis.length} docs</span>
+            `}
+          </div>
+          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">
+            ${alertasVencendo.length > 0 ? `⚠️ Atenção: ${escapeHtml(alertasVencendo[0].titulo)} vence em breve!` : 'Cofre seguro com 4 pastas da família'}
+          </p>
+          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <span>🔒 Pastas seguras</span>
+            <span>•</span>
+            <span style="color:var(--blue); font-weight:600;">Abrir Cofre →</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Card Especial do Módulo de Grade Horária Semanal (Etapa 7)
+    if (modDef.id === 'horario' || modDef.id === 'grade_horaria') {
+      const diasSemanaArray = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+      const hojeDiaNome = diasSemanaArray[new Date().getDay()] || 'segunda';
+      const itensHoje = typeof listarGradeHorariaFiltrada === 'function'
+        ? listarGradeHorariaFiltrada({ diaSemana: hojeDiaNome })
+        : (S.gradeHoraria || []).filter(g => g.diaSemana === hojeDiaNome);
+
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalGradeHoraria()">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            <span style="font-size:11px; font-weight:700; color:var(--primary);">${itensHoje.length} hoje</span>
+          </div>
+          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">
+            ${itensHoje.length > 0 ? `🕒 Próx: ${escapeHtml(itensHoje[0].titulo)} (${itensHoje[0].horaInicio})` : 'Nenhuma aula/rotina agendada hoje'}
+          </p>
+          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <span>📅 Rotina semanal</span>
+            <span>•</span>
+            <span style="color:var(--blue); font-weight:600;">Ver Grade →</span>
+          </div>
+        </div>
+      `;
+    }
+
     // Cards Padrão do Grid Familiar
     return `
       <div class="modulo-card card" style="cursor:pointer;" onclick="go('${modDef.telaAlvo || 'explorar'}')">
@@ -12532,6 +12889,1618 @@ function copiarTextoContato(texto) {
   }
 }
 
+// ============================================================================
+// SUPER-APP FAMILIAR v2.0 - ETAPA 7:
+// 1. PLANEJADOR DE REFEIÇÕES & CAIXA DE RECEITAS (COM GERAÇÃO DE LISTA DE COMPRAS)
+// 2. COFRE DE DOCUMENTOS DA FAMÍLIA (4 PASTAS PADRÃO COM BLINDAGEM DE PRIVACIDADE)
+// 3. GRADE HORÁRIA SEMANAL / TIMETABLE (COM SUPORTE A SEMANAS ALTERNADAS)
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// MÓDULO 4.6: REFEIÇÕES, RECEITAS CULINÁRIAS E GERAÇÃO DE LISTA DE COMPRAS
+// ----------------------------------------------------------------------------
+
+const DIAS_SEMANA_NOMES = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+const DIAS_SEMANA_LABELS = {
+  segunda: 'Segunda-feira',
+  terca: 'Terça-feira',
+  quarta: 'Quarta-feira',
+  quinta: 'Quinta-feira',
+  sexta: 'Sexta-feira',
+  sabado: 'Sábado',
+  domingo: 'Domingo'
+};
+
+const TURNOS_REFEICAO_LABELS = {
+  cafe: '☕ Café da Manhã',
+  almoco: '🍽️ Almoço',
+  jantar: '🍲 Jantar',
+  lanche: '🥪 Lanche'
+};
+
+let tabRefeicoesAtiva = 'cardapio'; // 'cardapio' | 'receitas'
+
+/**
+ * Salva ou edita uma receita culinária na Caixa de Receitas Familiar.
+ */
+function salvarReceitaCulinaria(dados = {}) {
+  try {
+    const titulo = dados.titulo != null ? String(dados.titulo).trim() : '';
+    if (!titulo) {
+      if (typeof alert === 'function') alert('O título da receita é obrigatório.');
+      return { ok: false, motivo: 'titulo_obrigatorio' };
+    }
+
+    if (!Array.isArray(S.receitasCulinarias)) {
+      S.receitasCulinarias = [];
+    }
+
+    const cId = S.circuloAtivoId || 'circ_1';
+    const membro = obterMembroAtivo();
+    const agoraIso = new Date().toISOString();
+
+    // Normalização dos ingredientes
+    const ingredientes = Array.isArray(dados.ingredientes)
+      ? dados.ingredientes.map(ing => ({
+          nome: String(ing.nome || '').trim(),
+          quantidade: String(ing.quantidade || '1').trim(),
+          unidade: String(ing.unidade || 'un').trim(),
+          corredor: (ing.corredor && CATEGORIAS_MERCADO[ing.corredor]) ? ing.corredor : 'mercearia'
+        })).filter(ing => !!ing.nome)
+      : [];
+
+    let receita = null;
+    let operacao = 'insert';
+
+    if (dados.id) {
+      const idx = S.receitasCulinarias.findIndex(r => r.id === dados.id);
+      if (idx >= 0) {
+        receita = S.receitasCulinarias[idx];
+        receita.titulo = titulo;
+        receita.categoria = dados.categoria || receita.categoria || 'almoco';
+        receita.tempoPreparoMin = Number(dados.tempoPreparoMin) > 0 ? Number(dados.tempoPreparoMin) : 30;
+        receita.porcoes = Number(dados.porcoes) > 0 ? Number(dados.porcoes) : 4;
+        receita.ingredientes = ingredientes;
+        receita.modoPreparo = dados.modoPreparo != null ? String(dados.modoPreparo).trim() : '';
+        receita.custoEstimado = Number(dados.custoEstimado) >= 0 ? Number(dados.custoEstimado) : 0;
+        receita.atualizadoEm = agoraIso;
+        operacao = 'update';
+      }
+    }
+
+    if (!receita) {
+      receita = {
+        id: dados.id || ('rec_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7)),
+        circuloId: cId,
+        titulo,
+        categoria: dados.categoria || 'almoco',
+        tempoPreparoMin: Number(dados.tempoPreparoMin) > 0 ? Number(dados.tempoPreparoMin) : 30,
+        porcoes: Number(dados.porcoes) > 0 ? Number(dados.porcoes) : 4,
+        ingredientes,
+        modoPreparo: dados.modoPreparo != null ? String(dados.modoPreparo).trim() : '',
+        custoEstimado: Number(dados.custoEstimado) >= 0 ? Number(dados.custoEstimado) : 0,
+        criadoPor: membro ? membro.id : (S.membroAtivoId || 'm_1'),
+        criadoEm: agoraIso
+      };
+      S.receitasCulinarias.push(receita);
+    }
+
+    adicionarNaFilaSync('receitas_culinarias', operacao, receita);
+
+    registrarNotificacaoFamilia({
+      tipo: 'geral',
+      titulo: '📖 Receita Salva',
+      texto: `${receita.titulo} (${receita.tempoPreparoMin} min)`,
+      icone: '📖'
+    });
+
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderRefeicoesFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true, receita };
+  } catch (err) {
+    console.error('Erro ao salvar receita culinária:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Exclui uma receita da Caixa de Receitas.
+ */
+function excluirReceitaCulinaria(receitaId) {
+  try {
+    const idx = (S.receitasCulinarias || []).findIndex(r => r.id === receitaId);
+    if (idx < 0) {
+      return { ok: false, motivo: 'receita_nao_encontrada' };
+    }
+
+    S.receitasCulinarias.splice(idx, 1);
+    adicionarNaFilaSync('receitas_culinarias', 'delete', { id: receitaId });
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderRefeicoesFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao excluir receita culinária:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Define ou atualiza uma refeição no Cardápio Semanal (segunda a domingo, cafe/almoco/jantar).
+ */
+function definirRefeicaoCardapio(params = {}) {
+  try {
+    const diaSemana = String(params.diaSemana || '').toLowerCase().trim();
+    const tipoRefeicao = String(params.tipoRefeicao || '').toLowerCase().trim();
+    const receitaId = params.receitaId || null;
+    let pratoLivre = params.pratoLivre != null ? String(params.pratoLivre).trim() : '';
+
+    if (!diaSemana || !tipoRefeicao) {
+      return { ok: false, motivo: 'dia_ou_turno_invalido' };
+    }
+
+    let receitaRef = null;
+    if (receitaId) {
+      receitaRef = (S.receitasCulinarias || []).find(r => r.id === receitaId);
+      if (receitaRef && !pratoLivre) {
+        pratoLivre = receitaRef.titulo;
+      }
+    }
+
+    if (!pratoLivre && !receitaId) {
+      if (typeof alert === 'function') alert('Informe o nome do prato ou selecione uma receita da caixa.');
+      return { ok: false, motivo: 'prato_obrigatorio' };
+    }
+
+    if (!Array.isArray(S.cardapioSemanal)) {
+      S.cardapioSemanal = [];
+    }
+
+    const cId = S.circuloAtivoId || 'circ_1';
+    const agoraIso = new Date().toISOString();
+
+    const ingredientesExtras = Array.isArray(params.ingredientesExtras)
+      ? params.ingredientesExtras.map(i => ({
+          nome: String(i.nome || '').trim(),
+          quantidade: String(i.quantidade || '1').trim(),
+          unidade: String(i.unidade || 'un').trim(),
+          corredor: (i.corredor && CATEGORIAS_MERCADO[i.corredor]) ? i.corredor : 'mercearia'
+        })).filter(i => !!i.nome)
+      : [];
+
+    const slotExistente = S.cardapioSemanal.find(r =>
+      r.circuloId === cId && r.diaSemana === diaSemana && r.tipoRefeicao === tipoRefeicao
+    );
+
+    let refeicaoSlot = null;
+    let operacao = 'insert';
+
+    if (slotExistente) {
+      refeicaoSlot = slotExistente;
+      refeicaoSlot.receitaId = receitaId;
+      refeicaoSlot.pratoLivre = pratoLivre;
+      refeicaoSlot.ingredientesExtras = ingredientesExtras;
+      refeicaoSlot.atualizadoEm = agoraIso;
+      operacao = 'update';
+    } else {
+      refeicaoSlot = {
+        id: `refeicao_${diaSemana}_${tipoRefeicao}_${Date.now().toString(36)}`,
+        circuloId: cId,
+        diaSemana,
+        tipoRefeicao,
+        receitaId,
+        pratoLivre,
+        ingredientesExtras,
+        criadoEm: agoraIso,
+        atualizadoEm: agoraIso
+      };
+      S.cardapioSemanal.push(refeicaoSlot);
+    }
+
+    adicionarNaFilaSync('cardapio_semanal', operacao, refeicaoSlot);
+
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderRefeicoesFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true, refeicao: refeicaoSlot };
+  } catch (err) {
+    console.error('Erro ao definir refeição do cardápio:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Remove uma refeição agendada do cardápio semanal.
+ */
+function limparRefeicaoCardapio(diaSemana, tipoRefeicao) {
+  try {
+    const cId = S.circuloAtivoId || 'circ_1';
+    const dLimpo = String(diaSemana || '').toLowerCase().trim();
+    const tLimpo = String(tipoRefeicao || '').toLowerCase().trim();
+
+    const idx = (S.cardapioSemanal || []).findIndex(r =>
+      r.circuloId === cId && r.diaSemana === dLimpo && r.tipoRefeicao === tLimpo
+    );
+
+    if (idx < 0) {
+      return { ok: false, motivo: 'refeicao_nao_encontrada' };
+    }
+
+    const removido = S.cardapioSemanal.splice(idx, 1)[0];
+    adicionarNaFilaSync('cardapio_semanal', 'delete', { id: removido.id });
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderRefeicoesFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao limpar refeição do cardápio:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Varre todo o cardápio da semana e retorna os ingredientes necessários
+ * que ainda NÃO estão comprados e NÃO estão pendentes na lista de compras.
+ */
+function obterIngredientesFaltantesCardapio() {
+  try {
+    const cId = S.circuloAtivoId || 'circ_1';
+    const refeicoesSemana = (S.cardapioSemanal || []).filter(r => r.circuloId === cId);
+
+    // 1. Coleta todos os ingredientes das receitas vinculadas e extras
+    const todosIngredientes = [];
+    refeicoesSemana.forEach(ref => {
+      if (ref.receitaId) {
+        const rec = (S.receitasCulinarias || []).find(r => r.id === ref.receitaId);
+        if (rec && Array.isArray(rec.ingredientes)) {
+          rec.ingredientes.forEach(ing => {
+            todosIngredientes.push({
+              nome: ing.nome,
+              quantidade: ing.quantidade || '1',
+              unidade: ing.unidade || 'un',
+              corredor: ing.corredor || 'mercearia',
+              origem: rec.titulo
+            });
+          });
+        }
+      }
+      if (Array.isArray(ref.ingredientesExtras)) {
+        ref.ingredientesExtras.forEach(ing => {
+          todosIngredientes.push({
+            nome: ing.nome,
+            quantidade: ing.quantidade || '1',
+            unidade: ing.unidade || 'un',
+            corredor: ing.corredor || 'mercearia',
+            origem: ref.pratoLivre || 'Cardápio Semanal'
+          });
+        });
+      }
+    });
+
+    // 2. Coleta itens já presentes nas listas de compras ativas (pendentes ou comprados)
+    const nomesJaNaLista = new Set();
+    (S.listas || []).filter(l => l.tipo === 'compras' && l.circuloId === cId).forEach(l => {
+      (l.itens || []).forEach(it => {
+        if (it && it.nome) {
+          nomesJaNaLista.add(it.nome.toLowerCase().trim());
+        }
+      });
+    });
+
+    // 3. Filtra apenas os ingredientes faltantes
+    const faltantes = [];
+    const nomesFaltantesAdicionados = new Set();
+
+    todosIngredientes.forEach(ing => {
+      const nomeLower = (ing.nome || '').toLowerCase().trim();
+      if (!nomeLower) return;
+
+      if (!nomesJaNaLista.has(nomeLower) && !nomesFaltantesAdicionados.has(nomeLower)) {
+        faltantes.push(ing);
+        nomesFaltantesAdicionados.add(nomeLower);
+      }
+    });
+
+    return faltantes;
+  } catch (err) {
+    console.error('Erro ao obter ingredientes faltantes do cardápio:', err);
+    return [];
+  }
+}
+
+/**
+ * Gera automaticamente uma Lista de Compras completa com base nos ingredientes
+ * das receitas agendadas no Cardápio Semanal, categorizando cada item no seu corredor correto
+ * e evitando duplicações desnecessárias.
+ */
+function gerarListaComprasDoCardapio(opcoes = {}) {
+  try {
+    const cId = S.circuloAtivoId || 'circ_1';
+    const refeicoesSemana = (S.cardapioSemanal || []).filter(r => r.circuloId === cId);
+
+    if (refeicoesSemana.length === 0) {
+      if (typeof alert === 'function') alert('O cardápio da semana está vazio. Adicione pratos e receitas primeiro!');
+      return { ok: false, motivo: 'cardapio_vazio' };
+    }
+
+    if (!Array.isArray(S.listas)) {
+      S.listas = [];
+    }
+
+    // Localiza ou cria a lista de mercado de destino
+    let listaMercado = (S.listas || []).find(l => l.tipo === 'compras' && l.circuloId === cId);
+    if (!listaMercado) {
+      listaMercado = criarListaFamiliar({
+        titulo: '🛒 Mercado (Cardápio da Semana)',
+        tipo: 'compras',
+        icone: '🛒',
+        cor: '#10B981'
+      });
+    }
+
+    if (!listaMercado) {
+      return { ok: false, motivo: 'erro_criar_lista' };
+    }
+
+    // Coleta todos os ingredientes da semana
+    const ingredientesParaAdicionar = [];
+    refeicoesSemana.forEach(ref => {
+      if (ref.receitaId) {
+        const rec = (S.receitasCulinarias || []).find(r => r.id === ref.receitaId);
+        if (rec && Array.isArray(rec.ingredientes)) {
+          rec.ingredientes.forEach(ing => {
+            if (ing && ing.nome) ingredientesParaAdicionar.push(ing);
+          });
+        }
+      }
+      if (Array.isArray(ref.ingredientesExtras)) {
+        ref.ingredientesExtras.forEach(ing => {
+          if (ing && ing.nome) ingredientesParaAdicionar.push(ing);
+        });
+      }
+    });
+
+    let totalAdicionados = 0;
+    const itensAdicionados = [];
+
+    ingredientesParaAdicionar.forEach(ing => {
+      const nomeLimpo = (ing.nome || '').trim();
+      if (!nomeLimpo) return;
+
+      const jaExistePendente = (listaMercado.itens || []).some(
+        it => !it.comprado && it.nome.toLowerCase() === nomeLimpo.toLowerCase()
+      );
+
+      // Regra de ouro: se já estiver pendente na lista, evita duplicar item idêntico
+      if (jaExistePendente && !opcoes.forcarDuplicatas) {
+        return;
+      }
+
+      const qtdNum = parseFloat(String(ing.quantidade).replace(',', '.')) || 1;
+      const corredor = (ing.corredor && CATEGORIAS_MERCADO[ing.corredor]) ? ing.corredor : 'mercearia';
+
+      const itemCriado = adicionarItemLista(listaMercado.id, {
+        nome: nomeLimpo,
+        qtd: qtdNum,
+        unidade: ing.unidade || 'un',
+        categoria: corredor,
+        precoEstimado: 0
+      });
+
+      if (itemCriado) {
+        totalAdicionados++;
+        itensAdicionados.push(itemCriado);
+      }
+    });
+
+    registrarNotificacaoFamilia({
+      tipo: 'listas',
+      titulo: '🛒 Lista de Compras Atualizada',
+      texto: `${totalAdicionados} ingrediente(s) do cardápio adicionado(s) na lista "${listaMercado.titulo}".`,
+      icone: '🛒'
+    });
+
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderRefeicoesFamiliaModal();
+      renderMuralInicio();
+      if (typeof renderListas === 'function') renderListas();
+    }
+
+    return {
+      ok: true,
+      listaId: listaMercado.id,
+      listaTitulo: listaMercado.titulo,
+      totalAdicionados,
+      itensAdicionados
+    };
+  } catch (err) {
+    console.error('Erro ao gerar lista de compras do cardápio:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// MÓDULO 4.7 & 5.5: COFRE DE DOCUMENTOS DA FAMÍLIA (4 PASTAS COM RLS/PRIVACIDADE)
+// ----------------------------------------------------------------------------
+
+const PASTAS_DOCUMENTOS_PADRAO = [
+  { id: 'privado', nome: '🔒 Privado (Dono & Admin)', icone: '🔒', cor: '#EF4444', desc: 'Contratos, finanças e dados confidenciais' },
+  { id: 'educacao', nome: '🎓 Educação & Escola', icone: '🎓', cor: '#8B5CF6', desc: 'Boletins, matrículas e certificados' },
+  { id: 'casa', nome: '🏠 Casa & Veículos', icone: '🏠', cor: '#F59E0B', desc: 'Apólices, IPVA, escrituras e manuais' },
+  { id: 'familia', nome: '👨‍👩‍👧 Saúde & Família', icone: '👨‍👩‍👧', cor: '#10B981', desc: 'Vacinas, certidões, RG, passaportes e exames' }
+];
+
+let pastaDocumentosAtiva = 'todas';
+
+/**
+ * Salva ou atualiza um documento no cofre familiar.
+ * Aplica regra inegociável de segurança: documentos da pasta 'privado'
+ * NUNCA podem ter permissão concedida a membros com papel 'crianca'.
+ */
+function salvarDocumentoFamilia(dados = {}) {
+  try {
+    const titulo = dados.titulo != null ? String(dados.titulo).trim() : '';
+    if (!titulo) {
+      if (typeof alert === 'function') alert('O título do documento é obrigatório.');
+      return { ok: false, motivo: 'titulo_obrigatorio' };
+    }
+
+    const pastaValida = ['privado', 'educacao', 'casa', 'familia'].includes(dados.pasta)
+      ? dados.pasta
+      : 'familia';
+
+    if (!Array.isArray(S.documentosFamilia)) {
+      S.documentosFamilia = [];
+    }
+
+    const cId = S.circuloAtivoId || 'circ_1';
+    const membro = obterMembroAtivo();
+    const agoraIso = new Date().toISOString();
+
+    // Sanitização de visibilidade: se a pasta for privada, blinda 100% contra crianças
+    let visivelParaIds = dados.visivelParaIds;
+    if (pastaValida === 'privado') {
+      const criancasIds = (S.membrosPerfil || []).filter(m => m.papel === 'crianca').map(m => m.id);
+      if (Array.isArray(visivelParaIds)) {
+        visivelParaIds = visivelParaIds.filter(id => !criancasIds.includes(id));
+      } else {
+        // Se for privado e não tiver lista restrita, restringe ao próprio dono
+        visivelParaIds = [membro ? membro.id : (S.membroAtivoId || 'm_1')];
+      }
+    } else if (!visivelParaIds) {
+      visivelParaIds = 'todos';
+    }
+
+    let doc = null;
+    let operacao = 'insert';
+
+    if (dados.id) {
+      const idx = S.documentosFamilia.findIndex(d => d.id === dados.id);
+      if (idx >= 0) {
+        doc = S.documentosFamilia[idx];
+        doc.titulo = titulo;
+        doc.pasta = pastaValida;
+        doc.tipoArquivo = dados.tipoArquivo || doc.tipoArquivo || 'pdf';
+        doc.conteudoUrlOuBase64 = dados.conteudoUrlOuBase64 || doc.conteudoUrlOuBase64 || '';
+        doc.numeroDocumento = dados.numeroDocumento != null ? String(dados.numeroDocumento).trim() : '';
+        doc.dataValidade = dados.dataValidade != null ? String(dados.dataValidade).trim() : '';
+        doc.visivelParaIds = visivelParaIds;
+        doc.observacoes = dados.observacoes != null ? String(dados.observacoes).trim() : '';
+        doc.atualizadoEm = agoraIso;
+        operacao = 'update';
+      }
+    }
+
+    if (!doc) {
+      doc = {
+        id: dados.id || ('doc_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7)),
+        circuloId: cId,
+        titulo,
+        pasta: pastaValida,
+        tipoArquivo: dados.tipoArquivo || 'pdf',
+        conteudoUrlOuBase64: dados.conteudoUrlOuBase64 || '',
+        numeroDocumento: dados.numeroDocumento != null ? String(dados.numeroDocumento).trim() : '',
+        dataValidade: dados.dataValidade != null ? String(dados.dataValidade).trim() : '',
+        membroDonoId: dados.membroDonoId || (membro ? membro.id : (S.membroAtivoId || 'm_1')),
+        visivelParaIds,
+        observacoes: dados.observacoes != null ? String(dados.observacoes).trim() : '',
+        criadoEm: agoraIso
+      };
+      S.documentosFamilia.push(doc);
+    }
+
+    adicionarNaFilaSync('documentos', operacao, doc);
+
+    // Registra notificação familiar apenas se o documento NÃO for privado
+    if (doc.pasta !== 'privado') {
+      registrarNotificacaoFamilia({
+        tipo: 'documentos',
+        titulo: '📂 Novo Documento Familiar',
+        texto: `${doc.titulo} arquivado na pasta ${doc.pasta}.`,
+        icone: '📂'
+      });
+    }
+
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderDocumentosFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true, documento: doc };
+  } catch (err) {
+    console.error('Erro ao salvar documento da família:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Exclui um documento do cofre familiar.
+ */
+function excluirDocumentoFamilia(docId) {
+  try {
+    const idx = (S.documentosFamilia || []).findIndex(d => d.id === docId);
+    if (idx < 0) {
+      return { ok: false, motivo: 'documento_nao_encontrado' };
+    }
+
+    S.documentosFamilia.splice(idx, 1);
+    adicionarNaFilaSync('documentos', 'delete', { id: docId });
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderDocumentosFamiliaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao excluir documento:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Lista todos os documentos visíveis para um membro específico no círculo familiar.
+ * POLÍTICA DE SEGURANÇA ESTRITA:
+ * - Se membro.papel === 'crianca': 100% dos documentos da pasta 'privado' são ocultados.
+ * - Documentos da pasta 'privado' são visíveis apenas para o próprio autor ou para administradores.
+ * - Pastas públicas ('educacao', 'casa', 'familia') são compartilhadas com todos os membros.
+ */
+function listarDocumentosVisiveisParaMembro(membroId, filtroPasta = 'todas', busca = '') {
+  try {
+    const cId = S.circuloAtivoId || 'circ_1';
+    const mId = membroId || S.membroAtivoId || 'm_1';
+    const membro = (S.membrosPerfil || []).find(m => m.id === mId) || { id: mId, papel: 'membro' };
+
+    const termoBusca = (busca || '').toLowerCase().trim();
+
+    return (S.documentosFamilia || []).filter(doc => {
+      if (doc.circuloId !== cId) return false;
+
+      // 1. Verificação de Privacidade e Papel
+      if (doc.pasta === 'privado') {
+        // Criança NUNCA pode ver documentos privados
+        if (membro.papel === 'crianca') {
+          return false;
+        }
+        // Apenas o dono ou um admin pode ver documentos privados
+        const ehDono = doc.membroDonoId === membro.id;
+        const ehAdmin = membro.papel === 'admin';
+        if (!ehDono && !ehAdmin) {
+          return false;
+        }
+      } else {
+        // Pastas educacao, casa, familia: verifica se não foi excluído explicitamente
+        if (Array.isArray(doc.visivelParaIds) && !doc.visivelParaIds.includes(membro.id)) {
+          return false;
+        }
+      }
+
+      // 2. Filtro de pasta
+      if (filtroPasta && filtroPasta !== 'todas') {
+        if (doc.pasta !== filtroPasta) return false;
+      }
+
+      // 3. Filtro textual de busca
+      if (termoBusca) {
+        const tit = (doc.titulo || '').toLowerCase();
+        const num = (doc.numeroDocumento || '').toLowerCase();
+        const obs = (doc.observacoes || '').toLowerCase();
+        if (!tit.includes(termoBusca) && !num.includes(termoBusca) && !obs.includes(termoBusca)) {
+          return false;
+        }
+      }
+
+      return true;
+    }).sort((a, b) => new Date(b.criadoEm || 0).getTime() - new Date(a.criadoEm || 0).getTime());
+  } catch (err) {
+    console.error('Erro ao listar documentos visíveis:', err);
+    return [];
+  }
+}
+
+/**
+ * Retorna documentos que estão vencendo nos próximos N dias (padrão: 30 dias)
+ * ou que já se encontram vencidos.
+ */
+function obterAlertasDocumentosVencendo(diasAntecedencia = 30) {
+  try {
+    const mAtivo = obterMembroAtivo();
+    const docs = listarDocumentosVisiveisParaMembro(mAtivo ? mAtivo.id : null);
+    // Data base consistente em ISO para evitar divergências de fuso horário
+    const hojeStr = new Date().toISOString().slice(0, 10);
+    const hoje = new Date(hojeStr + 'T00:00:00');
+
+    const alertas = [];
+
+    docs.forEach(doc => {
+      if (!doc.dataValidade) return;
+      const dataVal = new Date(doc.dataValidade + 'T00:00:00');
+      if (isNaN(dataVal.getTime())) return;
+
+      const diffMs = dataVal.getTime() - hoje.getTime();
+      const diasRestantes = Math.round(diffMs / 86400000);
+
+      if (diasRestantes <= diasAntecedencia) {
+        alertas.push({
+          ...doc,
+          diasRestantes,
+          statusVencimento: diasRestantes < 0 ? 'vencido' : (diasRestantes <= 16 ? 'urgente' : 'proximo')
+        });
+      }
+    });
+
+    return alertas.sort((a, b) => a.diasRestantes - b.diasRestantes);
+  } catch (err) {
+    console.error('Erro ao obter alertas de vencimento:', err);
+    return [];
+  }
+}
+
+// ----------------------------------------------------------------------------
+// MÓDULO 4.8: GRADE HORÁRIA SEMANAL / TIMETABLE (COM SEMANAS ALTERNADAS)
+// ----------------------------------------------------------------------------
+
+let filtroMembroGradeAtivo = 'todos';
+let filtroSemanaAlternadaAtiva = 'todas'; // 'todas' | 'semana_a' | 'semana_b'
+
+/**
+ * Salva ou atualiza uma atividade recorrente na Grade Horária Semanal.
+ */
+function salvarItemGradeHoraria(dados = {}) {
+  try {
+    const titulo = dados.titulo != null ? String(dados.titulo).trim() : '';
+    const membroId = dados.membroId || S.membroAtivoId || 'm_1';
+    const diaSemana = String(dados.diaSemana || 'segunda').toLowerCase().trim();
+    const horaInicio = String(dados.horaInicio || '08:00').trim();
+
+    if (!titulo) {
+      if (typeof alert === 'function') alert('O título da atividade na grade é obrigatório.');
+      return { ok: false, motivo: 'titulo_obrigatorio' };
+    }
+
+    if (!Array.isArray(S.gradeHoraria)) {
+      S.gradeHoraria = [];
+    }
+
+    const cId = S.circuloAtivoId || 'circ_1';
+    const membro = (S.membrosPerfil || []).find(m => m.id === membroId) || obterMembroAtivo() || { id: membroId, nome: 'Familiar', cor: '#5581E3' };
+    const agoraIso = new Date().toISOString();
+
+    const semanaAlternada = ['todas', 'semana_a', 'semana_b'].includes(dados.semanaAlternada)
+      ? dados.semanaAlternada
+      : 'todas';
+
+    let item = null;
+    let operacao = 'insert';
+
+    if (dados.id) {
+      const idx = S.gradeHoraria.findIndex(g => g.id === dados.id);
+      if (idx >= 0) {
+        item = S.gradeHoraria[idx];
+        item.titulo = titulo;
+        item.membroId = membroId;
+        item.membroNome = membro.nome;
+        item.membroCor = membro.cor;
+        item.diaSemana = diaSemana;
+        item.horaInicio = horaInicio;
+        item.horaFim = dados.horaFim != null ? String(dados.horaFim).trim() : '';
+        item.local = dados.local != null ? String(dados.local).trim() : '';
+        item.semanaAlternada = semanaAlternada;
+        item.cor = dados.cor || item.cor || membro.cor || '#5581E3';
+        item.atualizadoEm = agoraIso;
+        operacao = 'update';
+      }
+    }
+
+    if (!item) {
+      item = {
+        id: dados.id || ('grade_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7)),
+        circuloId: cId,
+        membroId,
+        membroNome: membro.nome,
+        membroCor: membro.cor,
+        titulo,
+        diaSemana,
+        horaInicio,
+        horaFim: dados.horaFim != null ? String(dados.horaFim).trim() : '',
+        local: dados.local != null ? String(dados.local).trim() : '',
+        semanaAlternada,
+        cor: dados.cor || membro.cor || '#5581E3',
+        criadoEm: agoraIso
+      };
+      S.gradeHoraria.push(item);
+    }
+
+    adicionarNaFilaSync('grade_horaria', operacao, item);
+
+    registrarNotificacaoFamilia({
+      tipo: 'eventos',
+      titulo: '🕒 Atividade na Grade Horária',
+      texto: `${item.membroNome}: ${item.titulo} (${item.diaSemana} às ${item.horaInicio})`,
+      icone: '🕒'
+    });
+
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderGradeHorariaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true, item };
+  } catch (err) {
+    console.error('Erro ao salvar item na grade horária:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Exclui uma atividade da Grade Horária.
+ */
+function excluirItemGradeHoraria(itemId) {
+  try {
+    const idx = (S.gradeHoraria || []).findIndex(g => g.id === itemId);
+    if (idx < 0) {
+      return { ok: false, motivo: 'item_nao_encontrado' };
+    }
+
+    S.gradeHoraria.splice(idx, 1);
+    adicionarNaFilaSync('grade_horaria', 'delete', { id: itemId });
+    save();
+
+    if (typeof document !== 'undefined') {
+      renderGradeHorariaModal();
+      renderMuralInicio();
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao excluir item da grade horária:', err);
+    return { ok: false, motivo: 'erro_interno', erro: err.message };
+  }
+}
+
+/**
+ * Filtra itens da Grade Horária Semanal considerando membro, dia e semana alternada.
+ */
+function listarGradeHorariaFiltrada(filtros = {}) {
+  try {
+    const cId = S.circuloAtivoId || 'circ_1';
+    const membroId = filtros.membroId || 'todos';
+    const diaSemana = filtros.diaSemana || 'todos';
+    const semanaTipo = filtros.semanaTipo || 'todas';
+
+    const DIAS_ORDEM = { segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6, domingo: 7 };
+
+    return (S.gradeHoraria || []).filter(item => {
+      if (item.circuloId !== cId) return false;
+
+      if (membroId !== 'todos' && item.membroId !== membroId) {
+        return false;
+      }
+
+      if (diaSemana !== 'todos' && item.diaSemana !== diaSemana) {
+        return false;
+      }
+
+      // Regra de semanas alternadas: 'todas' combina com tudo; semana_a ou semana_b filtra específico
+      if (semanaTipo !== 'todas') {
+        if (item.semanaAlternada !== 'todas' && item.semanaAlternada !== semanaTipo) {
+          return false;
+        }
+      }
+
+      return true;
+    }).sort((a, b) => {
+      const oA = DIAS_ORDEM[a.diaSemana] || 99;
+      const oB = DIAS_ORDEM[b.diaSemana] || 99;
+      if (oA !== oB) return oA - oB;
+      return (a.horaInicio || '').localeCompare(b.horaInicio || '');
+    });
+  } catch (err) {
+    console.error('Erro ao filtrar grade horária:', err);
+    return [];
+  }
+}
+
+// ----------------------------------------------------------------------------
+// CONTROLADORES DE INTERFACE E MODAIS (DOM) - ETAPA 7
+// ----------------------------------------------------------------------------
+
+function renderRefeicoesFamiliaModal(tab = 'cardapio') {
+  if (typeof document === 'undefined') return;
+  tabRefeicoesAtiva = tab;
+
+  const btnCardapio = document.getElementById('tab-btn-cardapio-semanal');
+  const btnReceitas = document.getElementById('tab-btn-caixa-receitas');
+  const secCardapio = document.getElementById('sec-tab-cardapio-semanal');
+  const secReceitas = document.getElementById('sec-tab-caixa-receitas');
+
+  if (btnCardapio && btnReceitas) {
+    if (tab === 'cardapio') {
+      btnCardapio.classList.add('btn-primary');
+      btnReceitas.classList.remove('btn-primary');
+      if (secCardapio) secCardapio.style.display = 'block';
+      if (secReceitas) secReceitas.style.display = 'none';
+    } else {
+      btnReceitas.classList.add('btn-primary');
+      btnCardapio.classList.remove('btn-primary');
+      if (secCardapio) secCardapio.style.display = 'none';
+      if (secReceitas) secReceitas.style.display = 'block';
+    }
+  }
+
+  // 1. Renderiza o Cardápio Semanal (segunda a domingo)
+  const containerCardapio = document.getElementById('cardapio-semanal-grid-container');
+  if (containerCardapio) {
+    const dias = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
+    const turnos = ['cafe', 'almoco', 'jantar'];
+    const cId = S.circuloAtivoId || 'circ_1';
+    const refeicoes = (S.cardapioSemanal || []).filter(r => r.circuloId === cId);
+
+    containerCardapio.innerHTML = dias.map(d => {
+      return `
+        <div class="card" style="margin-bottom:12px; padding:12px; background:var(--bg2);">
+          <h4 style="margin:0 0 8px; font-size:14px; font-weight:800; color:var(--text);">${DIAS_SEMANA_LABELS[d]}</h4>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px;">
+            ${turnos.map(t => {
+              const ref = refeicoes.find(r => r.diaSemana === d && r.tipoRefeicao === t);
+              return `
+                <div style="background:var(--bg3); border-radius:8px; padding:8px; border:1px solid var(--border); display:flex; flex-direction:column; justify-content:space-between; min-height:75px;">
+                  <div>
+                    <span style="font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase;">${TURNOS_REFEICAO_LABELS[t]}</span>
+                    <p style="margin:4px 0 0; font-size:12px; font-weight:700; color:var(--text); line-height:1.2;">
+                      ${ref ? escapeHtml(ref.pratoLivre) : '<span style="color:var(--muted); font-weight:normal; font-style:italic;">Não definido</span>'}
+                    </p>
+                  </div>
+                  <div style="display:flex; justify-content:flex-end; gap:4px; margin-top:6px;">
+                    <button type="button" class="btn" style="padding:2px 6px; font-size:10px;" onclick="abrirModalDefinirRefeicao('${d}', '${t}')" title="Definir prato">✏️</button>
+                    ${ref ? `<button type="button" class="btn" style="padding:2px 6px; font-size:10px; color:var(--red);" onclick="limparRefeicaoModal('${d}', '${t}')" title="Limpar">✕</button>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 2. Renderiza a Caixa de Receitas
+  const containerReceitas = document.getElementById('caixa-receitas-grid-container');
+  if (containerReceitas) {
+    const receitas = S.receitasCulinarias || [];
+    if (receitas.length === 0) {
+      containerReceitas.innerHTML = `
+        <div style="text-align:center; padding:32px 16px; color:var(--muted);">
+          <p style="font-size:32px; margin-bottom:8px;">📖</p>
+          <p style="font-weight:700; font-size:14px; margin-bottom:4px; color:var(--text);">Nenhuma receita cadastrada</p>
+          <p style="font-size:12px; margin:0 0 14px;">Adicione pratos favoritos da família com tempo de preparo e ingredientes.</p>
+          <button type="button" class="btn btn-primary" onclick="abrirModalNovaReceita()">+ Nova Receita</button>
+        </div>
+      `;
+    } else {
+      containerReceitas.innerHTML = receitas.map(r => `
+        <div class="card" style="margin-bottom:10px; padding:12px; background:var(--bg2);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+            <div>
+              <h4 style="margin:0; font-size:15px; font-weight:800; color:var(--text);">${escapeHtml(r.titulo)}</h4>
+              <p style="margin:2px 0 0; font-size:11px; color:var(--muted);">⏱️ ${r.tempoPreparoMin} min • 🍽️ ${r.porcoes} porções • R$ ${Number(r.custoEstimado || 0).toFixed(2)}</p>
+            </div>
+            <div style="display:flex; gap:4px;">
+              <button type="button" class="btn" style="padding:4px 8px; font-size:11px;" onclick="editarReceitaModal('${r.id}')">✏️</button>
+              <button type="button" class="btn" style="padding:4px 8px; font-size:11px; color:var(--red);" onclick="confirmarExcluirReceitaModal('${r.id}')">🗑️</button>
+            </div>
+          </div>
+          <div style="font-size:11px; color:var(--text); background:var(--bg3); padding:6px 8px; border-radius:6px; margin-top:6px;">
+            <strong>Ingredientes (${(r.ingredientes || []).length}):</strong> ${(r.ingredientes || []).map(i => `${i.quantidade || ''} ${i.unidade || ''} ${i.nome}`).join(', ')}
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
+  // 3. Atualiza contador de ingredientes faltantes no botão
+  const faltantesCountEl = document.getElementById('cardapio-btn-faltantes-count');
+  if (faltantesCountEl) {
+    const f = obterIngredientesFaltantesCardapio();
+    faltantesCountEl.textContent = f.length > 0 ? `(${f.length} itens a comprar)` : '';
+  }
+}
+
+function abrirModalRefeicoesFamilia(tab = 'cardapio') {
+  if (typeof document === 'undefined') return;
+  renderRefeicoesFamiliaModal(tab);
+  if (typeof openM === 'function') openM('m-refeicoes-familia');
+}
+
+function fecharModalRefeicoesFamilia() {
+  if (typeof closeM === 'function') closeM('m-refeicoes-familia');
+}
+
+function abrirModalNovaReceita() {
+  if (typeof document === 'undefined') return;
+  const idEl = document.getElementById('form-rec-id');
+  const titEl = document.getElementById('form-rec-titulo');
+  const catEl = document.getElementById('form-rec-categoria');
+  const tempoEl = document.getElementById('form-rec-tempo');
+  const porcoesEl = document.getElementById('form-rec-porcoes');
+  const custoEl = document.getElementById('form-rec-custo');
+  const ingsEl = document.getElementById('form-rec-ingredientes');
+  const modoEl = document.getElementById('form-rec-modo');
+
+  if (idEl) idEl.value = '';
+  if (titEl) titEl.value = '';
+  if (catEl) catEl.value = 'almoco';
+  if (tempoEl) tempoEl.value = '30';
+  if (porcoesEl) porcoesEl.value = '4';
+  if (custoEl) custoEl.value = '';
+  if (ingsEl) ingsEl.value = '';
+  if (modoEl) modoEl.value = '';
+
+  const titModal = document.getElementById('form-rec-modal-title');
+  if (titModal) titModal.textContent = '✨ Nova Receita da Família';
+
+  if (typeof openM === 'function') openM('m-form-receita');
+}
+
+function editarReceitaModal(receitaId) {
+  if (typeof document === 'undefined') return;
+  const rec = (S.receitasCulinarias || []).find(r => r.id === receitaId);
+  if (!rec) return;
+
+  const idEl = document.getElementById('form-rec-id');
+  const titEl = document.getElementById('form-rec-titulo');
+  const catEl = document.getElementById('form-rec-categoria');
+  const tempoEl = document.getElementById('form-rec-tempo');
+  const porcoesEl = document.getElementById('form-rec-porcoes');
+  const custoEl = document.getElementById('form-rec-custo');
+  const ingsEl = document.getElementById('form-rec-ingredientes');
+  const modoEl = document.getElementById('form-rec-modo');
+
+  if (idEl) idEl.value = rec.id;
+  if (titEl) titEl.value = rec.titulo || '';
+  if (catEl) catEl.value = rec.categoria || 'almoco';
+  if (tempoEl) tempoEl.value = rec.tempoPreparoMin || 30;
+  if (porcoesEl) porcoesEl.value = rec.porcoes || 4;
+  if (custoEl) custoEl.value = rec.custoEstimado || '';
+  if (modoEl) modoEl.value = rec.modoPreparo || '';
+
+  if (ingsEl) {
+    ingsEl.value = (rec.ingredientes || []).map(i => `${i.quantidade || '1'} ${i.unidade || 'un'} de ${i.nome} (${i.corredor || 'mercearia'})`).join('\n');
+  }
+
+  const titModal = document.getElementById('form-rec-modal-title');
+  if (titModal) titModal.textContent = '✏️ Editar Receita';
+
+  if (typeof openM === 'function') openM('m-form-receita');
+}
+
+function salvarReceitaModal() {
+  if (typeof document === 'undefined') return;
+
+  const id = document.getElementById('form-rec-id')?.value || '';
+  const titulo = document.getElementById('form-rec-titulo')?.value || '';
+  const categoria = document.getElementById('form-rec-categoria')?.value || 'almoco';
+  const tempoPreparoMin = Number(document.getElementById('form-rec-tempo')?.value) || 30;
+  const porcoes = Number(document.getElementById('form-rec-porcoes')?.value) || 4;
+  const custoEstimado = parseFloat(document.getElementById('form-rec-custo')?.value) || 0;
+  const modoPreparo = document.getElementById('form-rec-modo')?.value || '';
+  const ingsRaw = document.getElementById('form-rec-ingredientes')?.value || '';
+
+  // Parser simples de ingredientes a partir do texto multilinha
+  const ingredientes = ingsRaw.split('\n').map(l => l.trim()).filter(Boolean).map(linha => {
+    // Ex: "1 kg de Peito de Frango (carnes)" ou "2 un Ovo"
+    const corredorMatch = linha.match(/\((.*?)\)$/);
+    const corredor = corredorMatch ? corredorMatch[1].trim() : 'mercearia';
+    const limpa = linha.replace(/\((.*?)\)$/, '').trim();
+    const partes = limpa.split(/\s+/);
+    let qtd = '1';
+    let un = 'un';
+    let nome = limpa;
+
+    if (partes.length >= 2 && !isNaN(parseFloat(partes[0].replace(',', '.')))) {
+      qtd = partes[0];
+      un = partes[1];
+      nome = partes.slice(2).join(' ').replace(/^de\s+/i, '').trim();
+      if (!nome) {
+        nome = un;
+        un = 'un';
+      }
+    }
+
+    return { nome, quantidade: qtd, unidade: un, corredor };
+  });
+
+  const res = salvarReceitaCulinaria({
+    id,
+    titulo,
+    categoria,
+    tempoPreparoMin,
+    porcoes,
+    custoEstimado,
+    modoPreparo,
+    ingredientes
+  });
+
+  if (res.ok && typeof closeM === 'function') {
+    closeM('m-form-receita');
+  }
+}
+
+function confirmarExcluirReceitaModal(receitaId) {
+  if (typeof confirm === 'function') {
+    if (!confirm('Deseja excluir esta receita da Caixa de Receitas?')) return;
+  }
+  excluirReceitaCulinaria(receitaId);
+}
+
+function abrirModalDefinirRefeicao(diaSemana, tipoRefeicao) {
+  if (typeof document === 'undefined') return;
+  const diaInput = document.getElementById('def-ref-dia');
+  const turnoInput = document.getElementById('def-ref-turno');
+  const selectReceita = document.getElementById('def-ref-receita-select');
+  const pratoLivreInput = document.getElementById('def-ref-prato-livre');
+  const extrasInput = document.getElementById('def-ref-extras');
+
+  if (diaInput) diaInput.value = diaSemana;
+  if (turnoInput) turnoInput.value = tipoRefeicao;
+
+  const slot = (S.cardapioSemanal || []).find(r => r.diaSemana === diaSemana && r.tipoRefeicao === tipoRefeicao);
+
+  if (selectReceita) {
+    selectReceita.innerHTML = '<option value="">-- Nenhuma (Prato Livre Personalizado) --</option>' +
+      (S.receitasCulinarias || []).map(r => `<option value="${r.id}" ${slot && slot.receitaId === r.id ? 'selected' : ''}>📖 ${escapeHtml(r.titulo)}</option>`).join('');
+  }
+
+  if (pratoLivreInput) pratoLivreInput.value = slot ? slot.pratoLivre || '' : '';
+  if (extrasInput) extrasInput.value = slot && Array.isArray(slot.ingredientesExtras) ? slot.ingredientesExtras.map(i => i.nome).join(', ') : '';
+
+  const labelTitle = document.getElementById('def-ref-modal-title');
+  if (labelTitle) labelTitle.textContent = `🍽️ ${DIAS_SEMANA_LABELS[diaSemana] || diaSemana} - ${TURNOS_REFEICAO_LABELS[tipoRefeicao] || tipoRefeicao}`;
+
+  if (typeof openM === 'function') openM('m-definir-refeicao');
+}
+
+function salvarDefinicaoRefeicaoModal() {
+  if (typeof document === 'undefined') return;
+  const diaSemana = document.getElementById('def-ref-dia')?.value || '';
+  const tipoRefeicao = document.getElementById('def-ref-turno')?.value || '';
+  const receitaId = document.getElementById('def-ref-receita-select')?.value || null;
+  const pratoLivre = document.getElementById('def-ref-prato-livre')?.value || '';
+  const extrasRaw = document.getElementById('def-ref-extras')?.value || '';
+
+  const ingredientesExtras = extrasRaw.split(',').map(s => s.trim()).filter(Boolean).map(nome => ({
+    nome,
+    quantidade: '1',
+    unidade: 'un',
+    corredor: 'mercearia'
+  }));
+
+  const res = definirRefeicaoCardapio({
+    diaSemana,
+    tipoRefeicao,
+    receitaId,
+    pratoLivre,
+    ingredientesExtras
+  });
+
+  if (res.ok && typeof closeM === 'function') {
+    closeM('m-definir-refeicao');
+  }
+}
+
+function limparRefeicaoModal(diaSemana, tipoRefeicao) {
+  limparRefeicaoCardapio(diaSemana, tipoRefeicao);
+}
+
+function gerarListaComprasCardapioModal() {
+  const res = gerarListaComprasDoCardapio();
+  if (res.ok) {
+    if (typeof exibirToastNotificacao === 'function') {
+      exibirToastNotificacao(`Lista gerada! ${res.totalAdicionados} itens adicionados.`, '🛒');
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// CONTROLADORES DE DOCUMENTOS DA FAMÍLIA (DOM)
+// ----------------------------------------------------------------------------
+
+function renderDocumentosFamiliaModal(pasta = 'todas') {
+  if (typeof document === 'undefined') return;
+  pastaDocumentosAtiva = pasta;
+
+  const mAtivo = obterMembroAtivo();
+  const mId = mAtivo ? mAtivo.id : (S.membroAtivoId || 'm_1');
+  const busca = document.getElementById('docs-busca-input')?.value || '';
+
+  const docs = listarDocumentosVisiveisParaMembro(mId, pastaDocumentosAtiva, busca);
+  const container = document.getElementById('docs-lista-container');
+  const pillsEl = document.getElementById('docs-pastas-pills');
+
+  // 1. Pílulas das 4 pastas
+  if (pillsEl) {
+    const pastasDefs = [
+      { id: 'todas', nome: 'Todas as Pastas', icone: '📂' },
+      ...PASTAS_DOCUMENTOS_PADRAO
+    ];
+
+    // Se for criança, oculta a pasta 'privado' das pílulas visíveis
+    const pastasVisiveis = pastasDefs.filter(p => !(mAtivo && mAtivo.papel === 'crianca' && p.id === 'privado'));
+
+    pillsEl.innerHTML = pastasVisiveis.map(p => {
+      const isSel = pastaDocumentosAtiva === p.id;
+      return `
+        <button type="button" class="filtro-pill ${isSel ? 'sel' : ''}" style="${isSel ? 'background:var(--primary);color:#fff;' : ''}; font-size:11px; white-space:nowrap;" onclick="filtrarPastaDocumentosModal('${p.id}')">
+          ${p.icone} ${p.nome}
+        </button>
+      `;
+    }).join('');
+  }
+
+  // 2. Banner de Alertas de Vencimento
+  const bannerAlerta = document.getElementById('docs-banner-alertas');
+  if (bannerAlerta) {
+    const alertas = obterAlertasDocumentosVencendo(30);
+    if (alertas.length > 0) {
+      bannerAlerta.style.display = 'block';
+      bannerAlerta.innerHTML = `
+        <div style="background:rgba(239, 68, 68, 0.12); border:1px solid rgba(239, 68, 68, 0.35); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
+          <div style="font-size:12px; font-weight:800; color:var(--red); display:flex; align-items:center; gap:6px;">
+            <span>⚠️</span> Alerta de Vencimento de Documentos (${alertas.length})
+          </div>
+          <div style="margin-top:4px; font-size:11px; color:var(--text);">
+            ${alertas.map(a => `
+              <div>• <strong>${escapeHtml(a.titulo)}</strong>: ${a.diasRestantes < 0 ? 'Já vencido!' : `Vence em ${a.diasRestantes} dia(s)`} (${a.dataValidade})</div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      bannerAlerta.style.display = 'none';
+      bannerAlerta.innerHTML = '';
+    }
+  }
+
+  // 3. Lista de documentos
+  if (!container) return;
+
+  if (docs.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:32px 16px; color:var(--muted);">
+        <p style="font-size:32px; margin-bottom:8px;">🔒</p>
+        <p style="font-weight:700; font-size:14px; margin-bottom:4px; color:var(--text);">Nenhum documento encontrado</p>
+        <p style="font-size:12px; margin:0 0 14px;">Arquive exames, certidões, apólices e carteirinhas com segurança.</p>
+        <button type="button" class="btn btn-primary" onclick="abrirModalNovoDocumento()">+ Novo Documento</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = docs.map(doc => {
+    const pastaDef = PASTAS_DOCUMENTOS_PADRAO.find(p => p.id === doc.pasta) || { nome: doc.pasta, icone: '📂', cor: '#5581E3' };
+    const temValidade = !!doc.dataValidade;
+    let badgeValidade = '';
+
+    if (temValidade) {
+      const hoje = new Date();
+      hoje.setHours(0,0,0,0);
+      const val = new Date(doc.dataValidade + 'T00:00:00');
+      const dias = Math.ceil((val.getTime() - hoje.getTime()) / 86400000);
+      if (dias < 0) {
+        badgeValidade = `<span style="background:rgba(239, 68, 68, 0.2); color:var(--red); font-size:10px; font-weight:800; padding:2px 6px; border-radius:6px;">VENCIDO</span>`;
+      } else if (dias <= 30) {
+        badgeValidade = `<span style="background:rgba(245, 158, 11, 0.2); color:var(--yellow); font-size:10px; font-weight:800; padding:2px 6px; border-radius:6px;">VENCE EM ${dias}d</span>`;
+      } else {
+        badgeValidade = `<span style="font-size:10px; color:var(--muted);">Validade: ${doc.dataValidade}</span>`;
+      }
+    }
+
+    return `
+      <div class="card" style="margin-bottom:10px; padding:12px; background:var(--bg2);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+          <div style="display:flex; align-items:flex-start; gap:8px;">
+            <span style="font-size:20px;">${pastaDef.icone}</span>
+            <div>
+              <h4 style="margin:0; font-size:14px; font-weight:800; color:var(--text);">${escapeHtml(doc.titulo)}</h4>
+              <p style="margin:2px 0 0; font-size:11px; color:var(--muted);">
+                ${pastaDef.nome} ${doc.numeroDocumento ? `• Nº ${escapeHtml(doc.numeroDocumento)}` : ''}
+              </p>
+            </div>
+          </div>
+          <div>
+            ${badgeValidade}
+          </div>
+        </div>
+
+        ${doc.observacoes ? `
+          <div style="font-size:11px; background:var(--bg3); padding:6px 8px; border-radius:6px; margin:6px 0; color:var(--text);">
+            ℹ️ ${escapeHtml(doc.observacoes)}
+          </div>
+        ` : ''}
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid var(--border);">
+          <span style="font-size:10px; color:var(--muted);">Formato: ${String(doc.tipoArquivo || 'pdf').toUpperCase()}</span>
+          <div style="display:flex; gap:4px;">
+            <button type="button" class="btn" style="padding:4px 8px; font-size:11px;" onclick="editarDocumentoModal('${doc.id}')">✏️</button>
+            <button type="button" class="btn" style="padding:4px 8px; font-size:11px; color:var(--red);" onclick="confirmarExcluirDocumentoModal('${doc.id}')">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filtrarPastaDocumentosModal(pasta) {
+  renderDocumentosFamiliaModal(pasta);
+}
+
+function abrirModalDocumentosFamilia(pasta = 'todas') {
+  if (typeof document === 'undefined') return;
+  renderDocumentosFamiliaModal(pasta);
+  if (typeof openM === 'function') openM('m-documentos-familia');
+}
+
+function fecharModalDocumentosFamilia() {
+  if (typeof closeM === 'function') closeM('m-documentos-familia');
+}
+
+function abrirModalNovoDocumento() {
+  if (typeof document === 'undefined') return;
+  const idEl = document.getElementById('form-doc-id');
+  const titEl = document.getElementById('form-doc-titulo');
+  const pastaEl = document.getElementById('form-doc-pasta');
+  const tipoEl = document.getElementById('form-doc-tipo');
+  const numEl = document.getElementById('form-doc-numero');
+  const valEl = document.getElementById('form-doc-validade');
+  const obsEl = document.getElementById('form-doc-observacoes');
+
+  if (idEl) idEl.value = '';
+  if (titEl) titEl.value = '';
+  if (pastaEl) pastaEl.value = 'familia';
+  if (tipoEl) tipoEl.value = 'pdf';
+  if (numEl) numEl.value = '';
+  if (valEl) valEl.value = '';
+  if (obsEl) obsEl.value = '';
+
+  const titModal = document.getElementById('form-doc-modal-title');
+  if (titModal) titModal.textContent = '✨ Novo Documento Familiar';
+
+  if (typeof openM === 'function') openM('m-form-documento');
+}
+
+function editarDocumentoModal(docId) {
+  if (typeof document === 'undefined') return;
+  const doc = (S.documentosFamilia || []).find(d => d.id === docId);
+  if (!doc) return;
+
+  const idEl = document.getElementById('form-doc-id');
+  const titEl = document.getElementById('form-doc-titulo');
+  const pastaEl = document.getElementById('form-doc-pasta');
+  const tipoEl = document.getElementById('form-doc-tipo');
+  const numEl = document.getElementById('form-doc-numero');
+  const valEl = document.getElementById('form-doc-validade');
+  const obsEl = document.getElementById('form-doc-observacoes');
+
+  if (idEl) idEl.value = doc.id;
+  if (titEl) titEl.value = doc.titulo || '';
+  if (pastaEl) pastaEl.value = doc.pasta || 'familia';
+  if (tipoEl) tipoEl.value = doc.tipoArquivo || 'pdf';
+  if (numEl) numEl.value = doc.numeroDocumento || '';
+  if (valEl) valEl.value = doc.dataValidade || '';
+  if (obsEl) obsEl.value = doc.observacoes || '';
+
+  const titModal = document.getElementById('form-doc-modal-title');
+  if (titModal) titModal.textContent = '✏️ Editar Documento';
+
+  if (typeof openM === 'function') openM('m-form-documento');
+}
+
+function salvarDocumentoModal() {
+  if (typeof document === 'undefined') return;
+
+  const id = document.getElementById('form-doc-id')?.value || '';
+  const titulo = document.getElementById('form-doc-titulo')?.value || '';
+  const pasta = document.getElementById('form-doc-pasta')?.value || 'familia';
+  const tipoArquivo = document.getElementById('form-doc-tipo')?.value || 'pdf';
+  const numeroDocumento = document.getElementById('form-doc-numero')?.value || '';
+  const dataValidade = document.getElementById('form-doc-validade')?.value || '';
+  const observacoes = document.getElementById('form-doc-observacoes')?.value || '';
+
+  const res = salvarDocumentoFamilia({
+    id,
+    titulo,
+    pasta,
+    tipoArquivo,
+    numeroDocumento,
+    dataValidade,
+    observacoes
+  });
+
+  if (res.ok && typeof closeM === 'function') {
+    closeM('m-form-documento');
+  }
+}
+
+function confirmarExcluirDocumentoModal(docId) {
+  if (typeof confirm === 'function') {
+    if (!confirm('Deseja excluir este documento da família?')) return;
+  }
+  excluirDocumentoFamilia(docId);
+}
+
+function aoSelecionarArquivoDocumento(event) {
+  if (typeof document === 'undefined') return;
+  const file = event && event.target && event.target.files ? event.target.files[0] : null;
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    if (typeof exibirToastNotificacao === 'function') {
+      exibirToastNotificacao(`Arquivo carregado: ${file.name}`, '📂');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ----------------------------------------------------------------------------
+// CONTROLADORES DA GRADE HORÁRIA SEMANAL (DOM)
+// ----------------------------------------------------------------------------
+
+function renderGradeHorariaModal() {
+  if (typeof document === 'undefined') return;
+
+  const container = document.getElementById('grade-horaria-container');
+  const pillsMembro = document.getElementById('grade-membros-pills');
+  const pillsSemana = document.getElementById('grade-semanas-pills');
+
+  // 1. Pílulas de filtro por membro
+  if (pillsMembro) {
+    pillsMembro.innerHTML = [
+      { id: 'todos', nome: 'Todos da Casa' },
+      ...(S.membrosPerfil || []).map(m => ({ id: m.id, nome: m.nome, cor: m.cor }))
+    ].map(m => {
+      const isSel = filtroMembroGradeAtivo === m.id;
+      return `
+        <button type="button" class="filtro-pill ${isSel ? 'sel' : ''}" style="${isSel ? 'background:var(--primary);color:#fff;' : ''}; font-size:11px; white-space:nowrap;" onclick="filtrarMembroGradeModal('${m.id}')">
+          ${m.cor ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${m.cor};margin-right:4px;"></span>` : ''}
+          ${escapeHtml(m.nome)}
+        </button>
+      `;
+    }).join('');
+  }
+
+  // 2. Pílulas de semanas alternadas
+  if (pillsSemana) {
+    const semanas = [
+      { id: 'todas', nome: 'Todas as Semanas' },
+      { id: 'semana_a', nome: 'Semana A' },
+      { id: 'semana_b', nome: 'Semana B' }
+    ];
+    pillsSemana.innerHTML = semanas.map(s => {
+      const isSel = filtroSemanaAlternadaAtiva === s.id;
+      return `
+        <button type="button" class="filtro-pill ${isSel ? 'sel' : ''}" style="${isSel ? 'background:var(--primary);color:#fff;' : ''}; font-size:10px; white-space:nowrap;" onclick="filtrarSemanaAlternadaModal('${s.id}')">
+          ${s.nome}
+        </button>
+      `;
+    }).join('');
+  }
+
+  // 3. Grade agrupada por dias da semana
+  if (!container) return;
+
+  const dias = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
+  const itens = listarGradeHorariaFiltrada({
+    membroId: filtroMembroGradeAtivo,
+    semanaTipo: filtroSemanaAlternadaAtiva
+  });
+
+  if (itens.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:32px 16px; color:var(--muted);">
+        <p style="font-size:32px; margin-bottom:8px;">🕒</p>
+        <p style="font-weight:700; font-size:14px; margin-bottom:4px; color:var(--text);">Nenhuma atividade cadastrada</p>
+        <p style="font-size:12px; margin:0 0 14px;">Organize horários escolares, esportes, idiomas e plantões da família.</p>
+        <button type="button" class="btn btn-primary" onclick="abrirModalNovoItemGrade()">+ Nova Atividade</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = dias.map(d => {
+    const itensDia = itens.filter(i => i.diaSemana === d);
+    if (itensDia.length === 0) return '';
+
+    return `
+      <div class="card" style="margin-bottom:12px; padding:12px; background:var(--bg2);">
+        <h4 style="margin:0 0 8px; font-size:13px; font-weight:800; color:var(--text); text-transform:uppercase;">${DIAS_SEMANA_LABELS[d]}</h4>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          ${itensDia.map(it => `
+            <div style="background:var(--bg3); border-left:4px solid ${it.cor || 'var(--primary)'}; border-radius:6px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span style="font-size:11px; font-weight:800; color:${it.cor || 'var(--primary)'};">${escapeHtml(it.membroNome)}</span>
+                  ${it.semanaAlternada !== 'todas' ? `<span style="font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; background:rgba(139,92,246,0.2); color:#c084fc;">${it.semanaAlternada.toUpperCase()}</span>` : ''}
+                </div>
+                <div style="font-size:13px; font-weight:700; color:var(--text); margin-top:2px;">${escapeHtml(it.titulo)}</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">
+                  🕒 ${it.horaInicio} ${it.horaFim ? `às ${it.horaFim}` : ''} ${it.local ? `• 📍 ${escapeHtml(it.local)}` : ''}
+                </div>
+              </div>
+              <div style="display:flex; gap:4px;">
+                <button type="button" class="btn" style="padding:4px 8px; font-size:11px;" onclick="editarItemGradeModal('${it.id}')">✏️</button>
+                <button type="button" class="btn" style="padding:4px 8px; font-size:11px; color:var(--red);" onclick="confirmarExcluirItemGradeModal('${it.id}')">🗑️</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filtrarMembroGradeModal(membroId) {
+  filtroMembroGradeAtivo = membroId;
+  renderGradeHorariaModal();
+}
+
+function filtrarSemanaAlternadaModal(semanaTipo) {
+  filtroSemanaAlternadaAtiva = semanaTipo;
+  renderGradeHorariaModal();
+}
+
+function abrirModalGradeHoraria() {
+  if (typeof document === 'undefined') return;
+  filtroMembroGradeAtivo = 'todos';
+  filtroSemanaAlternadaAtiva = 'todas';
+  renderGradeHorariaModal();
+  if (typeof openM === 'function') openM('m-grade-horaria');
+}
+
+function fecharModalGradeHoraria() {
+  if (typeof closeM === 'function') closeM('m-grade-horaria');
+}
+
+function abrirModalNovoItemGrade() {
+  if (typeof document === 'undefined') return;
+  const idEl = document.getElementById('form-grade-id');
+  const titEl = document.getElementById('form-grade-titulo');
+  const membroEl = document.getElementById('form-grade-membro');
+  const diaEl = document.getElementById('form-grade-dia');
+  const inicioEl = document.getElementById('form-grade-inicio');
+  const fimEl = document.getElementById('form-grade-fim');
+  const localEl = document.getElementById('form-grade-local');
+  const semEl = document.getElementById('form-grade-semana');
+
+  if (idEl) idEl.value = '';
+  if (titEl) titEl.value = '';
+  if (membroEl) {
+    membroEl.innerHTML = (S.membrosPerfil || []).map(m => `<option value="${m.id}">${escapeHtml(m.nome)}</option>`).join('');
+    membroEl.value = S.membroAtivoId || (S.membrosPerfil[0] && S.membrosPerfil[0].id) || '';
+  }
+  if (diaEl) diaEl.value = 'segunda';
+  if (inicioEl) inicioEl.value = '08:00';
+  if (fimEl) fimEl.value = '09:00';
+  if (localEl) localEl.value = '';
+  if (semEl) semEl.value = 'todas';
+
+  const titModal = document.getElementById('form-grade-modal-title');
+  if (titModal) titModal.textContent = '✨ Nova Atividade na Grade Horária';
+
+  if (typeof openM === 'function') openM('m-form-grade-horaria');
+}
+
+function editarItemGradeModal(itemId) {
+  if (typeof document === 'undefined') return;
+  const item = (S.gradeHoraria || []).find(g => g.id === itemId);
+  if (!item) return;
+
+  const idEl = document.getElementById('form-grade-id');
+  const titEl = document.getElementById('form-grade-titulo');
+  const membroEl = document.getElementById('form-grade-membro');
+  const diaEl = document.getElementById('form-grade-dia');
+  const inicioEl = document.getElementById('form-grade-inicio');
+  const fimEl = document.getElementById('form-grade-fim');
+  const localEl = document.getElementById('form-grade-local');
+  const semEl = document.getElementById('form-grade-semana');
+
+  if (idEl) idEl.value = item.id;
+  if (titEl) titEl.value = item.titulo || '';
+  if (membroEl) {
+    membroEl.innerHTML = (S.membrosPerfil || []).map(m => `<option value="${m.id}" ${m.id === item.membroId ? 'selected' : ''}>${escapeHtml(m.nome)}</option>`).join('');
+  }
+  if (diaEl) diaEl.value = item.diaSemana || 'segunda';
+  if (inicioEl) inicioEl.value = item.horaInicio || '08:00';
+  if (fimEl) fimEl.value = item.horaFim || '';
+  if (localEl) localEl.value = item.local || '';
+  if (semEl) semEl.value = item.semanaAlternada || 'todas';
+
+  const titModal = document.getElementById('form-grade-modal-title');
+  if (titModal) titModal.textContent = '✏️ Editar Atividade na Grade';
+
+  if (typeof openM === 'function') openM('m-form-grade-horaria');
+}
+
+function salvarItemGradeModal() {
+  if (typeof document === 'undefined') return;
+
+  const id = document.getElementById('form-grade-id')?.value || '';
+  const titulo = document.getElementById('form-grade-titulo')?.value || '';
+  const membroId = document.getElementById('form-grade-membro')?.value || S.membroAtivoId || 'm_1';
+  const diaSemana = document.getElementById('form-grade-dia')?.value || 'segunda';
+  const horaInicio = document.getElementById('form-grade-inicio')?.value || '08:00';
+  const horaFim = document.getElementById('form-grade-fim')?.value || '';
+  const local = document.getElementById('form-grade-local')?.value || '';
+  const semanaAlternada = document.getElementById('form-grade-semana')?.value || 'todas';
+
+  const res = salvarItemGradeHoraria({
+    id,
+    titulo,
+    membroId,
+    diaSemana,
+    horaInicio,
+    horaFim,
+    local,
+    semanaAlternada
+  });
+
+  if (res.ok && typeof closeM === 'function') {
+    closeM('m-form-grade-horaria');
+  }
+}
+
+function confirmarExcluirItemGradeModal(itemId) {
+  if (typeof confirm === 'function') {
+    if (!confirm('Deseja excluir esta atividade da grade horária?')) return;
+  }
+  excluirItemGradeHoraria(itemId);
+}
+
 function abrirModuloExplorar(moduloId) {
   if (moduloId === 'mensagens') {
     abrirModalChatFamilia();
@@ -12547,6 +14516,23 @@ function abrirModuloExplorar(moduloId) {
   }
   if (moduloId === 'beneficios') {
     abrirModalCarteirasBeneficio();
+    return;
+  }
+  // Super-App Familiar v2.0 (Etapa 7)
+  if (moduloId === 'refeicoes') {
+    abrirModalRefeicoesFamilia('cardapio');
+    return;
+  }
+  if (moduloId === 'receitas_cul') {
+    abrirModalRefeicoesFamilia('receitas');
+    return;
+  }
+  if (moduloId === 'documentos') {
+    abrirModalDocumentosFamilia();
+    return;
+  }
+  if (moduloId === 'horario' || moduloId === 'grade_horaria') {
+    abrirModalGradeHoraria();
     return;
   }
   const modDef = MODULOS_INICIO_CATALOGO.find(m => m.id === moduloId);
@@ -12768,6 +14754,53 @@ if (typeof window !== 'undefined') {
   window.salvarContatoModal = salvarContatoModal;
   window.confirmarExcluirContatoModal = confirmarExcluirContatoModal;
   window.copiarTextoContato = copiarTextoContato;
+  // Super-App Familiar v2.0 (Etapa 7 - Refeições, Documentos & Grade Horária)
+  window.DIAS_SEMANA_NOMES = DIAS_SEMANA_NOMES;
+  window.DIAS_SEMANA_LABELS = DIAS_SEMANA_LABELS;
+  window.TURNOS_REFEICAO_LABELS = TURNOS_REFEICAO_LABELS;
+  window.PASTAS_DOCUMENTOS_PADRAO = PASTAS_DOCUMENTOS_PADRAO;
+  window.salvarReceitaCulinaria = salvarReceitaCulinaria;
+  window.excluirReceitaCulinaria = excluirReceitaCulinaria;
+  window.definirRefeicaoCardapio = definirRefeicaoCardapio;
+  window.limparRefeicaoCardapio = limparRefeicaoCardapio;
+  window.obterIngredientesFaltantesCardapio = obterIngredientesFaltantesCardapio;
+  window.gerarListaComprasDoCardapio = gerarListaComprasDoCardapio;
+  window.salvarDocumentoFamilia = salvarDocumentoFamilia;
+  window.excluirDocumentoFamilia = excluirDocumentoFamilia;
+  window.listarDocumentosVisiveisParaMembro = listarDocumentosVisiveisParaMembro;
+  window.obterAlertasDocumentosVencendo = obterAlertasDocumentosVencendo;
+  window.salvarItemGradeHoraria = salvarItemGradeHoraria;
+  window.excluirItemGradeHoraria = excluirItemGradeHoraria;
+  window.listarGradeHorariaFiltrada = listarGradeHorariaFiltrada;
+  window.renderRefeicoesFamiliaModal = renderRefeicoesFamiliaModal;
+  window.abrirModalRefeicoesFamilia = abrirModalRefeicoesFamilia;
+  window.fecharModalRefeicoesFamilia = fecharModalRefeicoesFamilia;
+  window.abrirModalNovaReceita = abrirModalNovaReceita;
+  window.editarReceitaModal = editarReceitaModal;
+  window.salvarReceitaModal = salvarReceitaModal;
+  window.confirmarExcluirReceitaModal = confirmarExcluirReceitaModal;
+  window.abrirModalDefinirRefeicao = abrirModalDefinirRefeicao;
+  window.salvarDefinicaoRefeicaoModal = salvarDefinicaoRefeicaoModal;
+  window.limparRefeicaoModal = limparRefeicaoModal;
+  window.gerarListaComprasCardapioModal = gerarListaComprasCardapioModal;
+  window.renderDocumentosFamiliaModal = renderDocumentosFamiliaModal;
+  window.abrirModalDocumentosFamilia = abrirModalDocumentosFamilia;
+  window.fecharModalDocumentosFamilia = fecharModalDocumentosFamilia;
+  window.filtrarPastaDocumentosModal = filtrarPastaDocumentosModal;
+  window.abrirModalNovoDocumento = abrirModalNovoDocumento;
+  window.editarDocumentoModal = editarDocumentoModal;
+  window.salvarDocumentoModal = salvarDocumentoModal;
+  window.confirmarExcluirDocumentoModal = confirmarExcluirDocumentoModal;
+  window.aoSelecionarArquivoDocumento = aoSelecionarArquivoDocumento;
+  window.renderGradeHorariaModal = renderGradeHorariaModal;
+  window.abrirModalGradeHoraria = abrirModalGradeHoraria;
+  window.fecharModalGradeHoraria = fecharModalGradeHoraria;
+  window.filtrarMembroGradeModal = filtrarMembroGradeModal;
+  window.filtrarSemanaAlternadaModal = filtrarSemanaAlternadaModal;
+  window.abrirModalNovoItemGrade = abrirModalNovoItemGrade;
+  window.editarItemGradeModal = editarItemGradeModal;
+  window.salvarItemGradeModal = salvarItemGradeModal;
+  window.confirmarExcluirItemGradeModal = confirmarExcluirItemGradeModal;
 }
 
 // EXPORTAÇÃO PARA TESTES / NODE.JS
@@ -13050,6 +15083,53 @@ if (typeof module !== 'undefined' && module.exports) {
     salvarContatoModal,
     confirmarExcluirContatoModal,
     copiarTextoContato,
+    // Super-App Familiar v2.0 (Etapa 7 - Refeições, Documentos & Grade Horária)
+    DIAS_SEMANA_NOMES,
+    DIAS_SEMANA_LABELS,
+    TURNOS_REFEICAO_LABELS,
+    PASTAS_DOCUMENTOS_PADRAO,
+    salvarReceitaCulinaria,
+    excluirReceitaCulinaria,
+    definirRefeicaoCardapio,
+    limparRefeicaoCardapio,
+    obterIngredientesFaltantesCardapio,
+    gerarListaComprasDoCardapio,
+    salvarDocumentoFamilia,
+    excluirDocumentoFamilia,
+    listarDocumentosVisiveisParaMembro,
+    obterAlertasDocumentosVencendo,
+    salvarItemGradeHoraria,
+    excluirItemGradeHoraria,
+    listarGradeHorariaFiltrada,
+    renderRefeicoesFamiliaModal,
+    abrirModalRefeicoesFamilia,
+    fecharModalRefeicoesFamilia,
+    abrirModalNovaReceita,
+    editarReceitaModal,
+    salvarReceitaModal,
+    confirmarExcluirReceitaModal,
+    abrirModalDefinirRefeicao,
+    salvarDefinicaoRefeicaoModal,
+    limparRefeicaoModal,
+    gerarListaComprasCardapioModal,
+    renderDocumentosFamiliaModal,
+    abrirModalDocumentosFamilia,
+    fecharModalDocumentosFamilia,
+    filtrarPastaDocumentosModal,
+    abrirModalNovoDocumento,
+    editarDocumentoModal,
+    salvarDocumentoModal,
+    confirmarExcluirDocumentoModal,
+    aoSelecionarArquivoDocumento,
+    renderGradeHorariaModal,
+    abrirModalGradeHoraria,
+    fecharModalGradeHoraria,
+    filtrarMembroGradeModal,
+    filtrarSemanaAlternadaModal,
+    abrirModalNovoItemGrade,
+    editarItemGradeModal,
+    salvarItemGradeModal,
+    confirmarExcluirItemGradeModal,
     getState: () => S,
     S
   };
