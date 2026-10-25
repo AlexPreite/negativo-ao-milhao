@@ -259,6 +259,20 @@
 
   .sec-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; margin-top: 4px; }
   .total-row { display: flex; justify-content: space-between; padding: 10px 0 0; font-weight: 700; font-size: 14px; border-top: 1px solid var(--border); margin-top: 4px; }
+
+  /* ESTILOS LISTAS DE COMPRAS & TAREFAS (Etapa 2) */
+  .list-chip { background: var(--bg3); border: 1px solid var(--border2); border-radius: 16px; padding: 5px 11px; font-size: 12px; cursor: pointer; color: var(--text); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s; }
+  .list-chip:active { background: var(--border2); transform: scale(0.96); }
+  .item-lista-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; transition: all 0.15s; }
+  .item-lista-row.concluido { opacity: 0.65; }
+  .item-lista-row.concluido .item-txt-principal { text-decoration: line-through; color: var(--muted); }
+  .chk-lista-custom { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--primary); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; background: transparent; transition: all 0.15s; }
+  .chk-lista-custom.checked { background: var(--primary); color: #fff; font-size: 12px; font-weight: 800; }
+  .corredor-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .prio-pill { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; }
+  .prio-alta { background: var(--red-dim); color: var(--red); }
+  .prio-media { background: var(--yellow-dim); color: var(--yellow); }
+  .prio-baixa { background: var(--green-dim); color: var(--green); }
 </style>
 </head>
 <body>
@@ -359,6 +373,166 @@
 
       <!-- GRADE DE MÓDULOS DO MURAL -->
       <div class="mural-grid" id="grid-mural-inicio"></div>
+    </div>
+
+    <!-- LISTAS DE COMPRAS & TAREFAS (Etapa 2) -->
+    <div id="sec-listas" class="section" style="display:none;">
+      <!-- VISÃO 1: GRADE GERAL DE LISTAS -->
+      <div id="listas-visao-grade">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div>
+            <p class="sec-title" style="margin:0;">📝 Listas da Família</p>
+            <p style="font-size:12px;color:var(--muted);margin:2px 0 0;">Compras e tarefas compartilhadas</p>
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-nova-lista" style="width:auto;margin:0;padding:8px 14px;font-size:12px;" onclick="abrirModalNovaLista()">+ Nova Lista</button>
+        </div>
+
+        <!-- ABAS DE FILTRO POR TIPO -->
+        <div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;">
+          <button type="button" class="filtro-pill sel" id="flt-listas-todas" onclick="filtrarTipoListas('todas')">Todas</button>
+          <button type="button" class="filtro-pill" id="flt-listas-compras" onclick="filtrarTipoListas('compras')">🛒 Compras</button>
+          <button type="button" class="filtro-pill" id="flt-listas-tarefas" onclick="filtrarTipoListas('tarefas')">✅ Tarefas</button>
+        </div>
+
+        <!-- GRADE DE CARDS DAS LISTAS -->
+        <div id="listas-grade-cards" style="display:flex;flex-direction:column;gap:10px;"></div>
+      </div>
+
+      <!-- VISÃO 2: DETALHES DA LISTA SELECIONADA -->
+      <div id="listas-visao-detalhe" style="display:none;">
+        <!-- BARRA DE NAVEGAÇÃO SUPERIOR DO DETALHE -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <button type="button" class="btn" id="btn-voltar-grade-listas" style="width:auto;margin:0;padding:6px 12px;font-size:12px;" onclick="fecharListaDetalhe()">← Voltar às Listas</button>
+          <button type="button" class="btn btn-r" id="btn-excluir-lista-atual" style="width:auto;margin:0;padding:6px 10px;font-size:11px;" onclick="confirmarExcluirListaAtual()">🗑️ Excluir Lista</button>
+        </div>
+
+        <!-- HEADER DA LISTA ATIVA -->
+        <div class="card" id="lista-detalhe-header-card" style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div id="ld-icone" style="width:42px;height:42px;border-radius:12px;background:var(--blue-dim);display:flex;align-items:center;justify-content:center;font-size:22px;">🛒</div>
+              <div>
+                <h3 id="ld-titulo" style="font-size:17px;font-weight:700;margin:0 0 2px;">Lista</h3>
+                <p id="ld-subinfo" style="font-size:12px;color:var(--muted);margin:0;">Criado por Família</p>
+              </div>
+            </div>
+            <span id="ld-badge-tipo" class="badge">Compras</span>
+          </div>
+
+          <!-- RESUMO DE VALORES / PROGRESSO -->
+          <div id="ld-bloco-resumo" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);"></div>
+        </div>
+
+        <!-- CHIPS DE ITENS FREQUENTES (COMPRAS) -->
+        <div id="ld-bloco-chips-frequentes" style="margin-bottom:12px;display:none;">
+          <p style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">⚡ Comprados com Frequência (+1 toque):</p>
+          <div id="ld-chips-frequentes-container" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+        </div>
+
+        <!-- FILTRO DE MEMBRO (TAREFAS) -->
+        <div id="ld-bloco-filtro-membro" style="margin-bottom:12px;display:none;">
+          <p style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">👤 Responsável:</p>
+          <div id="ld-filtro-membros-container" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+        </div>
+
+        <!-- FORMULÁRIO DE ADIÇÃO RÁPIDA -->
+        <div class="card" style="margin-bottom:14px;background:var(--bg3);">
+          <p id="form-item-titulo" style="font-size:13px;font-weight:700;margin-bottom:8px;">+ Adicionar à Lista</p>
+
+          <!-- CAMPOS DE COMPRA -->
+          <div id="form-campos-compra">
+            <div class="input-row" style="margin-bottom:8px;">
+              <input type="text" id="item-compra-nome" placeholder="Nome do item (ex: Café, Arroz, Frutas...)" style="font-size:14px;padding:10px 12px;"/>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+              <div>
+                <label style="font-size:11px;color:var(--muted);">Qtd</label>
+                <input type="number" id="item-compra-qtd" value="1" min="0.1" step="any" inputmode="decimal" style="padding:8px;font-size:13px;"/>
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--muted);">Unidade</label>
+                <select id="item-compra-unidade" style="padding:8px;font-size:13px;">
+                  <option value="un">un</option>
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                  <option value="l">L</option>
+                  <option value="ml">ml</option>
+                  <option value="pct">pct</option>
+                  <option value="cx">cx</option>
+                  <option value="dz">dz</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--muted);">Preço Est. (R$)</label>
+                <input type="number" id="item-compra-preco" placeholder="0,00" step="0.01" inputmode="decimal" style="padding:8px;font-size:13px;"/>
+              </div>
+            </div>
+            <div class="input-row" style="margin-bottom:10px;">
+              <label style="font-size:11px;color:var(--muted);">Corredor de Mercado</label>
+              <select id="item-compra-categoria" style="padding:8px;font-size:13px;">
+                <option value="mercearia">🍝 Mercearia</option>
+                <option value="hortifruti">🥬 Hortifrúti</option>
+                <option value="carnes">🥩 Carnes & Frios</option>
+                <option value="laticinios">🧀 Laticínios</option>
+                <option value="padaria">🥖 Padaria</option>
+                <option value="bebidas">🧃 Bebidas</option>
+                <option value="limpeza">🧼 Limpeza</option>
+                <option value="higiene">🧴 Higiene & Farmácia</option>
+                <option value="outros">📦 Outros</option>
+              </select>
+            </div>
+            <button type="button" class="btn btn-primary" id="btn-adicionar-item-compra" style="margin:0;padding:10px;" onclick="adicionarItemCompraModal()">+ Adicionar Item</button>
+          </div>
+
+          <!-- CAMPOS DE TAREFA TO-DO -->
+          <div id="form-campos-tarefa" style="display:none;">
+            <div class="input-row" style="margin-bottom:8px;">
+              <input type="text" id="tarefa-titulo" placeholder="O que precisa ser feito? (ex: Comprar remédio)" style="font-size:14px;padding:10px 12px;"/>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+              <div>
+                <label style="font-size:11px;color:var(--muted);">Responsável</label>
+                <select id="tarefa-responsavel" style="padding:8px;font-size:13px;"></select>
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--muted);">Prazo (Data)</label>
+                <input type="date" id="tarefa-prazo" style="padding:8px;font-size:13px;"/>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+              <div>
+                <label style="font-size:11px;color:var(--muted);">Prioridade</label>
+                <select id="tarefa-prioridade" style="padding:8px;font-size:13px;">
+                  <option value="media">🟡 Média</option>
+                  <option value="alta">🔴 Alta</option>
+                  <option value="baixa">🟢 Baixa</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--muted);">Repetição / Recorrência</label>
+                <select id="tarefa-recorrencia" style="padding:8px;font-size:13px;">
+                  <option value="nenhuma">Não se repete</option>
+                  <option value="diaria">Diária (+1 dia)</option>
+                  <option value="semanal">Semanal (+7 dias)</option>
+                  <option value="mensal">Mensal (+1 mês)</option>
+                </select>
+              </div>
+            </div>
+            <button type="button" class="btn btn-primary" id="btn-adicionar-tarefa" style="margin:0;padding:10px;" onclick="adicionarTarefaModal()">+ Adicionar Tarefa</button>
+          </div>
+        </div>
+
+        <!-- CONTÊINERES DE ITENS PENDENTES E CONCLUÍDOS -->
+        <div id="ld-itens-pendentes-container"></div>
+        <div id="ld-itens-concluidos-container" style="margin-top:16px;"></div>
+
+        <!-- CONVERSÃO DE COMPRAS EM GASTO (Oculto para Perfil Criança) -->
+        <div id="ld-bloco-converter-gasto" style="margin-top:18px;display:none;">
+          <button type="button" class="btn btn-g" id="btn-converter-lista-gasto" style="padding:12px;font-weight:700;" onclick="abrirModalConverterGastoLista()">
+            💳 Lançar Comprados nos Gastos
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- EXPLORAR (Etapa 1 - Seção 4.19) -->
@@ -788,15 +962,110 @@
         <div style="font-size:26px;margin-bottom:4px;">💵</div>
         <div style="font-size:13px;font-weight:700;">Nova Receita</div>
       </button>
+      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');go('listas');">
+        <div style="font-size:26px;margin-bottom:4px;">🛒</div>
+        <div style="font-size:13px;font-weight:700;">Listas / To-Do</div>
+      </button>
       <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalMembro();">
         <div style="font-size:26px;margin-bottom:4px;">👤</div>
         <div style="font-size:13px;font-weight:700;">Novo Membro</div>
       </button>
-      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');go('explorar');">
-        <div style="font-size:26px;margin-bottom:4px;">🧭</div>
-        <div style="font-size:13px;font-weight:700;">Ver Módulos</div>
+      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;grid-column:1 / -1;" onclick="closeM('m-fab-menu');go('explorar');">
+        <div style="font-size:22px;margin-bottom:2px;">🧭</div>
+        <div style="font-size:12px;font-weight:700;">Ver Todos os Módulos</div>
       </button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL NOVA LISTA FAMILIAR (Etapa 2) -->
+<div class="modal-bg" id="m-nova-lista">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-nova-lista')">×</span>
+    <p class="modal-title">✨ Nova Lista do Círculo</p>
+    
+    <div class="input-row">
+      <label>Título da Lista</label>
+      <input type="text" id="nl-titulo" placeholder="Ex: Feira de Domingo, Viagem de Férias, Farmácia..."/>
+    </div>
+
+    <div class="input-row">
+      <label>Tipo de Lista</label>
+      <select id="nl-tipo" onchange="atualizarOpcoesNovaListaModal()">
+        <option value="compras">🛒 Lista de Compras (Com corredor e carrinho)</option>
+        <option value="tarefas">✅ Lista de Tarefas (To-Do com prazos e responsáveis)</option>
+      </select>
+    </div>
+
+    <div class="input-row">
+      <label>Ícone Representativo</label>
+      <div id="nl-icone-grid" class="nl-icones-grid" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        <button type="button" class="filtro-pill sel" data-icone="🛒" onclick="selecionarIconeNovaLista('🛒')">🛒 Compras</button>
+        <button type="button" class="filtro-pill" data-icone="✅" onclick="selecionarIconeNovaLista('✅')">✅ Tarefas</button>
+        <button type="button" class="filtro-pill" data-icone="🥬" onclick="selecionarIconeNovaLista('🥬')">🥬 Feira</button>
+        <button type="button" class="filtro-pill" data-icone="💊" onclick="selecionarIconeNovaLista('💊')">💊 Farmácia</button>
+        <button type="button" class="filtro-pill" data-icone="🧳" onclick="selecionarIconeNovaLista('🧳')">🧳 Viagem</button>
+        <button type="button" class="filtro-pill" data-icone="🏠" onclick="selecionarIconeNovaLista('🏠')">🏠 Casa</button>
+      </div>
+      <input type="hidden" id="nl-icone" value="🛒"/>
+    </div>
+
+    <div class="input-row">
+      <label>Cor Identificadora</label>
+      <div id="nl-cor-grid" class="nl-cores-grid" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;"></div>
+      <input type="hidden" id="nl-cor" value="#10B981"/>
+    </div>
+
+    <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="salvarNovaListaModal()">Criar Lista</button>
+  </div>
+</div>
+
+<!-- MODAL CONVERTER COMPRAS EM GASTO (Etapa 2) -->
+<div class="modal-bg" id="m-converter-gasto-lista">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-converter-gasto-lista')">×</span>
+    <p class="modal-title" id="cvg-lista-nome">💳 Lançar Compras nos Gastos</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+      Gera uma despesa financeira automática no Orçamento com o valor do carrinho.
+    </p>
+
+    <div class="card" style="background:var(--bg3);margin-bottom:12px;">
+      <p style="font-size:12px;color:var(--muted);margin:0 0 2px;">Total estimado dos itens no carrinho:</p>
+      <p class="big-num c-green" id="cvg-total-carrinho-txt" style="font-size:22px;"><span id="cvg-total-txt">R$ 0,00</span></p>
+    </div>
+
+    <div class="input-row">
+      <label>Valor final pago no caixa (R$)</label>
+      <input type="number" id="cvg-valor" step="0.01" inputmode="decimal" placeholder="0,00"/>
+      <span style="font-size:11px;color:var(--muted);">Ajuste se o valor da nota/cupom for diferente do estimado</span>
+    </div>
+
+    <div class="input-row">
+      <label>Descrição do Gasto</label>
+      <input type="text" id="cvg-desc" placeholder="Ex: Supermercado do Mês"/>
+    </div>
+
+    <div class="input-row">
+      <label>Quem realizou o pagamento (Titular)</label>
+      <select id="cvg-titular"></select>
+    </div>
+
+    <div class="input-row">
+      <label>Categoria de Finanças</label>
+      <select id="cvg-categoria"></select>
+    </div>
+
+    <div class="input-row">
+      <label>Data da Compra</label>
+      <input type="date" id="cvg-data"/>
+    </div>
+
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:6px 0 14px;">
+      <input type="checkbox" id="cvg-limpar-comprados" checked style="width:18px;height:18px;accent-color:var(--green);"/>
+      <span>Limpar itens já comprados da lista após lançar</span>
+    </label>
+
+    <button type="button" class="btn btn-g" onclick="confirmarConverterGastoModal()">Confirmar Lançamento Financeiro</button>
   </div>
 </div>
 

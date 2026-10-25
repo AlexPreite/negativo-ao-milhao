@@ -31,7 +31,7 @@ const MODELOS_GEMINI_FALLBACK = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini
 
 const MODULOS_INICIO_CATALOGO = [
   { id: 'orcamento', nome: 'Orçamento', desc: 'Saldo em Caixa Real e visão financeira', icone: '🐷', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'resumo' },
-  { id: 'listas', nome: 'Listas', desc: 'Compras e tarefas colaborativas', icone: '🛒', cor: '#F59E0B', bgIcon: 'rgba(245,158,11,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
+  { id: 'listas', nome: 'Listas', desc: 'Compras e tarefas colaborativas', icone: '🛒', cor: '#F59E0B', bgIcon: 'rgba(245,158,11,0.14)', categoria: 'essencial', telaAlvo: 'listas' },
   { id: 'calendario', nome: 'Calendário', desc: 'Rotina familiar e contas a vencer', icone: '📅', cor: '#8B5CF6', bgIcon: 'rgba(139,92,246,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
   { id: 'familia', nome: 'Minha Família', desc: 'Membros, papéis e convites', icone: '👨‍👩‍👧‍👦', cor: '#5581E3', bgIcon: 'rgba(85,129,227,0.14)', categoria: 'avancado', telaAlvo: 'familia' },
   { id: 'atividade', nome: 'Atividade', desc: 'Linha do tempo e notificações', icone: '⚡', cor: '#3B82F6', bgIcon: 'rgba(59,130,246,0.14)', categoria: 'essencial', telaAlvo: 'atividade' },
@@ -69,6 +69,8 @@ let S = {
     silencioFim: '07:00'
   },
   syncQueue: [],
+  listas: [],
+  historicoCompras: [],
   receitas:[],
   gastos:[],
   dividas:[],
@@ -546,6 +548,100 @@ function migrarParaUpgradeFamiliarV2() {
   // 7. Fila de sincronização offline
   if (!Array.isArray(S.syncQueue)) {
     S.syncQueue = [];
+  }
+
+  // 8. Listas Compartilhadas e Histórico de Compras Frequentes (Etapa 2)
+  if (!Array.isArray(S.listas) || S.listas.length === 0) {
+    const agoraIso = new Date().toISOString();
+    const cId = S.circuloAtivoId || 'circ_1';
+    const mId = S.membroAtivoId || 'm_1';
+    S.listas = [
+      {
+        id: 'lst_mercado_padrao',
+        circuloId: cId,
+        titulo: '🛒 Mercado do Mês',
+        tipo: 'compras',
+        icone: '🛒',
+        cor: '#10B981',
+        criadoPor: mId,
+        criadoEm: agoraIso,
+        itens: [
+          {
+            id: 'item_compra_1',
+            nome: 'Arroz 5kg',
+            qtd: 1,
+            unidade: 'pct',
+            categoria: 'mercearia',
+            precoEstimado: 29.90,
+            comprado: false,
+            criadoPorNome: 'Alex',
+            criadoPorCor: '#5581E3',
+            criadoEm: agoraIso
+          },
+          {
+            id: 'item_compra_2',
+            nome: 'Leite Integral (Caixa)',
+            qtd: 6,
+            unidade: 'un',
+            categoria: 'laticinios',
+            precoEstimado: 5.49,
+            comprado: false,
+            criadoPorNome: 'Gabi',
+            criadoPorCor: '#EC4899',
+            criadoEm: agoraIso
+          }
+        ]
+      },
+      {
+        id: 'lst_tarefas_padrao',
+        circuloId: cId,
+        titulo: '✅ Tarefas da Casa',
+        tipo: 'tarefas',
+        icone: '✅',
+        cor: '#5581E3',
+        criadoPor: mId,
+        criadoEm: agoraIso,
+        itens: [
+          {
+            id: 'item_tarefa_1',
+            titulo: 'Organizar despensa e conferir validade',
+            responsavelId: mId,
+            responsavelNome: 'Alex',
+            responsavelCor: '#5581E3',
+            prazo: new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 10),
+            prioridade: 'media',
+            recorrencia: 'semanal',
+            concluida: false,
+            criadoPorNome: 'Alex',
+            criadoEm: agoraIso
+          },
+          {
+            id: 'item_tarefa_2',
+            titulo: 'Regar as plantas da varanda',
+            responsavelId: mId,
+            responsavelNome: 'Alex',
+            responsavelCor: '#5581E3',
+            prazo: new Date().toISOString().slice(0, 10),
+            prioridade: 'baixa',
+            recorrencia: 'diaria',
+            concluida: false,
+            criadoPorNome: 'Alex',
+            criadoEm: agoraIso
+          }
+        ]
+      }
+    ];
+  }
+
+  if (!Array.isArray(S.historicoCompras) || S.historicoCompras.length === 0) {
+    S.historicoCompras = [
+      { nome: 'Arroz', categoria: 'mercearia', precoUltimo: 29.90, vezesUsado: 5 },
+      { nome: 'Leite', categoria: 'laticinios', precoUltimo: 5.49, vezesUsado: 8 },
+      { nome: 'Café', categoria: 'mercearia', precoUltimo: 18.50, vezesUsado: 4 },
+      { nome: 'Sabão em Pó', categoria: 'limpeza', precoUltimo: 22.90, vezesUsado: 3 },
+      { nome: 'Frutas (Maçã/Banana)', categoria: 'hortifruti', precoUltimo: 14.00, vezesUsado: 6 },
+      { nome: 'Pão Francês', categoria: 'padaria', precoUltimo: 8.50, vezesUsado: 7 }
+    ];
   }
 }
 
@@ -1084,6 +1180,1157 @@ async function chamarGeminiComFallback({ contents, systemInstruction, generation
   throw new Error(`Todos os modelos Gemini do roteador falharam. Último erro: ${ultimoErro ? ultimoErro.message : 'Indisponibilidade de cota'}`);
 }
 
+// ============================================================================
+// SUPER-APP FAMILIAR V2.0 - LISTAS DE COMPRAS & TAREFAS TO-DO (Etapa 2)
+// ============================================================================
+
+// Categorias organizadas por corredor de mercado (Seção 4.2)
+const CATEGORIAS_MERCADO = {
+  hortifruti: { id: 'hortifruti', nome: 'Hortifrúti', icone: '🥬', cor: '#10B981' },
+  carnes:     { id: 'carnes',     nome: 'Carnes & Frios', icone: '🥩', cor: '#EF4444' },
+  laticinios: { id: 'laticinios', nome: 'Laticínios', icone: '🧀', cor: '#F59E0B' },
+  mercearia:  { id: 'mercearia',  nome: 'Mercearia', icone: '🍝', cor: '#8B5CF6' },
+  padaria:    { id: 'padaria',    nome: 'Padaria', icone: '🥖', cor: '#EC4899' },
+  bebidas:    { id: 'bebidas',    nome: 'Bebidas', icone: '🧃', cor: '#3B82F6' },
+  limpeza:    { id: 'limpeza',    nome: 'Limpeza', icone: '🧼', cor: '#06B6D4' },
+  higiene:    { id: 'higiene',    nome: 'Higiene & Farmácia', icone: '🧴', cor: '#14B8A6' },
+  outros:     { id: 'outros',     nome: 'Outros', icone: '📦', cor: '#6B7280' }
+};
+
+// Variáveis de estado da tela de listas
+let listaAtivaId = null;
+let filtroTipoListasAtual = 'todas';
+let filtroMembroTarefasAtual = 'todos';
+let listaParaConverterId = null;
+
+// Buffer para agrupamento anti-spam de notificações de adição de itens (15s)
+const bufferNotifItensLista = {
+  listaId: null,
+  membroNome: '',
+  listaTitulo: '',
+  quantidade: 0,
+  timestamp: 0
+};
+
+/**
+ * Registra mutações na fila offline local (S.syncQueue) para persistência e
+ * sincronização em segundo plano conforme arquitetura Outbox Pattern (Seção 3.1).
+ */
+function adicionarNaFilaSync(tabela, operacao, dados) {
+  if (!S) return null;
+  if (!Array.isArray(S.syncQueue)) S.syncQueue = [];
+
+  const entrada = {
+    id: 'sync_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
+    circuloId: S.circuloAtivoId || 'circ_1',
+    tabela,
+    operacao,
+    dados,
+    timestamp: new Date().toISOString(),
+    status: 'pendente'
+  };
+
+  S.syncQueue.push(entrada);
+  // Mantém histórico controlado
+  if (S.syncQueue.length > 100) {
+    S.syncQueue = S.syncQueue.slice(S.syncQueue.length - 100);
+  }
+  return entrada;
+}
+
+/**
+ * Calcula o resumo financeiro ou de tarefas de uma lista com precisão de centavos.
+ */
+function calcularResumoLista(listaOuId) {
+  const lista = typeof listaOuId === 'string'
+    ? (S.listas || []).find(l => l.id === listaOuId)
+    : listaOuId;
+
+  if (!lista) {
+    return {
+      totalItens: 0,
+      itensPendentes: 0,
+      itensComprados: 0,
+      concluidas: 0,
+      pendentes: 0,
+      pctConcluido: 0,
+      totalEstimado: 0,
+      totalCarrinho: 0,
+      totalCarrinhoCentavos: 0,
+      totalEstimadoCentavos: 0
+    };
+  }
+
+  const itens = Array.isArray(lista.itens) ? lista.itens : [];
+  const totalItens = itens.length;
+
+  if (lista.tipo === 'compras') {
+    const itensPendentes = itens.filter(i => !i.comprado).length;
+    const itensComprados = itens.filter(i => i.comprado).length;
+
+    let somaEstimada = 0;
+    let somaCarrinho = 0;
+
+    itens.forEach(i => {
+      const qtd = Number(i.qtd) > 0 ? Number(i.qtd) : 1;
+      const preco = Number(i.precoEstimado) > 0 ? Number(i.precoEstimado) : 0;
+      const totalItem = Math.round(qtd * preco * 100) / 100;
+      somaEstimada += totalItem;
+      if (i.comprado) {
+        somaCarrinho += totalItem;
+      }
+    });
+
+    somaEstimada = Math.round(somaEstimada * 100) / 100;
+    somaCarrinho = Math.round(somaCarrinho * 100) / 100;
+
+    return {
+      totalItens,
+      itensPendentes,
+      itensComprados,
+      totalEstimado: somaEstimada,
+      totalCarrinho: somaCarrinho,
+      totalCarrinhoCentavos: Math.round(somaCarrinho * 100),
+      totalEstimadoCentavos: Math.round(somaEstimada * 100)
+    };
+  } else {
+    // tipo === 'tarefas'
+    const concluidas = itens.filter(i => i.concluida).length;
+    const pendentes = totalItens - concluidas;
+    const pctConcluido = totalItens > 0 ? Math.round((concluidas / totalItens) * 100) : 0;
+
+    return {
+      totalItens,
+      concluidas,
+      pendentes,
+      pctConcluido
+    };
+  }
+}
+
+/**
+ * Cria uma nova lista familiar (compras ou tarefas).
+ */
+function criarListaFamiliar(dados) {
+  if (!dados || !dados.titulo) return null;
+  const tituloLimpo = dados.titulo.trim();
+  if (!tituloLimpo) return null;
+
+  if (!S) return null;
+  if (!Array.isArray(S.listas)) S.listas = [];
+
+  const tipo = dados.tipo === 'tarefas' ? 'tarefas' : 'compras';
+  const iconePadrao = tipo === 'compras' ? '🛒' : '✅';
+  const corPadrao = tipo === 'compras' ? '#10B981' : '#5581E3';
+
+  const novaLista = {
+    id: dados.id || ('lst_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6)),
+    circuloId: dados.circuloId || S.circuloAtivoId || 'circ_1',
+    titulo: tituloLimpo,
+    tipo,
+    icone: dados.icone || iconePadrao,
+    cor: dados.cor || corPadrao,
+    criadoPor: dados.criadoPor || S.membroAtivoId || 'm_1',
+    criadoEm: dados.criadoEm || new Date().toISOString(),
+    itens: Array.isArray(dados.itens) ? dados.itens : []
+  };
+
+  S.listas.push(novaLista);
+  adicionarNaFilaSync('listas', 'insert', novaLista);
+
+  registrarNotificacaoFamilia({
+    tipo: 'listas',
+    titulo: 'Nova Lista Familiar',
+    texto: `Lista "${tituloLimpo}" criada por ${obterMembroAtivo().nome}`,
+    linkTela: 'listas'
+  });
+
+  save();
+  render();
+  return novaLista;
+}
+
+/**
+ * Exclui uma lista familiar.
+ */
+function excluirListaFamiliar(listaId) {
+  if (!S || !Array.isArray(S.listas)) return false;
+  const idx = S.listas.findIndex(l => l.id === listaId);
+  if (idx < 0) return false;
+
+  const removida = S.listas.splice(idx, 1)[0];
+  if (listaAtivaId === listaId) {
+    listaAtivaId = null;
+  }
+
+  adicionarNaFilaSync('listas', 'delete', { id: listaId });
+
+  registrarNotificacaoFamilia({
+    tipo: 'listas',
+    titulo: 'Lista Excluída',
+    texto: `Lista "${removida.titulo}" foi removida`,
+    linkTela: 'listas'
+  });
+
+  save();
+  render();
+  return true;
+}
+
+/**
+ * Emite notificações agrupadas para adições consecutivas de itens na mesma lista em 15 segundos.
+ */
+function dispararNotificacaoAgrupadaItens(lista, membroNome, qtdAdicionada = 1) {
+  const agora = Date.now();
+  if (bufferNotifItensLista.listaId === lista.id && (agora - bufferNotifItensLista.timestamp) < 15000) {
+    bufferNotifItensLista.quantidade += qtdAdicionada;
+    bufferNotifItensLista.timestamp = agora;
+  } else {
+    bufferNotifItensLista.listaId = lista.id;
+    bufferNotifItensLista.membroNome = membroNome;
+    bufferNotifItensLista.listaTitulo = lista.titulo;
+    bufferNotifItensLista.quantidade = qtdAdicionada;
+    bufferNotifItensLista.timestamp = agora;
+  }
+
+  const texto = bufferNotifItensLista.quantidade > 1
+    ? `${membroNome} adicionou ${bufferNotifItensLista.quantidade} itens na lista "${lista.titulo}"`
+    : `${membroNome} adicionou item na lista "${lista.titulo}"`;
+
+  registrarNotificacaoFamilia({
+    tipo: 'listas',
+    titulo: 'Item Adicionado',
+    texto,
+    linkTela: 'listas'
+  });
+}
+
+/**
+ * Adiciona um item de compra ou tarefa To-Do a uma lista existente.
+ */
+function adicionarItemLista(listaId, dadosItem) {
+  if (!S || !Array.isArray(S.listas) || !dadosItem) return null;
+  const lista = S.listas.find(l => l.id === listaId);
+  if (!lista) return null;
+  if (!Array.isArray(lista.itens)) lista.itens = [];
+
+  const membro = obterMembroAtivo();
+  const agoraIso = new Date().toISOString();
+  let novoItem = null;
+
+  if (lista.tipo === 'compras') {
+    const nomeLimpo = (dadosItem.nome || '').trim();
+    if (!nomeLimpo) return null;
+
+    const qtd = Number(dadosItem.qtd) > 0 ? Number(dadosItem.qtd) : 1;
+    const unidade = (dadosItem.unidade || 'un').trim();
+    const categoria = dadosItem.categoria && CATEGORIAS_MERCADO[dadosItem.categoria] ? dadosItem.categoria : 'mercearia';
+    const preco = Number(dadosItem.precoEstimado) >= 0 ? Math.round(Number(dadosItem.precoEstimado) * 100) / 100 : 0;
+
+    novoItem = {
+      id: dadosItem.id || ('item_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 5)),
+      nome: nomeLimpo,
+      qtd,
+      unidade,
+      categoria,
+      precoEstimado: preco,
+      comprado: Boolean(dadosItem.comprado),
+      criadoPorNome: dadosItem.criadoPorNome || membro.nome,
+      criadoPorCor: dadosItem.criadoPorCor || membro.cor,
+      criadoEm: dadosItem.criadoEm || agoraIso
+    };
+
+    lista.itens.push(novoItem);
+
+    // Aprendizado contínuo do histórico de itens frequentes
+    if (!Array.isArray(S.historicoCompras)) S.historicoCompras = [];
+    const itemHist = S.historicoCompras.find(h => h.nome.toLowerCase() === nomeLimpo.toLowerCase());
+    if (itemHist) {
+      itemHist.vezesUsado = (itemHist.vezesUsado || 1) + 1;
+      if (preco > 0) itemHist.precoUltimo = preco;
+      itemHist.categoria = categoria;
+    } else {
+      S.historicoCompras.push({
+        nome: nomeLimpo,
+        categoria,
+        precoUltimo: preco,
+        vezesUsado: 1
+      });
+    }
+
+  } else {
+    // tipo === 'tarefas'
+    const tituloLimpo = (dadosItem.titulo || '').trim();
+    if (!tituloLimpo) return null;
+
+    const respId = dadosItem.responsavelId || S.membroAtivoId;
+    const respObj = (S.membrosPerfil || []).find(m => m.id === respId) || membro;
+
+    novoItem = {
+      id: dadosItem.id || ('item_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 5)),
+      titulo: tituloLimpo,
+      responsavelId: respObj.id,
+      responsavelNome: respObj.nome,
+      responsavelCor: respObj.cor,
+      prazo: dadosItem.prazo || '',
+      prioridade: ['alta', 'media', 'baixa'].includes(dadosItem.prioridade) ? dadosItem.prioridade : 'media',
+      recorrencia: ['nenhuma', 'diaria', 'semanal', 'mensal'].includes(dadosItem.recorrencia) ? dadosItem.recorrencia : 'nenhuma',
+      concluida: Boolean(dadosItem.concluida),
+      criadoPorNome: dadosItem.criadoPorNome || membro.nome,
+      criadoEm: dadosItem.criadoEm || agoraIso
+    };
+
+    lista.itens.push(novoItem);
+  }
+
+  adicionarNaFilaSync('itens_lista', 'insert', { listaId, item: novoItem });
+  dispararNotificacaoAgrupadaItens(lista, membro.nome, 1);
+
+  save();
+  render();
+  return novoItem;
+}
+
+/**
+ * Calcula a data da próxima ocorrência para tarefas recorrentes (+1 dia, +7 dias ou +1 mês).
+ */
+function calcularProximoPrazoRecorrente(prazoBase, recorrencia) {
+  const base = prazoBase || new Date().toISOString().slice(0, 10);
+  const [y, m, d] = base.split('-').map(Number);
+  const dataObj = new Date(y, m - 1, d);
+
+  if (recorrencia === 'diaria') {
+    dataObj.setDate(dataObj.getDate() + 1);
+  } else if (recorrencia === 'semanal') {
+    dataObj.setDate(dataObj.getDate() + 7);
+  } else if (recorrencia === 'mensal') {
+    dataObj.setMonth(dataObj.getMonth() + 1);
+  }
+
+  const ano = dataObj.getFullYear();
+  const mes = String(dataObj.getMonth() + 1).padStart(2, '0');
+  const dia = String(dataObj.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
+/**
+ * Alterna o estado de um item (comprado em compras, ou concluída em tarefas).
+ * Para tarefas recorrentes, cria automaticamente a próxima ocorrência com o novo prazo!
+ */
+function toggleItemLista(listaId, itemId) {
+  if (!S || !Array.isArray(S.listas)) return null;
+  const lista = S.listas.find(l => l.id === listaId);
+  if (!lista || !Array.isArray(lista.itens)) return null;
+
+  const item = lista.itens.find(i => i.id === itemId);
+  if (!item) return null;
+
+  const membro = obterMembroAtivo();
+
+  if (lista.tipo === 'compras') {
+    item.comprado = !item.comprado;
+    if (item.comprado) {
+      item.compradoPor = membro.nome;
+      item.compradoEm = new Date().toISOString();
+      if (Array.isArray(S.historicoCompras)) {
+        const h = S.historicoCompras.find(x => x.nome.toLowerCase() === item.nome.toLowerCase());
+        if (h) h.vezesUsado = (h.vezesUsado || 1) + 1;
+      }
+    } else {
+      delete item.compradoPor;
+      delete item.compradoEm;
+    }
+
+    adicionarNaFilaSync('itens_lista', 'update', { listaId, itemId, comprado: item.comprado });
+  } else {
+    // tipo === 'tarefas'
+    item.concluida = !item.concluida;
+    if (item.concluida) {
+      item.concluidaPor = membro.nome;
+      item.concluidaEm = new Date().toISOString();
+
+      // Tarefa Recorrente: gera automaticamente a próxima ocorrência na lista
+      if (item.recorrencia && item.recorrencia !== 'nenhuma') {
+        const novoPrazo = calcularProximoPrazoRecorrente(item.prazo, item.recorrencia);
+        const proximaTarefa = {
+          id: 'item_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 5),
+          titulo: item.titulo,
+          responsavelId: item.responsavelId,
+          responsavelNome: item.responsavelNome,
+          responsavelCor: item.responsavelCor,
+          prazo: novoPrazo,
+          prioridade: item.prioridade,
+          recorrencia: item.recorrencia,
+          concluida: false,
+          criadoPorNome: item.criadoPorNome || membro.nome,
+          criadoEm: new Date().toISOString()
+        };
+
+        lista.itens.push(proximaTarefa);
+        adicionarNaFilaSync('itens_lista', 'insert', { listaId, item: proximaTarefa });
+
+        registrarNotificacaoFamilia({
+          tipo: 'listas',
+          titulo: 'Tarefa Concluída & Reagendada',
+          texto: `"${item.titulo}" concluída por ${membro.nome}! Próxima agendada para ${novoPrazo}`,
+          linkTela: 'listas'
+        });
+      }
+    } else {
+      delete item.concluidaPor;
+      delete item.concluidaEm;
+    }
+
+    adicionarNaFilaSync('itens_lista', 'update', { listaId, itemId, concluida: item.concluida });
+  }
+
+  save();
+  render();
+  return item;
+}
+
+/**
+ * Remove um item da lista.
+ */
+function excluirItemLista(listaId, itemId) {
+  if (!S || !Array.isArray(S.listas)) return false;
+  const lista = S.listas.find(l => l.id === listaId);
+  if (!lista || !Array.isArray(lista.itens)) return false;
+
+  const idx = lista.itens.findIndex(i => i.id === itemId);
+  if (idx < 0) return false;
+
+  lista.itens.splice(idx, 1);
+  adicionarNaFilaSync('itens_lista', 'delete', { listaId, itemId });
+
+  save();
+  render();
+  return true;
+}
+
+/**
+ * Readiciona com 1 toque um item do histórico frequente de compras à lista.
+ */
+function readicionarItemFrequente(listaId, nomeItem) {
+  if (!S) return null;
+  const hist = (S.historicoCompras || []).find(h => h.nome.toLowerCase() === String(nomeItem || '').toLowerCase());
+  const dados = {
+    nome: hist ? hist.nome : nomeItem,
+    qtd: 1,
+    unidade: 'un',
+    categoria: hist ? hist.categoria : 'mercearia',
+    precoEstimado: hist ? (hist.precoUltimo || 0) : 0,
+    comprado: false
+  };
+  return adicionarItemLista(listaId, dados);
+}
+
+/**
+ * Converte itens de compras comprados no carrinho em um lançamento de gasto financeiro (Seção 4.5).
+ * Blindado contra acesso do perfil 'crianca'.
+ */
+function converterListaEmGasto(listaId, dadosOverride = {}) {
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    if (typeof alert === 'function') {
+      alert('Acesso financeiro restrito aos responsáveis adultos da família.');
+    }
+    return { ok: false, motivo: 'perfil_crianca' };
+  }
+
+  if (!S || !Array.isArray(S.listas)) return { ok: false, motivo: 'sem_listas' };
+  const lista = S.listas.find(l => l.id === listaId);
+  if (!lista || lista.tipo !== 'compras') return { ok: false, motivo: 'lista_invalida' };
+
+  const resumo = calcularResumoLista(lista);
+  let valorFinal = dadosOverride.valor !== undefined
+    ? Number(dadosOverride.valor)
+    : resumo.totalCarrinho;
+
+  valorFinal = Math.round((Number(valorFinal) || 0) * 100) / 100;
+  if (valorFinal <= 0) {
+    if (typeof alert === 'function') {
+      alert('Marque pelo menos um item no carrinho com preço estimado para converter em gasto financeiro.');
+    }
+    return { ok: false, motivo: 'valor_zerado' };
+  }
+
+  const titularFinal = dadosOverride.titular || membroAtivo.nome || 'Família';
+  const descFinal = dadosOverride.desc || `Mercado: ${lista.titulo}`;
+  const dataFinal = dadosOverride.data || new Date().toISOString().slice(0, 10);
+  const catFinal = dadosOverride.cat || 'recorrente';
+
+  if (!Array.isArray(S.gastos)) S.gastos = [];
+
+  const novoGasto = {
+    id: Date.now(),
+    desc: descFinal,
+    val: valorFinal,
+    cat: catFinal,
+    titular: titularFinal,
+    data: dataFinal,
+    pago: true,
+    dataPagto: dataFinal,
+    origemListaId: listaId,
+    parcelado: false,
+    recorrente: false
+  };
+
+  S.gastos.push(novoGasto);
+  adicionarNaFilaSync('lancamentos_financeiros', 'insert', novoGasto);
+
+  // Limpa itens comprados da lista após a conversão para gasto
+  if (dadosOverride.limparComprados !== false) {
+    lista.itens = lista.itens.filter(i => !i.comprado);
+  }
+
+  registrarNotificacaoFamilia({
+    tipo: 'financas',
+    titulo: 'Compras Lançadas no Orçamento',
+    texto: `${descFinal} (${fmt(valorFinal)}) por ${titularFinal}`,
+    valor: valorFinal,
+    linkTela: 'gastos'
+  });
+
+  save();
+  render();
+  return { ok: true, gasto: novoGasto, valor: valorFinal };
+}
+
+// --- FUNÇÕES DE NAVEGAÇÃO E MODAIS DE LISTAS ---
+
+function abrirModuloFamiliar(moduloId) {
+  if (moduloId === 'listas') {
+    go('listas');
+  } else {
+    go(moduloId);
+  }
+}
+
+function abrirListaDetalhe(listaId) {
+  listaAtivaId = listaId;
+  if (typeof document !== 'undefined') {
+    const visaoGrade = document.getElementById('listas-visao-grade');
+    const visaoDetalhe = document.getElementById('listas-visao-detalhe');
+    if (visaoGrade) visaoGrade.style.display = 'none';
+    if (visaoDetalhe) visaoDetalhe.style.display = 'block';
+  }
+  renderListas();
+}
+
+function fecharListaDetalhe() {
+  listaAtivaId = null;
+  if (typeof document !== 'undefined') {
+    const visaoGrade = document.getElementById('listas-visao-grade');
+    const visaoDetalhe = document.getElementById('listas-visao-detalhe');
+    if (visaoGrade) visaoGrade.style.display = 'block';
+    if (visaoDetalhe) visaoDetalhe.style.display = 'none';
+  }
+  renderListas();
+}
+
+function filtrarTipoListas(tipo) {
+  filtroTipoListasAtual = tipo;
+  if (typeof document !== 'undefined') {
+    ['flt-listas-todas', 'flt-listas-compras', 'flt-listas-tarefas'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('sel');
+    });
+    const target = tipo === 'compras' ? 'flt-listas-compras' : tipo === 'tarefas' ? 'flt-listas-tarefas' : 'flt-listas-todas';
+    const el = document.getElementById(target);
+    if (el) el.classList.add('sel');
+  }
+  renderListas();
+}
+
+function filtrarMembroTarefas(membroId) {
+  filtroMembroTarefasAtual = membroId;
+  renderListas();
+}
+
+function abrirModalNovaLista() {
+  if (typeof document === 'undefined') return;
+  const tInput = document.getElementById('nl-titulo');
+  if (tInput) tInput.value = '';
+
+  const tipoSelect = document.getElementById('nl-tipo');
+  if (tipoSelect) tipoSelect.value = 'compras';
+
+  selecionarIconeNovaLista('🛒');
+  selecionarCorNovaLista('#10B981');
+
+  // Paleta de cores para lista
+  const coresContainer = document.getElementById('nl-cores-grid') || document.getElementById('nl-cor-grid');
+  if (coresContainer) {
+    coresContainer.innerHTML = PALETA_FAMILIAR.map(c => `
+      <div data-cor="${c}" onclick="selecionarCorNovaLista('${c}')" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c === '#10B981' ? '#fff' : 'transparent'};"></div>
+    `).join('');
+  }
+
+  openM('m-nova-lista');
+}
+
+function atualizarOpcoesNovaListaModal() {
+  const tipoSelect = document.getElementById('nl-tipo');
+  if (!tipoSelect) return;
+  if (tipoSelect.value === 'tarefas') {
+    selecionarIconeNovaLista('✅');
+    selecionarCorNovaLista('#5581E3');
+  } else {
+    selecionarIconeNovaLista('🛒');
+    selecionarCorNovaLista('#10B981');
+  }
+}
+
+function selecionarTipoNovaLista() {
+  return atualizarOpcoesNovaListaModal();
+}
+
+function selecionarIconeNovaLista(icone) {
+  const hiddenInput = document.getElementById('nl-icone');
+  if (hiddenInput) hiddenInput.value = icone;
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('#nl-icones-grid button, #nl-icone-grid button').forEach(btn => {
+      if (btn.dataset.icone === icone) btn.classList.add('sel');
+      else btn.classList.remove('sel');
+    });
+  }
+}
+
+function selecionarCorNovaLista(cor) {
+  const hiddenInput = document.getElementById('nl-cor');
+  if (hiddenInput) hiddenInput.value = cor;
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('#nl-cores-grid div, #nl-cor-grid div').forEach(d => {
+      d.style.borderColor = d.dataset.cor === cor ? '#fff' : 'transparent';
+    });
+  }
+}
+
+function salvarNovaListaModal() {
+  const tituloEl = document.getElementById('nl-titulo');
+  const tipoEl = document.getElementById('nl-tipo');
+  const iconeEl = document.getElementById('nl-icone');
+  const corEl = document.getElementById('nl-cor');
+
+  const titulo = tituloEl ? tituloEl.value.trim() : '';
+  const tipo = tipoEl ? tipoEl.value : 'compras';
+  const icone = iconeEl ? iconeEl.value : (tipo === 'compras' ? '🛒' : '✅');
+  const cor = corEl ? corEl.value : '#10B981';
+
+  if (!titulo) {
+    if (typeof alert === 'function') alert('Informe o título da lista.');
+    return;
+  }
+
+  const nova = criarListaFamiliar({ titulo, tipo, icone, cor });
+  closeM('m-nova-lista');
+  if (nova) {
+    abrirListaDetalhe(nova.id);
+  }
+}
+
+function adicionarItemCompraModal() {
+  if (!listaAtivaId) return;
+  const nomeEl = document.getElementById('item-compra-nome');
+  const qtdEl = document.getElementById('item-compra-qtd');
+  const unEl = document.getElementById('item-compra-unidade');
+  const precoEl = document.getElementById('item-compra-preco');
+  const catEl = document.getElementById('item-compra-categoria');
+
+  const nome = nomeEl ? nomeEl.value.trim() : '';
+  const qtd = qtdEl ? parseFloat(qtdEl.value) : 1;
+  const unidade = unEl ? unEl.value : 'un';
+  const precoEstimado = precoEl ? parseFloat(precoEl.value) || 0 : 0;
+  const categoria = catEl ? catEl.value : 'mercearia';
+
+  if (!nome) {
+    if (typeof alert === 'function') alert('Informe o nome do item para adicionar à lista.');
+    return;
+  }
+
+  adicionarItemLista(listaAtivaId, { nome, qtd, unidade, precoEstimado, categoria });
+  if (nomeEl) nomeEl.value = '';
+  if (precoEl) precoEl.value = '';
+}
+
+function adicionarTarefaModal() {
+  if (!listaAtivaId) return;
+  const titEl = document.getElementById('tarefa-titulo');
+  const respEl = document.getElementById('tarefa-responsavel');
+  const prazoEl = document.getElementById('tarefa-prazo');
+  const prioEl = document.getElementById('tarefa-prioridade');
+  const recEl = document.getElementById('tarefa-recorrencia');
+
+  const titulo = titEl ? titEl.value.trim() : '';
+  const responsavelId = respEl ? respEl.value : S.membroAtivoId;
+  const prazo = prazoEl ? prazoEl.value : '';
+  const prioridade = prioEl ? prioEl.value : 'media';
+  const recorrencia = recEl ? recEl.value : 'nenhuma';
+
+  if (!titulo) {
+    if (typeof alert === 'function') alert('Informe o título da tarefa.');
+    return;
+  }
+
+  adicionarItemLista(listaAtivaId, { titulo, responsavelId, prazo, prioridade, recorrencia });
+  if (titEl) titEl.value = '';
+}
+
+function abrirModalConverterGastoLista() {
+  if (!listaAtivaId) return;
+  const lista = (S.listas || []).find(l => l.id === listaAtivaId);
+  if (!lista) return;
+
+  const resumo = calcularResumoLista(lista);
+  if (resumo.totalCarrinho <= 0) {
+    if (typeof alert === 'function') alert('Marque os itens no carrinho antes de converter para despesa financeira.');
+    return;
+  }
+
+  listaParaConverterId = listaAtivaId;
+
+  const txtTotal = document.getElementById('cvg-total-carrinho-txt');
+  if (txtTotal) txtTotal.textContent = fmt(resumo.totalCarrinho);
+
+  const valorInput = document.getElementById('cvg-valor');
+  if (valorInput) valorInput.value = resumo.totalCarrinho.toFixed(2);
+
+  const descInput = document.getElementById('cvg-desc');
+  if (descInput) descInput.value = `Mercado: ${lista.titulo}`;
+
+  const dataInput = document.getElementById('cvg-data');
+  if (dataInput) dataInput.value = new Date().toISOString().slice(0, 10);
+
+  // Preenche titulares disponíveis
+  const titSelect = document.getElementById('cvg-titular');
+  if (titSelect) {
+    const membros = (S.membrosPerfil || []).filter(m => m.papel !== 'crianca');
+    titSelect.innerHTML = membros.map(m => `<option value="${escapeHtml(m.nome)}">${escapeHtml(m.nome)}</option>`).join('');
+  }
+
+  // Preenche categorias de finanças
+  const catSelect = document.getElementById('cvg-categoria');
+  if (catSelect) {
+    const cats = S.categoriasGastos || DEFAULT_CATEGORIAS_GASTOS;
+    catSelect.innerHTML = cats.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.nome)}</option>`).join('');
+  }
+
+  openM('m-converter-gasto-lista');
+}
+
+function confirmarConverterGastoModal() {
+  if (!listaParaConverterId) return;
+  const valorInput = document.getElementById('cvg-valor');
+  const descInput = document.getElementById('cvg-desc');
+  const titSelect = document.getElementById('cvg-titular');
+  const catSelect = document.getElementById('cvg-categoria');
+  const dataInput = document.getElementById('cvg-data');
+  const limparChk = document.getElementById('cvg-limpar-comprados');
+
+  const valor = valorInput ? parseFloat(valorInput.value) : 0;
+  const desc = descInput ? descInput.value.trim() : '';
+  const titular = titSelect ? titSelect.value : '';
+  const cat = catSelect ? catSelect.value : 'recorrente';
+  const data = dataInput ? dataInput.value : '';
+  const limparComprados = limparChk ? limparChk.checked : true;
+
+  if (!valor || valor <= 0) {
+    if (typeof alert === 'function') alert('Informe um valor válido para o lançamento.');
+    return;
+  }
+
+  const res = converterListaEmGasto(listaParaConverterId, { valor, desc, titular, cat, data, limparComprados });
+  if (res.ok) {
+    closeM('m-converter-gasto-lista');
+    listaParaConverterId = null;
+    exibirToastNotificacao(`Despesa de ${fmt(valor)} lançada no Orçamento!`, '💳');
+  }
+}
+
+function confirmarExcluirListaAtual() {
+  if (!listaAtivaId) return;
+  const lista = (S.listas || []).find(l => l.id === listaAtivaId);
+  if (!lista) return;
+
+  if (typeof confirm === 'function' && !confirm(`Tem certeza de que deseja excluir a lista "${lista.titulo}"?`)) {
+    return;
+  }
+
+  excluirListaFamiliar(listaAtivaId);
+}
+
+function excluirListaAtualDetalhe() {
+  return confirmarExcluirListaAtual();
+}
+
+/**
+ * Renderizador mestre da interface de Listas e Tarefas da Etapa 2.
+ */
+function renderListas() {
+  if (typeof document === 'undefined') return;
+
+  const visaoGrade = document.getElementById('listas-visao-grade');
+  const visaoDetalhe = document.getElementById('listas-visao-detalhe');
+  if (!visaoGrade || !visaoDetalhe) return;
+
+  const membroAtivo = obterMembroAtivo();
+  const isCrianca = membroAtivo && membroAtivo.papel === 'crianca';
+
+  // Se nenhuma lista específica estiver aberta, exibe a grade geral
+  if (!listaAtivaId) {
+    visaoGrade.style.display = 'block';
+    visaoDetalhe.style.display = 'none';
+
+    const gradeCards = document.getElementById('listas-grade-cards');
+    if (!gradeCards) return;
+
+    const listas = (S.listas || []).filter(l => {
+      if (filtroTipoListasAtual === 'compras') return l.tipo === 'compras';
+      if (filtroTipoListasAtual === 'tarefas') return l.tipo === 'tarefas';
+      return true;
+    });
+
+    if (listas.length === 0) {
+      gradeCards.innerHTML = `
+        <div class="card" style="text-align:center;padding:32px 16px;color:var(--muted);">
+          <p style="font-size:32px;margin-bottom:8px;">📝</p>
+          <p style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:4px;">Nenhuma lista encontrada</p>
+          <p style="font-size:12px;margin-bottom:14px;">Crie uma lista de compras para feira e mercado ou tarefas para organizar a casa.</p>
+          <button type="button" class="btn btn-primary" style="max-width:200px;margin:0 auto;padding:10px;" onclick="abrirModalNovaLista()">+ Nova Lista</button>
+        </div>
+      `;
+      return;
+    }
+
+    gradeCards.innerHTML = listas.map(l => {
+      const res = calcularResumoLista(l);
+      const isCompras = l.tipo === 'compras';
+
+      let detalheHtml = '';
+      if (isCompras) {
+        detalheHtml = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;">
+            <span style="color:var(--muted);">${res.itensPendentes} pendentes • ${res.itensComprados} no carrinho</span>
+            ${!isCrianca && res.totalEstimado > 0 ? `<span style="font-weight:700;color:var(--green);">${fmt(res.totalEstimado)} est.</span>` : ''}
+          </div>
+        `;
+      } else {
+        detalheHtml = `
+          <div style="margin-top:10px;">
+            <div class="prog-row" style="margin-bottom:3px;font-size:11px;">
+              <span>${res.concluidas} de ${res.totalItens} concluídas</span>
+              <span style="font-weight:700;">${res.pctConcluido}%</span>
+            </div>
+            <div class="prog-bar"><div class="prog-fill" style="width:${res.pctConcluido}%;background:${l.cor || 'var(--primary)'};"></div></div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="card" style="margin-bottom:8px;cursor:pointer;border-left:4px solid ${l.cor || 'var(--primary)'};" onclick="abrirListaDetalhe('${l.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:38px;height:38px;border-radius:10px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:20px;">
+                ${l.icone || (isCompras ? '🛒' : '✅')}
+              </div>
+              <div>
+                <h4 style="font-size:15px;font-weight:700;margin:0 0 2px;color:var(--text);">${escapeHtml(l.titulo)}</h4>
+                <p style="font-size:11px;color:var(--muted);margin:0;">${isCompras ? 'Lista de Mercado' : 'Tarefas da Rotina'}</p>
+              </div>
+            </div>
+            <span style="font-size:12px;color:var(--primary);font-weight:700;">Abrir →</span>
+          </div>
+          ${detalheHtml}
+        </div>
+      `;
+    }).join('');
+
+    return;
+  }
+
+  // --- VISÃO DETALHADA DA LISTA SELECIONADA ---
+  visaoGrade.style.display = 'none';
+  visaoDetalhe.style.display = 'block';
+
+  const lista = (S.listas || []).find(l => l.id === listaAtivaId);
+  if (!lista) {
+    fecharListaDetalhe();
+    return;
+  }
+
+  const isCompras = lista.tipo === 'compras';
+  const res = calcularResumoLista(lista);
+
+  // Preenche dados do card cabeçalho
+  const ldIcone = document.getElementById('ld-icone');
+  const ldTitulo = document.getElementById('ld-titulo');
+  const ldSubinfo = document.getElementById('ld-subinfo');
+  const ldBadge = document.getElementById('ld-badge-tipo');
+  const ldResumo = document.getElementById('ld-bloco-resumo');
+
+  if (ldIcone) ldIcone.textContent = lista.icone || (isCompras ? '🛒' : '✅');
+  if (ldTitulo) ldTitulo.textContent = lista.titulo;
+  if (ldSubinfo) {
+    const criador = (S.membrosPerfil || []).find(m => m.id === lista.criadoPor);
+    ldSubinfo.textContent = `Criada por ${criador ? criador.nome : 'Família'} • ${lista.itens?.length || 0} itens`;
+  }
+  if (ldBadge) {
+    ldBadge.textContent = isCompras ? '🛒 Compras' : '✅ To-Do';
+    ldBadge.style.background = isCompras ? 'rgba(16,185,129,0.15)' : 'rgba(85,129,227,0.15)';
+    ldBadge.style.color = isCompras ? 'var(--green)' : 'var(--primary)';
+  }
+
+  if (ldResumo) {
+    if (isCompras) {
+      ldResumo.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <span style="font-size:11px;color:var(--muted);display:block;">No Carrinho:</span>
+            <span style="font-size:18px;font-weight:800;color:var(--green);">${!isCrianca ? fmt(res.totalCarrinho) : `${res.itensComprados} itens`}</span>
+          </div>
+          <div style="text-align:right;">
+            <span style="font-size:11px;color:var(--muted);display:block;">Estimado Total:</span>
+            <span style="font-size:15px;font-weight:700;color:var(--text);">${!isCrianca ? fmt(res.totalEstimado) : `${res.totalItens} itens`}</span>
+          </div>
+        </div>
+      `;
+    } else {
+      ldResumo.innerHTML = `
+        <div>
+          <div class="prog-row" style="margin-bottom:3px;font-size:11px;">
+            <span>${res.concluidas} de ${res.totalItens} tarefas concluídas</span>
+            <span style="font-weight:700;">${res.pctConcluido}%</span>
+          </div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${res.pctConcluido}%;background:${lista.cor || 'var(--primary)'};"></div></div>
+        </div>
+      `;
+    }
+  }
+
+  // Alterna formulários
+  const fCompra = document.getElementById('form-campos-compra');
+  const fTarefa = document.getElementById('form-campos-tarefa');
+  const bChips = document.getElementById('ld-bloco-chips-frequentes');
+  const bFiltroMembro = document.getElementById('ld-bloco-filtro-membro');
+  const bConverterGasto = document.getElementById('ld-bloco-converter-gasto');
+
+  if (isCompras) {
+    if (fCompra) fCompra.style.display = 'block';
+    if (fTarefa) fTarefa.style.display = 'none';
+    if (bFiltroMembro) bFiltroMembro.style.display = 'none';
+
+    // Preenche chips de itens frequentes
+    if (bChips) {
+      bChips.style.display = 'block';
+      const cContainer = document.getElementById('ld-chips-frequentes-container');
+      if (cContainer) {
+        const frequentes = (S.historicoCompras || []).slice(0, 10);
+        cContainer.innerHTML = frequentes.map(item => `
+          <button type="button" class="list-chip" onclick="readicionarItemFrequente('${lista.id}', '${escapeHtml(item.nome)}')">
+            <span>+ ${escapeHtml(item.nome)}</span>
+            ${!isCrianca && item.precoUltimo > 0 ? `<span style="opacity:0.7;font-size:11px;">(${fmt(item.precoUltimo)})</span>` : ''}
+          </button>
+        `).join('');
+      }
+    }
+
+    // Botão de converter em gasto
+    if (bConverterGasto) {
+      bConverterGasto.style.display = (!isCrianca && res.itensComprados > 0) ? 'block' : 'none';
+    }
+
+  } else {
+    // tipo === 'tarefas'
+    if (fCompra) fCompra.style.display = 'none';
+    if (fTarefa) fTarefa.style.display = 'block';
+    if (bChips) bChips.style.display = 'none';
+    if (bConverterGasto) bConverterGasto.style.display = 'none';
+
+    // Preenche seletor de responsáveis no formulário
+    const respSelect = document.getElementById('tarefa-responsavel');
+    if (respSelect) {
+      respSelect.innerHTML = (S.membrosPerfil || []).map(m => `
+        <option value="${m.id}" ${m.id === S.membroAtivoId ? 'selected' : ''}>${escapeHtml(m.nome)}</option>
+      `).join('');
+    }
+
+    // Preenche filtro de responsáveis
+    if (bFiltroMembro) {
+      bFiltroMembro.style.display = 'block';
+      const fMembros = document.getElementById('ld-filtro-membros-container');
+      if (fMembros) {
+        fMembros.innerHTML = [
+          `<button type="button" class="filtro-pill ${filtroMembroTarefasAtual === 'todos' ? 'sel' : ''}" onclick="filtrarMembroTarefas('todos')">Todos</button>`,
+          ...(S.membrosPerfil || []).map(m => `
+            <button type="button" class="filtro-pill ${filtroMembroTarefasAtual === m.id ? 'sel' : ''}" onclick="filtrarMembroTarefas('${m.id}')">${escapeHtml(m.nome)}</button>
+          `)
+        ].join('');
+      }
+    }
+  }
+
+  // --- RENDERIZAÇÃO DOS ITENS PENDENTES E CONCLUÍDOS ---
+  const pendentesContainer = document.getElementById('ld-itens-pendentes-container');
+  const concluidosContainer = document.getElementById('ld-itens-concluidos-container');
+  if (!pendentesContainer || !concluidosContainer) return;
+
+  const itens = Array.isArray(lista.itens) ? lista.itens : [];
+
+  if (isCompras) {
+    // ITENS DE COMPRA
+    const pendentes = itens.filter(i => !i.comprado);
+    const comprados = itens.filter(i => i.comprado);
+
+    if (pendentes.length === 0) {
+      pendentesContainer.innerHTML = `
+        <div class="card" style="text-align:center;padding:20px;color:var(--muted);background:var(--bg2);">
+          <p style="font-size:24px;margin-bottom:4px;">🎉</p>
+          <p style="font-size:13px;font-weight:600;margin:0;">Nenhum item pendente para comprar.</p>
+        </div>
+      `;
+    } else {
+      // Agrupa pendentes por corredor de mercado
+      const grupos = {};
+      pendentes.forEach(item => {
+        const cat = item.categoria || 'outros';
+        if (!grupos[cat]) grupos[cat] = [];
+        grupos[cat].push(item);
+      });
+
+      pendentesContainer.innerHTML = Object.keys(grupos).map(catKey => {
+        const catDef = CATEGORIAS_MERCADO[catKey] || CATEGORIAS_MERCADO.outros;
+        const itensDesteCorredor = grupos[catKey];
+
+        return `
+          <div style="margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="font-size:14px;">${catDef.icone}</span>
+              <span class="corredor-badge" style="background:${catDef.cor}22;color:${catDef.cor};">${escapeHtml(catDef.nome)}</span>
+              <span style="font-size:11px;color:var(--muted);">(${itensDesteCorredor.length})</span>
+            </div>
+            ${itensDesteCorredor.map(item => `
+              <div class="item-lista-row">
+                <div class="chk-lista-custom" onclick="toggleItemLista('${lista.id}', '${item.id}')" title="Marcar como comprado"></div>
+                <div style="flex:1;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span class="item-txt-principal" style="font-weight:600;font-size:14px;">${escapeHtml(item.nome)}</span>
+                    ${!isCrianca && item.precoEstimado > 0 ? `<span style="font-weight:700;font-size:13px;color:var(--text);">${fmt(item.precoEstimado * item.qtd)}</span>` : ''}
+                  </div>
+                  <div style="display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted);margin-top:2px;">
+                    <span>${item.qtd} ${escapeHtml(item.unidade || 'un')}</span>
+                    ${item.criadoPorNome ? `<span>• Por ${escapeHtml(item.criadoPorNome)}</span>` : ''}
+                  </div>
+                </div>
+                <span class="item-del" onclick="excluirItemLista('${lista.id}', '${item.id}')" title="Excluir item">×</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Seção Carrinho (Itens Comprados)
+    if (comprados.length > 0) {
+      concluidosContainer.innerHTML = `
+        <div style="border-top:1px dashed var(--border2);padding-top:12px;">
+          <p style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">
+            🛒 No Carrinho (${comprados.length})
+          </p>
+          ${comprados.map(item => `
+            <div class="item-lista-row concluido">
+              <div class="chk-lista-custom checked" onclick="toggleItemLista('${lista.id}', '${item.id}')" title="Retirar do carrinho">✓</div>
+              <div style="flex:1;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span class="item-txt-principal" style="font-weight:600;font-size:14px;">${escapeHtml(item.nome)}</span>
+                  ${!isCrianca && item.precoEstimado > 0 ? `<span style="font-weight:700;font-size:13px;color:var(--muted);">${fmt(item.precoEstimado * item.qtd)}</span>` : ''}
+                </div>
+                <div style="display:flex;gap:6px;font-size:11px;color:var(--muted);margin-top:2px;">
+                  <span>${item.qtd} ${escapeHtml(item.unidade || 'un')}</span>
+                  ${item.compradoPor ? `<span>• Comprado por ${escapeHtml(item.compradoPor)}</span>` : ''}
+                </div>
+              </div>
+              <span class="item-del" onclick="excluirItemLista('${lista.id}', '${item.id}')" title="Excluir item">×</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } else {
+      concluidosContainer.innerHTML = '';
+    }
+
+  } else {
+    // TAREFAS TO-DO
+    let tarefasFiltradas = itens;
+    if (filtroMembroTarefasAtual && filtroMembroTarefasAtual !== 'todos') {
+      tarefasFiltradas = itens.filter(t => t.responsavelId === filtroMembroTarefasAtual);
+    }
+
+    const pendentes = tarefasFiltradas.filter(t => !t.concluida);
+    const concluidas = tarefasFiltradas.filter(t => t.concluida);
+
+    if (pendentes.length === 0) {
+      pendentesContainer.innerHTML = `
+        <div class="card" style="text-align:center;padding:20px;color:var(--muted);background:var(--bg2);">
+          <p style="font-size:24px;margin-bottom:4px;">✨</p>
+          <p style="font-size:13px;font-weight:600;margin:0;">Nenhuma tarefa pendente!</p>
+        </div>
+      `;
+    } else {
+      pendentesContainer.innerHTML = pendentes.map(t => {
+        const prioClass = t.prioridade === 'alta' ? 'prio-alta' : t.prioridade === 'baixa' ? 'prio-baixa' : 'prio-media';
+        const prioLabel = t.prioridade === 'alta' ? 'Alta' : t.prioridade === 'baixa' ? 'Baixa' : 'Média';
+        const recLabel = t.recorrencia && t.recorrencia !== 'nenhuma'
+          ? `<span class="badge" style="background:rgba(85,129,227,0.15);color:var(--primary);">🔁 ${t.recorrencia}</span>`
+          : '';
+
+        return `
+          <div class="item-lista-row">
+            <div class="chk-lista-custom" onclick="toggleItemLista('${lista.id}', '${t.id}')" title="Concluir tarefa"></div>
+            <div style="flex:1;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <span class="item-txt-principal" style="font-weight:600;font-size:14px;">${escapeHtml(t.titulo)}</span>
+                <span class="prio-pill ${prioClass}">${prioLabel}</span>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:3px;">
+                <span style="font-weight:700;color:${t.responsavelCor || 'var(--primary)'};">👤 ${escapeHtml(t.responsavelNome || 'Família')}</span>
+                ${t.prazo ? `<span>• 📅 ${t.prazo}</span>` : ''}
+                ${recLabel}
+              </div>
+            </div>
+            <span class="item-del" onclick="excluirItemLista('${lista.id}', '${t.id}')" title="Excluir tarefa">×</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    if (concluidas.length > 0) {
+      concluidosContainer.innerHTML = `
+        <div style="border-top:1px dashed var(--border2);padding-top:12px;">
+          <p style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">
+            ✓ Concluídas (${concluidas.length})
+          </p>
+          ${concluidas.map(t => `
+            <div class="item-lista-row concluido">
+              <div class="chk-lista-custom checked" onclick="toggleItemLista('${lista.id}', '${t.id}')" title="Reabrir tarefa">✓</div>
+              <div style="flex:1;">
+                <span class="item-txt-principal" style="font-weight:600;font-size:14px;">${escapeHtml(t.titulo)}</span>
+                <div style="display:flex;gap:6px;font-size:11px;color:var(--muted);margin-top:2px;">
+                  <span>👤 ${escapeHtml(t.responsavelNome || 'Família')}</span>
+                  ${t.concluidaPor ? `<span>• Feito por ${escapeHtml(t.concluidaPor)}</span>` : ''}
+                </div>
+              </div>
+              <span class="item-del" onclick="excluirItemLista('${lista.id}', '${t.id}')" title="Excluir tarefa">×</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } else {
+      concluidosContainer.innerHTML = '';
+    }
+  }
+}
+
 function loadState(){
   try {
     if (typeof localStorage !== 'undefined') {
@@ -1390,6 +2637,7 @@ function updateKeyStatus(){
 // NAV
 const TITLES = {
   inicio: 'Mural da Família',
+  listas: 'Listas & Tarefas Compartilhadas',
   explorar: 'Explorar Recursos',
   familia: 'Minha Família',
   atividade: 'Linha do Tempo',
@@ -1401,7 +2649,7 @@ const TITLES = {
   agente: 'Agente Financeiro',
   config: 'Configurações'
 };
-const SECS = ['inicio', 'explorar', 'familia', 'atividade', 'resumo', 'receitas', 'gastos', 'dividas', 'metas', 'agente', 'config'];
+const SECS = ['inicio', 'listas', 'explorar', 'familia', 'atividade', 'resumo', 'receitas', 'gastos', 'dividas', 'metas', 'agente', 'config'];
 const ROTAS_FINANCEIRAS = ['resumo', 'receitas', 'gastos', 'dividas', 'metas'];
 
 function go(id) {
@@ -5201,6 +6449,44 @@ function renderMuralInicio() {
       `;
     }
 
+    // Card Especial do Módulo de Listas & Tarefas (Etapa 2)
+    if (modDef.id === 'listas') {
+      const listas = S.listas || [];
+      const totalListas = listas.length;
+      let totalPendentes = 0;
+      let comprasPendentes = 0;
+      let tarefasPendentes = 0;
+
+      listas.forEach(l => {
+        const res = calcularResumoLista(l);
+        if (l.tipo === 'compras') {
+          comprasPendentes += res.itensPendentes;
+          totalPendentes += res.itensPendentes;
+        } else {
+          tarefasPendentes += res.pendentes;
+          totalPendentes += res.pendentes;
+        }
+      });
+
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="go('listas')">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            <span style="font-size:11px; font-weight:700; color:var(--primary);">${totalListas} ${totalListas === 1 ? 'lista' : 'listas'}</span>
+          </div>
+          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">${totalPendentes > 0 ? `${totalPendentes} pendências ativas` : 'Tudo em dia na rotina!'}</p>
+          <div style="font-size:11px; color:var(--muted); display:flex; gap:6px;">
+            <span>🛒 ${comprasPendentes} itens</span>
+            <span>•</span>
+            <span>✅ ${tarefasPendentes} tarefas</span>
+          </div>
+        </div>
+      `;
+    }
+
     // Cards Padrão do Grid Familiar
     return `
       <div class="modulo-card card" style="cursor:pointer;" onclick="go('${modDef.telaAlvo || 'explorar'}')">
@@ -5410,6 +6696,7 @@ function render(){
   renderAbaExplorar();
   renderMinhaFamilia();
   renderAtividadeFeed();
+  renderListas();
 
   // Renderizações Contábeis Legadas (Zero Regressão)
   atualizarDatalistTitulares();
@@ -6237,6 +7524,37 @@ if (typeof window !== 'undefined') {
   window.selTag = selTag;
   window.salvarNegociacaoGasto = salvarNegociacaoGasto;
   window.confirmarAdiantamento = confirmarAdiantamento;
+  // Super-App Familiar v2.0 - Listas & Tarefas (Etapa 2)
+  window.CATEGORIAS_MERCADO = CATEGORIAS_MERCADO;
+  window.criarListaFamiliar = criarListaFamiliar;
+  window.excluirListaFamiliar = excluirListaFamiliar;
+  window.adicionarNaFilaSync = adicionarNaFilaSync;
+  window.dispararNotificacaoAgrupadaItens = dispararNotificacaoAgrupadaItens;
+  window.adicionarItemLista = adicionarItemLista;
+  window.calcularProximoPrazoRecorrente = calcularProximoPrazoRecorrente;
+  window.toggleItemLista = toggleItemLista;
+  window.excluirItemLista = excluirItemLista;
+  window.readicionarItemFrequente = readicionarItemFrequente;
+  window.converterListaEmGasto = converterListaEmGasto;
+  window.calcularResumoLista = calcularResumoLista;
+  window.abrirModuloFamiliar = abrirModuloFamiliar;
+  window.abrirListaDetalhe = abrirListaDetalhe;
+  window.fecharListaDetalhe = fecharListaDetalhe;
+  window.filtrarTipoListas = filtrarTipoListas;
+  window.filtrarMembroTarefas = filtrarMembroTarefas;
+  window.abrirModalNovaLista = abrirModalNovaLista;
+  window.atualizarOpcoesNovaListaModal = atualizarOpcoesNovaListaModal;
+  window.selecionarIconeNovaLista = selecionarIconeNovaLista;
+  window.selecionarCorNovaLista = selecionarCorNovaLista;
+  window.salvarNovaListaModal = salvarNovaListaModal;
+  window.adicionarItemCompraModal = adicionarItemCompraModal;
+  window.adicionarTarefaModal = adicionarTarefaModal;
+  window.abrirModalConverterGastoLista = abrirModalConverterGastoLista;
+  window.confirmarConverterGastoModal = confirmarConverterGastoModal;
+  window.confirmarExcluirListaAtual = confirmarExcluirListaAtual;
+  window.excluirListaAtualDetalhe = excluirListaAtualDetalhe;
+  window.selecionarTipoNovaLista = selecionarTipoNovaLista;
+  window.renderListas = renderListas;
 }
 
 // EXPORTAÇÃO PARA TESTES / NODE.JS
@@ -6377,6 +7695,37 @@ if (typeof module !== 'undefined' && module.exports) {
     salvarNegociacaoGasto,
     confirmarAdiantamento,
     chamarGeminiComFallback,
+    // Super-App Familiar v2.0 (Etapa 2 - Listas & Tarefas)
+    CATEGORIAS_MERCADO,
+    criarListaFamiliar,
+    excluirListaFamiliar,
+    adicionarNaFilaSync,
+    dispararNotificacaoAgrupadaItens,
+    adicionarItemLista,
+    calcularProximoPrazoRecorrente,
+    toggleItemLista,
+    excluirItemLista,
+    readicionarItemFrequente,
+    converterListaEmGasto,
+    calcularResumoLista,
+    abrirModuloFamiliar,
+    abrirListaDetalhe,
+    fecharListaDetalhe,
+    filtrarTipoListas,
+    filtrarMembroTarefas,
+    abrirModalNovaLista,
+    atualizarOpcoesNovaListaModal,
+    selecionarIconeNovaLista,
+    selecionarCorNovaLista,
+    salvarNovaListaModal,
+    adicionarItemCompraModal,
+    adicionarTarefaModal,
+    abrirModalConverterGastoLista,
+    confirmarConverterGastoModal,
+    confirmarExcluirListaAtual,
+    excluirListaAtualDetalhe,
+    selecionarTipoNovaLista,
+    renderListas,
     getState: () => S,
     S
   };
