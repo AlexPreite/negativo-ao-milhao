@@ -11,7 +11,27 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 <title>Do Negativo ao Milhão</title>
 <style>
-  :root {
+  :root, [data-theme="claro"] {
+    --bg: #F2F2F7;
+    --bg2: #FFFFFF;
+    --bg3: #E5E5EA;
+    --border: rgba(0,0,0,0.07);
+    --border2: rgba(0,0,0,0.12);
+    --text: #1C1C1E;
+    --muted: #8E8E93;
+    --green: #10B981;
+    --green-dim: rgba(16,185,129,0.12);
+    --red: #EF4444;
+    --red-dim: rgba(239,68,68,0.12);
+    --yellow: #F59E0B;
+    --yellow-dim: rgba(245,158,11,0.12);
+    --blue: #5581E3;
+    --primary: #5581E3;
+    --card-shadow: 0 4px 14px rgba(0,0,0,0.04);
+    --radius: 22px;
+    --radius-sm: 12px;
+  }
+  [data-theme="escuro"] {
     --bg: #0a0a0a;
     --bg2: #141414;
     --bg3: #1c1c1c;
@@ -26,27 +46,72 @@
     --yellow: #facc15;
     --yellow-dim: rgba(250,204,21,0.12);
     --blue: #60a5fa;
-    --radius: 14px;
-    --radius-sm: 8px;
+    --primary: #5581E3;
+    --card-shadow: none;
+    --radius: 22px;
+    --radius-sm: 12px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif; transition: background 0.25s, color 0.25s; }
   body { overflow: hidden; }
 
-  /* LAYOUT */
-  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: 430px; margin: 0 auto; }
-  #header { padding: 52px 20px 12px; flex-shrink: 0; }
-  #header h1 { font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
-  #header h2 { font-size: 22px; font-weight: 600; color: var(--text); margin-top: 2px; }
-  #nav { display: flex; gap: 6px; padding: 0 20px 12px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
-  #nav::-webkit-scrollbar { display: none; }
-  .nav-btn { flex-shrink: 0; padding: 7px 16px; border-radius: 20px; border: 1px solid var(--border2); background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-  .nav-btn.active { background: var(--text); color: var(--bg); border-color: transparent; }
-  #content { flex: 1; overflow-y: auto; padding: 0 20px 30px; scrollbar-width: none; }
+  /* LAYOUT FAMILIAR */
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: 430px; margin: 0 auto; position: relative; background: var(--bg); }
+  
+  /* TOP BAR FAMILIAR */
+  #header-top-bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 8px; flex-shrink: 0; }
+  .circulo-selector-btn { display: flex; align-items: center; gap: 6px; background: var(--bg2); border: 1px solid var(--border); padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; box-shadow: var(--card-shadow); }
+  .top-bar-actions { display: flex; align-items: center; gap: 8px; }
+  .icon-btn-circle { width: 38px; height: 38px; border-radius: 50%; background: var(--bg2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--text); cursor: pointer; position: relative; box-shadow: var(--card-shadow); }
+  .notif-badge-pill { position: absolute; top: -3px; right: -3px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 10px; border: 2px solid var(--bg2); }
+  .member-avatar-btn { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; cursor: pointer; border: 2px solid #fff; position: relative; box-shadow: var(--card-shadow); }
+  .member-crown-badge { position: absolute; bottom: -4px; right: -4px; font-size: 11px; }
+
+  #header { padding: 4px 20px 8px; flex-shrink: 0; }
+  #header h1 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  #header h2 { font-size: 20px; font-weight: 700; color: var(--text); margin-top: 1px; }
+  
+  /* SUBNAV FINANÇAS */
+  #subnav-financas { display: none; gap: 6px; padding: 0 20px 8px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+  #subnav-financas::-webkit-scrollbar { display: none; }
+  .subnav-btn { flex-shrink: 0; padding: 6px 14px; border-radius: 18px; border: 1px solid var(--border2); background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .subnav-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
+
+  #content { flex: 1; overflow-y: auto; padding: 0 20px 90px; scrollbar-width: none; }
   #content::-webkit-scrollbar { display: none; }
 
+  /* BOTTOM NAVIGATION BAR (PÍLULA FLUTUANTE) */
+  #bottom-nav-bar { position: absolute; bottom: 16px; left: 20px; right: 20px; height: 60px; background: var(--bg2); border: 1px solid var(--border2); border-radius: 30px; display: flex; align-items: center; justify-content: space-around; padding: 0 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); z-index: 100; }
+  .bottom-nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 600; flex: 1; height: 100%; transition: all 0.2s; }
+  .bottom-nav-btn .b-icon { font-size: 19px; line-height: 1; }
+  .bottom-nav-btn.active { color: var(--primary); font-weight: 700; transform: translateY(-1px); }
+
+  /* BOTÃO FAB ADICIONAR (+) */
+  #btn-fab-adicionar { position: absolute; bottom: 84px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; border: none; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 6px 18px rgba(85,129,227,0.4); z-index: 101; transition: transform 0.15s; }
+  #btn-fab-adicionar:active { transform: scale(0.92); }
+
+  /* TOAST NOTIFICAÇÃO */
+  #toast-notificacao { position: absolute; top: 18px; left: 20px; right: 20px; background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 20px rgba(0,0,0,0.12); z-index: 400; display: none; align-items: center; gap: 10px; transition: transform 0.3s, opacity 0.3s; }
+  #toast-notificacao.show { display: flex; animation: slideDown 0.3s ease; }
+  @keyframes slideDown { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* MURAL INICIAL & CARDS 22PX */
+  .mural-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .mural-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; min-height: 120px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; position: relative; overflow: hidden; box-shadow: var(--card-shadow); transition: transform 0.15s, border-color 0.15s; }
+  .mural-card:active { transform: scale(0.98); }
+  .mural-card-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .mural-card-desc { font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .mural-card-icon-badge { align-self: flex-end; width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+
+  /* CARROSSEL DICAS */
+  .carousel-wrap { margin-bottom: 14px; position: relative; }
+  .carousel-slide-box { background: linear-gradient(135deg, rgba(85,129,227,0.12), rgba(85,129,227,0.03)); border: 1px solid rgba(85,129,227,0.25); border-radius: var(--radius); padding: 16px; min-height: 84px; display: flex; align-items: center; gap: 12px; }
+  .carousel-dots { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
+  .carousel-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border2); transition: all 0.2s; }
+  .carousel-dot.active { width: 16px; border-radius: 3px; background: var(--primary); }
+
   /* CARDS */
-  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: var(--card-shadow); }
   .card-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
   .big-num { font-size: 32px; font-weight: 700; letter-spacing: -0.5px; }
   .c-green { color: var(--green); }
@@ -224,11 +289,45 @@
 
 <!-- APP -->
 <div id="app" style="display:none;">
-  <div id="header">
-    <h1>Do Negativo ao Milhão</h1>
-    <h2 id="header-title">Resumo do mês</h2>
+  <!-- TOP BAR DO CÍRCULO FAMILIAR (Etapa 1) -->
+  <div id="header-top-bar">
+    <button type="button" class="circulo-selector-btn" id="btn-circulo-selector" onclick="abrirModalCirculo()" title="Alternar ou gerenciar Círculo Familiar">
+      <span>🏰</span>
+      <span id="top-circulo-nome">Nossa Família</span>
+      <span style="font-size:10px;opacity:0.7;">▾</span>
+    </button>
+    <div class="top-bar-actions">
+      <button type="button" class="icon-btn-circle" id="btn-theme-toggle" onclick="alternarTema()" title="Alternar tema Claro / Escuro">
+        <span id="theme-icon">☀️</span>
+      </button>
+      <button type="button" class="icon-btn-circle" id="btn-notif-bell" onclick="go('atividade')" title="Central de Notificações">
+        <span>🔔</span>
+        <span class="notif-badge-pill" id="notif-badge-count" style="display:none;">0</span>
+      </button>
+      <div class="member-avatar-btn" id="header-avatar-btn" onclick="go('familia')" title="Membro Ativo" style="background:#5581E3;">
+        <span id="header-avatar-txt">AL</span>
+        <span class="member-crown-badge" id="header-avatar-crown">👑</span>
+      </div>
+    </div>
   </div>
-  <nav id="nav">
+
+  <div id="header">
+    <h1 id="header-supertitle">Círculo Familiar</h1>
+    <h2 id="header-title">Mural da Família</h2>
+  </div>
+
+  <!-- SUBNAV DE FINANÇAS (Exibida em abas financeiras) -->
+  <nav id="subnav-financas">
+    <button class="subnav-btn active" id="snb-resumo" onclick="go('resumo')">Resumo</button>
+    <button class="subnav-btn" id="snb-receitas" onclick="go('receitas')">Receitas</button>
+    <button class="subnav-btn" id="snb-gastos" onclick="go('gastos')">Gastos</button>
+    <button class="subnav-btn" id="snb-dividas" onclick="go('dividas')">Dívidas</button>
+    <button class="subnav-btn" id="snb-metas" onclick="go('metas')">Investimentos</button>
+    <button class="subnav-btn" id="snb-config" onclick="go('config')">Config</button>
+  </nav>
+
+  <!-- NAV LEGADA (Preservada para compatibilidade de testes) -->
+  <nav id="nav" style="display:none;">
     <button class="nav-btn active" onclick="go('resumo')">Resumo</button>
     <button class="nav-btn" onclick="go('receitas')">Receitas</button>
     <button class="nav-btn" onclick="go('gastos')">Gastos</button>
@@ -237,7 +336,84 @@
     <button class="nav-btn" onclick="go('agente')">Agente IA</button>
     <button class="nav-btn" onclick="go('config')">Config</button>
   </nav>
+
   <div id="content">
+
+    <!-- INÍCIO: MURAL DA FAMÍLIA (Etapa 1 - Seção 6) -->
+    <div id="sec-inicio" class="section">
+      <!-- CARROSSEL DE DICAS -->
+      <div class="carousel-wrap" id="carousel-wrap">
+        <div class="carousel-slide-box" id="carousel-box">
+          <div style="font-size:32px;" id="carousel-icon">👨‍👩‍👧‍👦</div>
+          <div style="flex:1;">
+            <p style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px;" id="carousel-title">Bem-vindo ao Mural Familiar</p>
+            <p style="font-size:12px;color:var(--muted);line-height:1.35;" id="carousel-desc">Tudo organizado em um só lugar: orçamento, rotina, compras e muito mais.</p>
+          </div>
+        </div>
+        <div class="carousel-dots">
+          <span class="carousel-dot active" onclick="setCarouselSlide(0)"></span>
+          <span class="carousel-dot" onclick="setCarouselSlide(1)"></span>
+          <span class="carousel-dot" onclick="setCarouselSlide(2)"></span>
+        </div>
+      </div>
+
+      <!-- GRADE DE MÓDULOS DO MURAL -->
+      <div class="mural-grid" id="grid-mural-inicio"></div>
+    </div>
+
+    <!-- EXPLORAR (Etapa 1 - Seção 4.19) -->
+    <div id="sec-explorar" class="section" style="display:none;">
+      <p class="sec-title" style="margin-top:0;">🧭 Explorar Módulos Familiares</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.4;">
+        Personalize o seu Mural Inicial. Adicione ou remova atalhos e organize a ordem dos cards.
+      </p>
+      <div id="lista-modulos-explorar"></div>
+    </div>
+
+    <!-- MINHA FAMÍLIA (Etapa 1 - Seção 4.18) -->
+    <div id="sec-familia" class="section" style="display:none;">
+      <div class="card" style="margin-bottom:12px;background:linear-gradient(135deg, rgba(85,129,227,0.14), rgba(85,129,227,0.02));border-color:rgba(85,129,227,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span class="card-label" style="margin:0;color:var(--primary);">Círculo Ativo</span>
+          <span class="badge" style="background:rgba(85,129,227,0.2);color:var(--primary);" id="fam-codigo-tag">Código Ativo</span>
+        </div>
+        <p class="big-num" style="font-size:22px;" id="fam-circulo-nome-box">Nossa Família</p>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button type="button" class="btn btn-primary" style="margin:0;padding:9px;font-size:12px;" onclick="abrirModalConvite()">✉️ Convidar Membro</button>
+          <button type="button" class="btn" style="margin:0;padding:9px;font-size:12px;" onclick="abrirModalMembro()">+ Novo Membro</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;">
+        <p class="card-label" style="margin-bottom:8px;">👀 Simular / Ver o app como:</p>
+        <div id="seletor-membro-ativo-pills" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+      </div>
+
+      <p class="sec-title">Membros do Círculo</p>
+      <div id="lista-membros-familia" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+
+    <!-- ATIVIDADE & CENTRAL DE NOTIFICAÇÕES (Etapa 1 - Seções 4.13 e 4.17) -->
+    <div id="sec-atividade" class="section" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <p class="sec-title" style="margin:0;">🔔 Atividades & Notificações</p>
+        <div style="display:flex;gap:6px;">
+          <button type="button" class="btn" style="width:auto;margin:0;padding:5px 9px;font-size:11px;" onclick="marcarNotificacoesLidas()">✓ Lidas</button>
+          <button type="button" class="btn" style="width:auto;margin:0;padding:5px 9px;font-size:11px;" onclick="abrirModalNotifPrefs()">⚙️ Ajustes</button>
+        </div>
+      </div>
+
+      <!-- FILTROS DO FEED -->
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:10px;">
+        <button class="filtro-pill sel" id="flt-ativ-todos" onclick="filtrarAtividadeTipo('todos')">Todos</button>
+        <button class="filtro-pill" id="flt-ativ-financas" onclick="filtrarAtividadeTipo('financeiro')">Finanças</button>
+        <button class="filtro-pill" id="flt-ativ-listas" onclick="filtrarAtividadeTipo('lista')">Listas</button>
+        <button class="filtro-pill" id="flt-ativ-eventos" onclick="filtrarAtividadeTipo('evento')">Eventos</button>
+        <button class="filtro-pill" id="flt-ativ-sistema" onclick="filtrarAtividadeTipo('sistema')">Sistema</button>
+      </div>
+
+      <div id="lista-atividade-feed"></div>
+    </div>
 
     <!-- RESUMO -->
     <div id="sec-resumo" class="section">
@@ -426,6 +602,201 @@
       <button class="btn btn-r" onclick="if(confirm('Apagar todos os dados?')){localStorage.clear();location.reload();}">Apagar todos os dados</button>
     </div>
 
+  </div> <!-- fecha #content -->
+
+  <!-- TOAST POP-UP DE NOTIFICAÇÃO (Etapa 1) -->
+  <div id="toast-notificacao">
+    <span id="toast-icon">🔔</span>
+    <span id="toast-text" style="font-size:13px;font-weight:600;flex:1;"></span>
+  </div>
+
+  <!-- BOTÃO FLUTUANTE DE AÇÃO RÁPIDA (+) -->
+  <button type="button" id="btn-fab-adicionar" onclick="abrirMenuAcaoRapida()" title="Ação Rápida">+</button>
+
+  <!-- PÍLULA FLUTUANTE DE NAVEGAÇÃO INFERIOR (Etapa 1) -->
+  <nav id="bottom-nav-bar">
+    <button type="button" class="bottom-nav-btn active" id="bnav-inicio" onclick="go('inicio')">
+      <span class="b-icon">🏠</span>
+      <span>Início</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="bnav-explorar" onclick="go('explorar')">
+      <span class="b-icon">🧭</span>
+      <span>Explorar</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="bnav-resumo" onclick="go('resumo')">
+      <span class="b-icon">🐷</span>
+      <span>Orçamento</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="bnav-atividade" onclick="go('atividade')">
+      <span class="b-icon">🔔</span>
+      <span>Atividade</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="bnav-agente" onclick="go('agente')">
+      <span class="b-icon">✨</span>
+      <span>Norte</span>
+    </button>
+  </nav>
+
+</div> <!-- fecha #app -->
+
+<!-- MODAIS DO UPGRADE FAMILIAR V2 (Etapa 1) -->
+
+<!-- MODAL CÍRCULO FAMILIAR -->
+<div class="modal-bg" id="m-circulo">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-circulo')">×</span>
+    <p class="modal-title">🏰 Círculos Familiares</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Alterne entre seus círculos ou crie um novo espaço familiar.</p>
+    <div id="lista-circulos-modal" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
+    
+    <div style="border-top:1px solid var(--border);padding-top:12px;">
+      <p class="card-label" style="margin-bottom:6px;">Criar Novo Círculo</p>
+      <div class="input-row" style="flex-direction:row;gap:6px;">
+        <input type="text" id="novo-circulo-nome" placeholder="Ex: Casa na Praia, Família Silva" style="flex:1;"/>
+        <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:10px 14px;font-size:13px;" onclick="salvarNovoCirculoModal()">Criar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MEMBRO (ADICIONAR / EDITAR) -->
+<div class="modal-bg" id="m-membro">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-membro')">×</span>
+    <p class="modal-title" id="m-membro-titulo">👤 Membro da Família</p>
+    <input type="hidden" id="mb-edit-id" value=""/>
+    
+    <div class="input-row">
+      <label>Nome do Membro</label>
+      <input type="text" id="mb-nome" placeholder="Ex: Alex, Gabi, Sofia..."/>
+    </div>
+
+    <div class="input-row">
+      <label>Papel no Círculo Familiar</label>
+      <select id="mb-papel">
+        <option value="admin">Administrador 👑 (Acesso total)</option>
+        <option value="membro">Membro Adulto (Acesso a finanças e rotina)</option>
+        <option value="crianca">Criança 🧒 (Rotina e listas, sem acesso a finanças)</option>
+      </select>
+    </div>
+
+    <div class="input-row">
+      <label>Cor Identificadora da Paleta</label>
+      <div id="mb-cores-paleta" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;"></div>
+      <input type="hidden" id="mb-cor" value="#5581E3"/>
+    </div>
+
+    <div class="input-row">
+      <label>Data de Aniversário (Opcional)</label>
+      <input type="date" id="mb-aniversario"/>
+    </div>
+
+    <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="salvarMembroModal()">Salvar Membro</button>
+    <button type="button" class="btn btn-r" id="mb-btn-excluir" style="display:none;margin-top:6px;" onclick="excluirMembroModal()">Excluir Membro</button>
+  </div>
+</div>
+
+<!-- MODAL CONVITE DE 7 DIAS -->
+<div class="modal-bg" id="m-convite-circulo">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-convite-circulo')">×</span>
+    <p class="modal-title">✉️ Convite Familiar (Válido por 7 dias)</p>
+    <p style="font-size:13px;color:var(--muted);line-height:1.4;margin-bottom:14px;">
+      Envie este código ou link para seu parceiro(a) ou familiar. Ao entrar, ele fará parte do círculo <strong id="cv-circulo-nome">Nossa Família</strong>.
+    </p>
+
+    <div class="card" style="text-align:center;background:var(--bg3);border:1px dashed var(--primary);padding:18px;">
+      <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Código de Ingresso</p>
+      <p style="font-size:26px;font-weight:800;letter-spacing:2px;color:var(--primary);margin:0;" id="cv-codigo-txt">FAM-XXXXXX</p>
+      <p style="font-size:11px;color:var(--muted);margin-top:6px;" id="cv-expira-txt">Vence em: 7 dias</p>
+    </div>
+
+    <button type="button" class="btn btn-primary" onclick="copiarLinkConvite()">📋 Copiar Link de Convite</button>
+    <button type="button" class="btn" style="margin-top:6px;" onclick="gerarNovoConviteModal()">🔄 Gerar Novo Código</button>
+  </div>
+</div>
+
+<!-- MODAL PREFERÊNCIAS DE NOTIFICAÇÃO -->
+<div class="modal-bg" id="m-notif-prefs">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-notif-prefs')">×</span>
+    <p class="modal-title">⚙️ Preferências de Notificação</p>
+    
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+      <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+        <div>
+          <div style="font-size:14px;font-weight:600;">🔒 Ocultar Valores em R$</div>
+          <div style="font-size:12px;color:var(--muted);">Mascara valores financeiros nas notificações por discrição</div>
+        </div>
+        <input type="checkbox" id="np-ocultar-valores" style="width:20px;height:20px;accent-color:var(--primary);"/>
+      </label>
+
+      <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+        <div>
+          <div style="font-size:14px;font-weight:600;">💰 Avisos Financeiros</div>
+          <div style="font-size:12px;color:var(--muted);">Despesas, receitas e faturas no feed da família</div>
+        </div>
+        <input type="checkbox" id="np-financas" checked style="width:20px;height:20px;accent-color:var(--primary);"/>
+      </label>
+
+      <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+        <div>
+          <div style="font-size:14px;font-weight:600;">🛒 Avisos de Listas</div>
+          <div style="font-size:12px;color:var(--muted);">Itens adicionados ou comprados em listas</div>
+        </div>
+        <input type="checkbox" id="np-listas" checked style="width:20px;height:20px;accent-color:var(--primary);"/>
+      </label>
+
+      <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+        <div>
+          <div style="font-size:14px;font-weight:600;">📅 Avisos de Eventos</div>
+          <div style="font-size:12px;color:var(--muted);">Compromissos e rotina do calendário</div>
+        </div>
+        <input type="checkbox" id="np-eventos" checked style="width:20px;height:20px;accent-color:var(--primary);"/>
+      </label>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;background:var(--bg3);">
+      <p style="font-size:12px;font-weight:600;margin-bottom:6px;">🌙 Horário Silencioso</p>
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;">
+          <label style="font-size:11px;color:var(--muted);">Início</label>
+          <input type="time" id="np-silencio-ini" value="22:00" style="padding:8px;border-radius:8px;background:var(--bg2);color:var(--text);border:1px solid var(--border2);width:100%;"/>
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:11px;color:var(--muted);">Fim</label>
+          <input type="time" id="np-silencio-fim" value="07:00" style="padding:8px;border-radius:8px;background:var(--bg2);color:var(--text);border:1px solid var(--border2);width:100%;"/>
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-primary" onclick="salvarNotifPrefsModal()">Salvar Preferências</button>
+  </div>
+</div>
+
+<!-- MODAL AÇÕES RÁPIDAS (FAB +) -->
+<div class="modal-bg" id="m-fab-menu">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-fab-menu')">×</span>
+    <p class="modal-title">⚡ Ação Rápida Familiar</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');openM('m-gasto');">
+        <div style="font-size:26px;margin-bottom:4px;">💸</div>
+        <div style="font-size:13px;font-weight:700;">Novo Gasto</div>
+      </button>
+      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');openM('m-receita');">
+        <div style="font-size:26px;margin-bottom:4px;">💵</div>
+        <div style="font-size:13px;font-weight:700;">Nova Receita</div>
+      </button>
+      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalMembro();">
+        <div style="font-size:26px;margin-bottom:4px;">👤</div>
+        <div style="font-size:13px;font-weight:700;">Novo Membro</div>
+      </button>
+      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');go('explorar');">
+        <div style="font-size:26px;margin-bottom:4px;">🧭</div>
+        <div style="font-size:13px;font-weight:700;">Ver Módulos</div>
+      </button>
+    </div>
   </div>
 </div>
 

@@ -26,7 +26,49 @@ function sincronizarTiposDividaMap() {
   TIPOS_DIVIDA = map;
 }
 
+const PALETA_FAMILIAR = ['#5581E3', '#EC4899', '#10B981', '#F59E0B', '#8B5CF6', '#3B82F6', '#EF4444', '#14B8A6'];
+const MODELOS_GEMINI_FALLBACK = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+
+const MODULOS_INICIO_CATALOGO = [
+  { id: 'orcamento', nome: 'Orçamento', desc: 'Saldo em Caixa Real e visão financeira', icone: '🐷', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'resumo' },
+  { id: 'listas', nome: 'Listas', desc: 'Compras e tarefas colaborativas', icone: '🛒', cor: '#F59E0B', bgIcon: 'rgba(245,158,11,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
+  { id: 'calendario', nome: 'Calendário', desc: 'Rotina familiar e contas a vencer', icone: '📅', cor: '#8B5CF6', bgIcon: 'rgba(139,92,246,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
+  { id: 'familia', nome: 'Minha Família', desc: 'Membros, papéis e convites', icone: '👨‍👩‍👧‍👦', cor: '#5581E3', bgIcon: 'rgba(85,129,227,0.14)', categoria: 'avancado', telaAlvo: 'familia' },
+  { id: 'atividade', nome: 'Atividade', desc: 'Linha do tempo e notificações', icone: '⚡', cor: '#3B82F6', bgIcon: 'rgba(59,130,246,0.14)', categoria: 'essencial', telaAlvo: 'atividade' },
+  { id: 'aniversarios', nome: 'Aniversários', desc: 'Datas especiais de quem amamos', icone: '🎂', cor: '#EC4899', bgIcon: 'rgba(236,72,153,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
+  { id: 'documentos', nome: 'Documentos', desc: 'Cofre seguro de arquivos da casa', icone: '📂', cor: '#6366F1', bgIcon: 'rgba(99,102,241,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
+  { id: 'refeicoes', nome: 'Refeições', desc: 'Cardápio semanal e receitas', icone: '🍲', cor: '#14B8A6', bgIcon: 'rgba(20,184,166,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
+  { id: 'receitas_cul', nome: 'Receitas', desc: 'Pratos favoritos da família', icone: '📖', cor: '#F97316', bgIcon: 'rgba(249,115,22,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
+  { id: 'mensagens', nome: 'Mural / Mensagens', desc: 'Recados fixados no mural', icone: '💬', cor: '#06B6D4', bgIcon: 'rgba(6,182,212,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
+  { id: 'horario', nome: 'Horário Escolar', desc: 'Aulas e atividades dos filhos', icone: '🎒', cor: '#A855F7', bgIcon: 'rgba(168,85,247,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
+  { id: 'contatos', nome: 'Contatos Úteis', desc: 'Telefones de emergência e médicos', icone: '📞', cor: '#64748B', bgIcon: 'rgba(100,116,139,0.14)', categoria: 'essencial', telaAlvo: 'explorar' }
+];
+
 let S = {
+  versaoSchema: 2,
+  tema: 'claro',
+  circulos: [
+    { id: 'circ_1', nome: 'Nossa Família', codigoConvite: 'FAM-INICIO', expiraEm: '', criadoEm: new Date().toISOString() }
+  ],
+  circuloAtivoId: 'circ_1',
+  membrosPerfil: [
+    { id: 'm_1', circuloId: 'circ_1', nome: 'Alex', papel: 'admin', cor: '#5581E3', iniciais: 'AL', aniversario: '' },
+    { id: 'm_2', circuloId: 'circ_1', nome: 'Gabi', papel: 'membro', cor: '#EC4899', iniciais: 'GA', aniversario: '' }
+  ],
+  membroAtivoId: 'm_1',
+  modulosInicio: ['orcamento', 'listas', 'calendario', 'familia', 'atividade', 'aniversarios', 'documentos', 'refeicoes'],
+  notificacoes: [],
+  preferenciasNotificacao: {
+    eventos: true,
+    financas: true,
+    listas: true,
+    documentos: true,
+    mensagens: true,
+    ocultarValores: false,
+    silencioInicio: '22:00',
+    silencioFim: '07:00'
+  },
+  syncQueue: [],
   receitas:[],
   gastos:[],
   dividas:[],
@@ -411,18 +453,656 @@ function processarInadimplencia60Dias(mesReferenciaOverride) {
   }
 }
 
+// ============================================================================
+// SUPER-APP FAMILIAR V2.0 - FUNDAÇÃO DO CÍRCULO FAMILIAR (Etapa 1)
+// ============================================================================
+
+/**
+ * Migração automática sem perda de dados para o Super-App Familiar v2.0 (Etapa 1).
+ * Preserva 100% dos dados legados, inicializa o esquema v2 e mantém sincronia bidirecional.
+ */
+function migrarParaUpgradeFamiliarV2() {
+  if (!S) return;
+
+  // 1. Versão do esquema
+  if (!S.versaoSchema || S.versaoSchema < 2) {
+    S.versaoSchema = 2;
+  }
+
+  // 2. Tema visual
+  if (!S.tema || (S.tema !== 'claro' && S.tema !== 'escuro')) {
+    S.tema = 'claro';
+  }
+
+  // 3. Círculo familiar padrão
+  if (!Array.isArray(S.circulos) || S.circulos.length === 0) {
+    S.circulos = [
+      {
+        id: 'circ_1',
+        nome: 'Nossa Família',
+        codigoConvite: 'FAM-INICIO',
+        expiraEm: '',
+        criadoEm: new Date().toISOString()
+      }
+    ];
+  }
+
+  if (!S.circuloAtivoId || !S.circulos.some(c => c.id === S.circuloAtivoId)) {
+    S.circuloAtivoId = S.circulos[0].id;
+  }
+
+  // 4. Membros e Perfis com papéis ('admin', 'membro', 'crianca')
+  if (!Array.isArray(S.membrosPerfil) || S.membrosPerfil.length === 0) {
+    const nomesBase = Array.isArray(S.membrosFamilia) && S.membrosFamilia.length > 0
+      ? S.membrosFamilia
+      : ['Alex', 'Gabi'];
+
+    S.membrosPerfil = nomesBase.map((nome, idx) => {
+      const partes = nome.trim().split(/\s+/);
+      const iniciais = partes.length > 1
+        ? (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+        : partes[0].substring(0, 2).toUpperCase();
+      return {
+        id: 'm_' + (idx + 1),
+        circuloId: S.circuloAtivoId,
+        nome: nome.trim(),
+        papel: idx === 0 ? 'admin' : 'membro',
+        cor: PALETA_FAMILIAR[idx % PALETA_FAMILIAR.length] || '#5581E3',
+        iniciais,
+        aniversario: ''
+      };
+    });
+  }
+
+  if (!S.membroAtivoId || !S.membrosPerfil.some(m => m.id === S.membroAtivoId)) {
+    S.membroAtivoId = S.membrosPerfil[0].id;
+  }
+
+  // Sincronia bidirecional com S.membrosFamilia para manter retrocompatibilidade total
+  S.membrosFamilia = S.membrosPerfil.map(m => m.nome);
+
+  // 5. Módulos do Mural Inicial
+  if (!Array.isArray(S.modulosInicio) || S.modulosInicio.length === 0) {
+    S.modulosInicio = ['orcamento', 'listas', 'calendario', 'familia', 'atividade', 'aniversarios', 'documentos', 'refeicoes'];
+  }
+
+  // 6. Notificações e Preferências
+  if (!Array.isArray(S.notificacoes)) {
+    S.notificacoes = [];
+  }
+
+  const prefsPadrao = {
+    eventos: true,
+    financas: true,
+    listas: true,
+    documentos: true,
+    mensagens: true,
+    ocultarValores: false,
+    silencioInicio: '22:00',
+    silencioFim: '07:00'
+  };
+  S.preferenciasNotificacao = Object.assign({}, prefsPadrao, S.preferenciasNotificacao || {});
+
+  // 7. Fila de sincronização offline
+  if (!Array.isArray(S.syncQueue)) {
+    S.syncQueue = [];
+  }
+}
+
+// --- TEMA CLARO / ESCURO ---
+function aplicarTema(tema) {
+  const temaFinal = tema === 'escuro' ? 'escuro' : 'claro';
+  S.tema = temaFinal;
+  if (typeof document !== 'undefined') {
+    if (document.documentElement) {
+      document.documentElement.setAttribute('data-theme', temaFinal);
+    }
+    const themeIcon = document.getElementById('theme-icon');
+    if (themeIcon) {
+      themeIcon.textContent = temaFinal === 'escuro' ? '🌙' : '☀️';
+    }
+  }
+}
+
+function alternarTema() {
+  const novoTema = S.tema === 'claro' ? 'escuro' : 'claro';
+  aplicarTema(novoTema);
+  save();
+}
+
+// --- GESTÃO DE CÍRCULOS FAMILIARES ---
+function obterCirculoAtivo() {
+  if (!S || !Array.isArray(S.circulos) || S.circulos.length === 0) {
+    return { id: 'circ_1', nome: 'Nossa Família', codigoConvite: 'FAM-INICIO' };
+  }
+  const circ = S.circulos.find(c => c.id === S.circuloAtivoId);
+  return circ || S.circulos[0];
+}
+
+function criarCirculo(nome) {
+  const nomeLimpo = (nome || '').trim();
+  if (!nomeLimpo) return null;
+  const id = 'circ_' + Date.now().toString(36);
+  const codigoConvite = 'FAM-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  const novoCirculo = {
+    id,
+    nome: nomeLimpo,
+    codigoConvite,
+    expiraEm: '',
+    criadoEm: new Date().toISOString()
+  };
+  if (!Array.isArray(S.circulos)) S.circulos = [];
+  S.circulos.push(novoCirculo);
+  S.circuloAtivoId = id;
+
+  registrarNotificacaoFamilia({
+    tipo: 'geral',
+    titulo: 'Novo Círculo Familiar',
+    texto: `Círculo "${nomeLimpo}" criado com sucesso!`,
+    valor: 0
+  });
+
+  save();
+  render();
+  return novoCirculo;
+}
+
+function selecionarCirculo(circuloId) {
+  if (!S || !Array.isArray(S.circulos)) return;
+  const encontrado = S.circulos.find(c => c.id === circuloId);
+  if (!encontrado) return;
+  S.circuloAtivoId = circuloId;
+
+  // Sincroniza membro ativo para este círculo se houver membros associados
+  const membrosDesteCirculo = (S.membrosPerfil || []).filter(m => m.circuloId === circuloId);
+  if (membrosDesteCirculo.length > 0) {
+    if (!membrosDesteCirculo.some(m => m.id === S.membroAtivoId)) {
+      S.membroAtivoId = membrosDesteCirculo[0].id;
+    }
+  }
+
+  save();
+  render();
+}
+
+function gerarConviteCirculo(circuloId, papelProposto = 'membro') {
+  const circulo = (S.circulos || []).find(c => c.id === (circuloId || S.circuloAtivoId)) || obterCirculoAtivo();
+  if (!circulo) return null;
+
+  const codigo = 'FAM-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  const expiraEm = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // Validade de 7 dias
+
+  circulo.codigoConvite = codigo;
+  circulo.expiraEm = expiraEm;
+
+  save();
+  return {
+    codigo,
+    expiraEm,
+    papel: papelProposto,
+    link: `https://negativoaomilhao.app/convite?c=${codigo}&papel=${papelProposto}`
+  };
+}
+
+// --- GESTÃO DE MEMBROS E PERFIS ---
+function obterMembroAtivo() {
+  if (!S || !Array.isArray(S.membrosPerfil) || S.membrosPerfil.length === 0) {
+    return { id: 'm_1', nome: 'Alex', papel: 'admin', cor: '#5581E3', iniciais: 'AL' };
+  }
+  const ativo = S.membrosPerfil.find(m => m.id === S.membroAtivoId);
+  return ativo || S.membrosPerfil[0];
+}
+
+function alternarMembroAtivo(membroId) {
+  if (!S || !Array.isArray(S.membrosPerfil)) return;
+  const encontrado = S.membrosPerfil.find(m => m.id === membroId);
+  if (!encontrado) return;
+
+  S.membroAtivoId = membroId;
+
+  // Blindagem do perfil 'crianca': redireciona se estiver em tela financeira
+  if (encontrado.papel === 'crianca' && typeof document !== 'undefined') {
+    const rotasRestritas = ['resumo', 'receitas', 'gastos', 'dividas', 'metas'];
+    const secoes = document.querySelectorAll('.section');
+    for (let i = 0; i < secoes.length; i++) {
+      if (secoes[i].style.display === 'block') {
+        const idAtual = secoes[i].id.replace('sec-', '');
+        if (rotasRestritas.includes(idAtual)) {
+          go('inicio');
+          break;
+        }
+      }
+    }
+  }
+
+  save();
+  render();
+}
+
+function salvarMembroCirculo(dados) {
+  if (!dados || !dados.nome) return null;
+  const nomeLimpo = dados.nome.trim();
+  if (!nomeLimpo) return null;
+
+  if (!Array.isArray(S.membrosPerfil)) S.membrosPerfil = [];
+
+  const papel = ['admin', 'membro', 'crianca'].includes(dados.papel) ? dados.papel : 'membro';
+  const partes = nomeLimpo.split(/\s+/);
+  const iniciais = partes.length > 1
+    ? (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+    : partes[0].substring(0, 2).toUpperCase();
+  const circuloId = dados.circuloId || S.circuloAtivoId;
+  const cor = dados.cor || PALETA_FAMILIAR[S.membrosPerfil.length % PALETA_FAMILIAR.length] || '#5581E3';
+
+  let membroSalvo = null;
+  if (dados.id) {
+    const idx = S.membrosPerfil.findIndex(m => m.id === dados.id);
+    if (idx >= 0) {
+      S.membrosPerfil[idx] = {
+        ...S.membrosPerfil[idx],
+        nome: nomeLimpo,
+        papel,
+        cor,
+        iniciais,
+        aniversario: dados.aniversario || S.membrosPerfil[idx].aniversario || ''
+      };
+      membroSalvo = S.membrosPerfil[idx];
+    }
+  }
+
+  if (!membroSalvo) {
+    membroSalvo = {
+      id: 'm_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 5),
+      circuloId,
+      nome: nomeLimpo,
+      papel,
+      cor,
+      iniciais,
+      aniversario: dados.aniversario || ''
+    };
+    S.membrosPerfil.push(membroSalvo);
+  }
+
+  // Sincronia bidirecional com S.membrosFamilia para manter integridade contábil
+  S.membrosFamilia = S.membrosPerfil.map(m => m.nome);
+
+  registrarNotificacaoFamilia({
+    tipo: 'geral',
+    titulo: 'Perfil Familiar Atualizado',
+    texto: `${nomeLimpo} (${papel}) está ativo no círculo`,
+    valor: 0,
+    membroId: membroSalvo.id
+  });
+
+  save();
+  render();
+  return membroSalvo;
+}
+
+function excluirMembroCirculo(membroId) {
+  if (!S || !Array.isArray(S.membrosPerfil) || S.membrosPerfil.length <= 1) {
+    if (typeof alert === 'function') alert('O Círculo precisa ter pelo menos um membro cadastrado.');
+    return false;
+  }
+
+  const membro = S.membrosPerfil.find(m => m.id === membroId);
+  if (!membro) return false;
+
+  // Garante a existência de pelo menos 1 administrador
+  if (membro.papel === 'admin') {
+    const totalAdmins = S.membrosPerfil.filter(m => m.papel === 'admin').length;
+    if (totalAdmins <= 1) {
+      if (typeof alert === 'function') alert('Promova outro membro a Administrador antes de excluir este.');
+      return false;
+    }
+  }
+
+  S.membrosPerfil = S.membrosPerfil.filter(m => m.id !== membroId);
+  if (S.membroAtivoId === membroId) {
+    S.membroAtivoId = S.membrosPerfil[0].id;
+  }
+
+  // Sincronia com lista de nomes de família
+  S.membrosFamilia = S.membrosPerfil.map(m => m.nome);
+
+  save();
+  render();
+  return true;
+}
+
+// --- CENTRAL DE NOTIFICAÇÕES & LINHA DO TEMPO (ATIVIDADE) ---
+let ultimaNotificacaoTimestamp = 0;
+let ultimaNotificacaoAssinatura = '';
+let filtroAtividadeAtual = 'todos';
+
+function verificarHorarioSilencio() {
+  const prefs = S.preferenciasNotificacao;
+  if (!prefs || !prefs.silencioInicio || !prefs.silencioFim) return false;
+  try {
+    const agora = new Date();
+    const horaMin = String(agora.getHours()).padStart(2, '0') + ':' + String(agora.getMinutes()).padStart(2, '0');
+    const { silencioInicio, silencioFim } = prefs;
+
+    if (silencioInicio <= silencioFim) {
+      return horaMin >= silencioInicio && horaMin <= silencioFim;
+    } else {
+      return horaMin >= silencioInicio || horaMin <= silencioFim;
+    }
+  } catch (err) {
+    console.error('Erro em verificarHorarioSilencio:', err);
+    return false;
+  }
+}
+
+function registrarNotificacaoFamilia(dados) {
+  if (!dados || !dados.titulo) return null;
+  if (!S) return null;
+  if (!Array.isArray(S.notificacoes)) S.notificacoes = [];
+
+  const tipo = dados.tipo || 'geral';
+  const prefs = S.preferenciasNotificacao || {};
+
+  // Respeita preferência do tipo de notificação
+  if (prefs[tipo] === false) {
+    return null;
+  }
+
+  // Anti-spam de 15 segundos para evitar ruído com notificações idênticas consecutivas
+  const assinatura = `${tipo}_${dados.titulo}_${dados.texto || ''}`;
+  const agora = Date.now();
+  if (assinatura === ultimaNotificacaoAssinatura && (agora - ultimaNotificacaoTimestamp) < 15000) {
+    return null;
+  }
+  ultimaNotificacaoAssinatura = assinatura;
+  ultimaNotificacaoTimestamp = agora;
+
+  const novaNotif = {
+    id: 'notif_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 5),
+    circuloId: S.circuloAtivoId,
+    tipo,
+    titulo: dados.titulo,
+    texto: dados.texto || '',
+    valor: Number(dados.valor) || 0,
+    membroId: dados.membroId || S.membroAtivoId,
+    linkTela: dados.linkTela || '',
+    lida: false,
+    criadoEm: new Date().toISOString()
+  };
+
+  S.notificacoes.unshift(novaNotif);
+
+  // Mantém histórico em tamanho adequado (máx 100 itens)
+  if (S.notificacoes.length > 100) {
+    S.notificacoes = S.notificacoes.slice(0, 100);
+  }
+
+  // Exibe toast em tela caso não esteja em horário de silêncio
+  if (!verificarHorarioSilencio() && typeof document !== 'undefined') {
+    const icone = tipo === 'financas' ? '💰' : tipo === 'listas' ? '🛒' : '🔔';
+    exibirToastNotificacao(dados.titulo + (dados.texto ? ': ' + dados.texto : ''), icone);
+  }
+
+  atualizarBadgesHeader();
+  return novaNotif;
+}
+
+function obterFeedAtividade(filtroTipo = 'todos') {
+  if (!S || !Array.isArray(S.notificacoes)) return [];
+  const membroAtivo = obterMembroAtivo();
+  const isCrianca = membroAtivo && membroAtivo.papel === 'crianca';
+  const ocultarValores = Boolean(S.preferenciasNotificacao && S.preferenciasNotificacao.ocultarValores);
+
+  return S.notificacoes
+    .filter(n => {
+      // Blindagem do perfil 'crianca': oculta todo registro de tipo 'financas' ou 'financeiro'
+      if (isCrianca && (n.tipo === 'financas' || n.tipo === 'financeiro')) {
+        return false;
+      }
+      if (filtroTipo && filtroTipo !== 'todos' && n.tipo !== filtroTipo) {
+        return false;
+      }
+      return true;
+    })
+    .map(n => {
+      let textoFormatado = n.texto;
+      if (ocultarValores && n.valor > 0) {
+        // Mascara quantias monetárias para R$ •••••
+        textoFormatado = textoFormatado.replace(/R\$\s*[\d\.,]+/g, 'R$ •••••');
+      }
+      return {
+        ...n,
+        texto: textoFormatado
+      };
+    });
+}
+
+function marcarNotificacoesLidas() {
+  if (!S || !Array.isArray(S.notificacoes)) return;
+  S.notificacoes.forEach(n => { n.lida = true; });
+  save();
+  atualizarBadgesHeader();
+  renderAtividadeFeed();
+}
+
+function salvarPreferenciasNotificacao(novasPrefs) {
+  if (!S) return;
+  S.preferenciasNotificacao = Object.assign({}, S.preferenciasNotificacao || {}, novasPrefs || {});
+  save();
+}
+
+function exibirToastNotificacao(texto, icone = '🔔') {
+  if (typeof document === 'undefined') return;
+  const toast = document.getElementById('toast-notificacao');
+  const txtEl = document.getElementById('toast-text') || document.getElementById('toast-texto');
+  const icEl = document.getElementById('toast-icon') || document.getElementById('toast-icone');
+  if (!toast || !txtEl) return;
+
+  txtEl.textContent = texto;
+  if (icEl) icEl.textContent = icone;
+  toast.classList.add('show');
+  toast.classList.add('visible');
+
+  if (typeof window !== 'undefined') {
+    clearTimeout(window.__toastTimeout);
+    window.__toastTimeout = setTimeout(() => {
+      toast.classList.remove('show');
+      toast.classList.remove('visible');
+    }, 3500);
+  }
+}
+
+// --- MURAL INICIAL E ABA EXPLORAR ---
+function toggleModuloInicio(moduloId) {
+  if (!S || !Array.isArray(S.modulosInicio)) return;
+  const idx = S.modulosInicio.indexOf(moduloId);
+  if (idx >= 0) {
+    if (S.modulosInicio.length <= 1) {
+      if (typeof alert === 'function') alert('Mantenha pelo menos 1 módulo no Mural Inicial.');
+      return;
+    }
+    S.modulosInicio.splice(idx, 1);
+  } else {
+    S.modulosInicio.push(moduloId);
+  }
+  save();
+  render();
+}
+
+function reordenarModuloInicio(moduloId, direcao) {
+  if (!S || !Array.isArray(S.modulosInicio)) return;
+  const idx = S.modulosInicio.indexOf(moduloId);
+  if (idx < 0) return;
+
+  const novoIdx = direcao === 'up' ? idx - 1 : idx + 1;
+  if (novoIdx < 0 || novoIdx >= S.modulosInicio.length) return;
+
+  const item = S.modulosInicio.splice(idx, 1)[0];
+  S.modulosInicio.splice(novoIdx, 0, item);
+
+  save();
+  render();
+}
+
+// Carrossel
+const SLIDES_CARROSSEL = [
+  {
+    icon: '👨‍👩‍👧‍👦',
+    titulo: 'Bem-vindo ao Mural Familiar',
+    desc: 'Tudo organizado em um só lugar: orçamento, rotina, compras e muito mais.'
+  },
+  {
+    icon: '💡',
+    titulo: 'Dica Financeira: Regra 50/30/20',
+    desc: '50% para necessidades, 30% para estilo de vida e 20% para quitar dívidas e investir.'
+  },
+  {
+    icon: '🛡️',
+    titulo: 'Privacidade e Proteção Infantil',
+    desc: 'Perfis infantis têm acesso seguro com ocultação automática de finanças da família.'
+  },
+  {
+    icon: '⚡',
+    titulo: 'Rotina Sem Estresse',
+    desc: 'Use listas colaborativas para supermercado e feira sincronizadas com toda a casa.'
+  }
+];
+let slideCarrosselAtual = 0;
+
+function setCarouselSlide(idx) {
+  if (idx < 0 || idx >= SLIDES_CARROSSEL.length) return;
+  slideCarrosselAtual = idx;
+  if (typeof document === 'undefined') return;
+
+  const slide = SLIDES_CARROSSEL[idx];
+  const iconEl = document.getElementById('carousel-icon');
+  const titleEl = document.getElementById('carousel-title');
+  const descEl = document.getElementById('carousel-desc');
+  if (iconEl) iconEl.textContent = slide.icon;
+  if (titleEl) titleEl.textContent = slide.titulo;
+  if (descEl) descEl.textContent = slide.desc;
+
+  document.querySelectorAll('.carousel-dot').forEach((dot, dIdx) => {
+    if (dIdx === idx) dot.classList.add('active');
+    else dot.classList.remove('active');
+  });
+}
+
+function proximoSlideCarrossel() {
+  const next = (slideCarrosselAtual + 1) % SLIDES_CARROSSEL.length;
+  setCarouselSlide(next);
+}
+
+// --- FAB + MENU ---
+function abrirFabMenu() {
+  openM('m-fab-menu');
+}
+
+function abrirMenuAcaoRapida() {
+  abrirFabMenu();
+}
+
+function fecharFabMenu() {
+  closeM('m-fab-menu');
+}
+
+function toggleFabMenu() {
+  const modal = document.getElementById('m-fab-menu');
+  if (modal && modal.classList.contains('open')) {
+    fecharFabMenu();
+  } else {
+    abrirFabMenu();
+  }
+}
+
+// --- ROTEADOR DE MODELOS GEMINI RESILIENTE (ADR-004 / ETAPA 1) ---
+/**
+ * Roteador de Modelos Gemini com Fallback Ordenado.
+ * Resiliente a 429 (Too Many Requests), RESOURCE_EXHAUSTED, 503 e 404.
+ */
+async function chamarGeminiComFallback({ contents, systemInstruction, generationConfig, fetchFn = (typeof fetch !== 'undefined' ? fetch : null) }) {
+  const chave = apiKey || (S && S.apiKey);
+  if (!chave) {
+    throw new Error('Configure a Gemini API Key em Configurações para usar a inteligência artificial.');
+  }
+  if (!fetchFn) {
+    throw new Error('Nenhum cliente fetch disponível no ambiente.');
+  }
+
+  let ultimoErro = null;
+
+  for (const modelo of MODELOS_GEMINI_FALLBACK) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${chave}`;
+      const payload = { contents };
+      if (systemInstruction) {
+        payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+      }
+      if (generationConfig) {
+        payload.generationConfig = generationConfig;
+      }
+
+      const resp = await fetchFn(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      // Se status de cota ou indisponibilidade, aciona fallback para o próximo modelo
+      if (resp.status === 429 || resp.status === 503 || resp.status === 404 || resp.status === 500) {
+        console.warn(`[Gemini Fallback] Modelo ${modelo} retornou status ${resp.status}. Tentando próximo modelo da lista...`);
+        continue;
+      }
+
+      const data = await resp.json();
+
+      if (data.error) {
+        const errMsg = String(data.error.message || '').toUpperCase();
+        if (errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('QUOTA') || data.error.code === 429) {
+          console.warn(`[Gemini Fallback] Cota esgotada no modelo ${modelo} (${data.error.message}). Tentando próximo...`);
+          continue;
+        }
+        throw new Error(data.error.message || 'Erro na resposta da API Gemini');
+      }
+
+      // Sucesso
+      return {
+        modeloUtilizado: modelo,
+        data,
+        text: data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      };
+    } catch (err) {
+      ultimoErro = err;
+      const msg = String(err.message || '').toUpperCase();
+      if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('QUOTA')) {
+        console.warn(`[Gemini Fallback] Falha no modelo ${modelo}. Tentando próximo...`);
+        continue;
+      }
+      console.warn(`[Gemini Fallback] Erro ao chamar modelo ${modelo}:`, err);
+    }
+  }
+
+  throw new Error(`Todos os modelos Gemini do roteador falharam. Último erro: ${ultimoErro ? ultimoErro.message : 'Indisponibilidade de cota'}`);
+}
+
 function loadState(){
   try {
     if (typeof localStorage !== 'undefined') {
-      const d = localStorage.getItem('dnm_data');
-      if (d) {
-        const parsed = JSON.parse(d);
+      const rawData = localStorage.getItem('dnm_data');
+      if (rawData && !localStorage.getItem('dnm_backup_v1')) {
+        localStorage.setItem('dnm_backup_v1', rawData);
+        localStorage.setItem('dnm_backup_v1_timestamp', new Date().toISOString());
+      }
+      if (rawData) {
+        const parsed = JSON.parse(rawData);
         Object.assign(S, parsed);
       }
     }
   } catch(e){
     console.error('Erro ao ler dnm_data do localStorage:', e);
   }
+
+  // Migração segura para o Super-App Familiar v2.0 (Etapa 1)
+  migrarParaUpgradeFamiliarV2();
   if(!S.membrosFamilia) S.membrosFamilia = ['Alex', 'Gabi'];
   if(!S.categoriasGastos || !S.categoriasGastos.length) S.categoriasGastos = [...DEFAULT_CATEGORIAS_GASTOS];
   if(!S.tiposDivida || !S.tiposDivida.length) S.tiposDivida = [...DEFAULT_TIPOS_DIVIDA];
@@ -603,7 +1283,7 @@ async function loadFromCloud(){
     if(doc.exists){
       S = {...S, ...doc.data()};
       if(S.apiKey) apiKey=S.apiKey;
-      try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){}
+      try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){ console.error('Erro ao gravar dnm_data no localStorage em loadFromCloud:', e); }
     }
   } catch(e) { console.error('Erro ao carregar dados da nuvem:', e); }
 }
@@ -629,7 +1309,7 @@ function salvarFamiliaId(){
       // Já existe dado nesse código — este aparelho ADOTA os dados, nunca sobrescreve.
       S = {...S, ...doc.data()};
       if(S.apiKey) apiKey=S.apiKey;
-      try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){}
+      try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){ console.error('Erro ao gravar dnm_data no localStorage em salvarFamiliaId:', e); }
       updateKeyStatus(); render();
       alert('Código vinculado! Os dados da família já foram carregados aqui.');
     } else {
@@ -708,16 +1388,329 @@ function updateKeyStatus(){
 }
 
 // NAV
-const TITLES={resumo:'Resumo do mês',receitas:'Receitas',gastos:'Gastos',dividas:'Dívidas',metas:'Investimentos & Metas',agente:'Agente Financeiro',config:'Configurações'};
-const SECS=['resumo','receitas','gastos','dividas','metas','agente','config'];
-function go(id){
-  document.querySelectorAll('.section').forEach(s=>s.style.display='none');
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('sec-'+id).style.display='block';
-  document.querySelectorAll('.nav-btn')[SECS.indexOf(id)].classList.add('active');
-  document.getElementById('header-title').textContent=TITLES[id];
-  document.getElementById('content').scrollTop=0;
+const TITLES = {
+  inicio: 'Mural da Família',
+  explorar: 'Explorar Recursos',
+  familia: 'Minha Família',
+  atividade: 'Linha do Tempo',
+  resumo: 'Resumo do mês',
+  receitas: 'Receitas',
+  gastos: 'Gastos',
+  dividas: 'Dívidas',
+  metas: 'Investimentos & Metas',
+  agente: 'Agente Financeiro',
+  config: 'Configurações'
+};
+const SECS = ['inicio', 'explorar', 'familia', 'atividade', 'resumo', 'receitas', 'gastos', 'dividas', 'metas', 'agente', 'config'];
+const ROTAS_FINANCEIRAS = ['resumo', 'receitas', 'gastos', 'dividas', 'metas'];
+
+function go(id) {
+  if (!id) id = 'inicio';
+
+  // Blindagem do perfil 'crianca': bloqueia acesso a rotas contábeis e financeiras
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca' && ROTAS_FINANCEIRAS.includes(id)) {
+    if (typeof alert === 'function') {
+      alert('Área financeira restrita aos adultos e responsáveis da família.');
+    }
+    id = 'inicio';
+  }
+
+  if (typeof document === 'undefined') return;
+
+  // Oculta todas as seções
+  document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+
+  // Exibe a seção ativa
+  const targetSec = document.getElementById('sec-' + id);
+  if (targetSec) {
+    targetSec.style.display = 'block';
+  }
+
+  // Controle da Subnav de Finanças
+  const subnavFin = document.getElementById('subnav-financas');
+  if (subnavFin) {
+    if (ROTAS_FINANCEIRAS.includes(id) || id === 'config') {
+      subnavFin.style.display = 'flex';
+      document.querySelectorAll('.subnav-btn').forEach(b => b.classList.remove('active'));
+      const activeSubBtn = document.getElementById('snb-' + id);
+      if (activeSubBtn) activeSubBtn.classList.add('active');
+    } else {
+      subnavFin.style.display = 'none';
+    }
+  }
+
+  // Controle da Bottom Nav Bar
+  document.querySelectorAll('.bottom-nav-btn, .bnav-btn').forEach(b => b.classList.remove('active'));
+  const bnavBtn = document.getElementById('bnav-' + id);
+  if (bnavBtn) {
+    bnavBtn.classList.add('active');
+  }
+
+  // Nav legada (preservada para suítes de testes legadas)
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const legacyIdx = SECS.indexOf(id);
+  const legacyButtons = document.querySelectorAll('.nav-btn');
+  if (legacyIdx >= 0 && legacyButtons[legacyIdx]) {
+    legacyButtons[legacyIdx].classList.add('active');
+  }
+
+  // Atualiza título do cabeçalho
+  const titleEl = document.getElementById('header-title');
+  if (titleEl && TITLES[id]) {
+    titleEl.textContent = TITLES[id];
+  }
+
+  const superTitleEl = document.getElementById('header-supertitle');
+  if (superTitleEl) {
+    const circulo = obterCirculoAtivo();
+    superTitleEl.textContent = circulo ? circulo.nome : 'Círculo Familiar';
+  }
+
+  const contentEl = document.getElementById('content');
+  if (contentEl) contentEl.scrollTop = 0;
+
   render();
+}
+
+// --- MODAIS DO CÍRCULO FAMILIAR ---
+function abrirModalCirculo() {
+  const listaEl = document.getElementById('lista-circulos-modal') || document.getElementById('lista-circulos-selector');
+  if (listaEl) {
+    listaEl.innerHTML = (S.circulos || []).map(c => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;margin-bottom:8px;background:${c.id === S.circuloAtivoId ? 'var(--blue-dim)' : 'var(--bg3)'};border-radius:var(--radius-sm);cursor:pointer;border:1px solid ${c.id === S.circuloAtivoId ? 'var(--blue)' : 'var(--border2)'};" onclick="selecionarCirculo('${c.id}');closeM('m-circulo');">
+        <div>
+          <span style="font-weight:700;font-size:14px;">🏰 ${escapeHtml(c.nome)}</span>
+          <p style="font-size:11px;color:var(--muted);margin-top:2px;">Código: ${escapeHtml(c.codigoConvite || 'N/A')}</p>
+        </div>
+        ${c.id === S.circuloAtivoId ? '<span style="color:var(--blue);font-weight:700;font-size:12px;">Ativo</span>' : ''}
+      </div>
+    `).join('');
+  }
+  openM('m-circulo');
+}
+
+function salvarNovoCirculo() {
+  const input = document.getElementById('novo-circulo-nome') || document.getElementById('circulo-novo-nome');
+  if (!input) return;
+  const nome = input.value.trim();
+  if (!nome) {
+    if (typeof alert === 'function') alert('Digite o nome do novo círculo.');
+    return;
+  }
+  criarCirculo(nome);
+  input.value = '';
+  closeM('m-circulo');
+}
+
+function salvarNovoCirculoModal() {
+  salvarNovoCirculo();
+}
+
+function selecionarCorMembro(cor) {
+  const corInput = document.getElementById('mb-cor') || document.getElementById('membro-edit-cor');
+  if (corInput) corInput.value = cor;
+  const paletaEl = document.getElementById('mb-cores-paleta');
+  if (paletaEl) {
+    paletaEl.querySelectorAll('div').forEach(d => {
+      d.style.borderColor = d.dataset.cor === cor ? '#fff' : 'transparent';
+    });
+  }
+}
+
+function abrirModalMembro(membroId) {
+  const mIdInput = document.getElementById('mb-edit-id') || document.getElementById('membro-edit-id');
+  const nomeInput = document.getElementById('mb-nome') || document.getElementById('membro-edit-nome');
+  const papelSelect = document.getElementById('mb-papel') || document.getElementById('membro-edit-papel');
+  const anivInput = document.getElementById('mb-aniversario') || document.getElementById('membro-edit-aniv');
+  const btnExcluir = document.getElementById('mb-btn-excluir') || document.getElementById('membro-btn-excluir');
+  const corInput = document.getElementById('mb-cor') || document.getElementById('membro-edit-cor');
+
+  let membroCor = '#5581E3';
+  if (membroId) {
+    const membro = (S.membrosPerfil || []).find(m => m.id === membroId);
+    if (membro) {
+      if (mIdInput) mIdInput.value = membro.id;
+      if (nomeInput) nomeInput.value = membro.nome;
+      if (papelSelect) papelSelect.value = membro.papel || 'membro';
+      if (anivInput) anivInput.value = membro.aniversario || '';
+      if (corInput) corInput.value = membro.cor || '#5581E3';
+      membroCor = membro.cor || '#5581E3';
+      if (btnExcluir) btnExcluir.style.display = 'block';
+    }
+  } else {
+    if (mIdInput) mIdInput.value = '';
+    if (nomeInput) nomeInput.value = '';
+    if (papelSelect) papelSelect.value = 'membro';
+    if (anivInput) anivInput.value = '';
+    if (corInput) corInput.value = PALETA_FAMILIAR[0] || '#5581E3';
+    membroCor = PALETA_FAMILIAR[0] || '#5581E3';
+    if (btnExcluir) btnExcluir.style.display = 'none';
+  }
+
+  const paletaEl = document.getElementById('mb-cores-paleta');
+  if (paletaEl) {
+    paletaEl.innerHTML = PALETA_FAMILIAR.map(c => `
+      <div data-cor="${c}" onclick="selecionarCorMembro('${c}')" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c === membroCor ? '#fff' : 'transparent'};"></div>
+    `).join('');
+  }
+
+  openM('m-membro');
+}
+
+function salvarModalMembro() {
+  const mIdInput = document.getElementById('mb-edit-id') || document.getElementById('membro-edit-id');
+  const nomeInput = document.getElementById('mb-nome') || document.getElementById('membro-edit-nome');
+  const papelSelect = document.getElementById('mb-papel') || document.getElementById('membro-edit-papel');
+  const anivInput = document.getElementById('mb-aniversario') || document.getElementById('membro-edit-aniv');
+  const corInput = document.getElementById('mb-cor') || document.getElementById('membro-edit-cor');
+
+  const id = mIdInput ? mIdInput.value.trim() : '';
+  const nome = nomeInput ? nomeInput.value.trim() : '';
+  const papel = papelSelect ? papelSelect.value : 'membro';
+  const aniversario = anivInput ? anivInput.value.trim() : '';
+  const cor = corInput ? corInput.value.trim() : '';
+
+  if (!nome) {
+    if (typeof alert === 'function') alert('Informe o nome do membro.');
+    return;
+  }
+
+  salvarMembroCirculo({ id, nome, papel, aniversario, cor });
+  closeM('m-membro');
+}
+
+function salvarMembroModal() {
+  salvarModalMembro();
+}
+
+function excluirModalMembro() {
+  const mIdInput = document.getElementById('mb-edit-id') || document.getElementById('membro-edit-id');
+  const id = mIdInput ? mIdInput.value.trim() : '';
+  if (!id) return;
+
+  if (typeof confirm === 'function' && !confirm('Tem certeza de que deseja remover este membro do círculo?')) {
+    return;
+  }
+
+  const ok = excluirMembroCirculo(id);
+  if (ok) {
+    closeM('m-membro');
+  }
+}
+
+function excluirMembroModal() {
+  excluirModalMembro();
+}
+
+function abrirModalConviteCirculo() {
+  const convite = gerarConviteCirculo();
+  if (!convite) return;
+
+  const circulo = obterCirculoAtivo();
+  const cvCirculoNome = document.getElementById('cv-circulo-nome');
+  if (cvCirculoNome && circulo) cvCirculoNome.textContent = circulo.nome;
+
+  const codEl = document.getElementById('cv-codigo-txt') || document.getElementById('convite-circulo-codigo');
+  const linkEl = document.getElementById('convite-link-texto');
+  const expiraEl = document.getElementById('cv-expira-txt') || document.getElementById('convite-expira-texto');
+
+  if (codEl) codEl.textContent = convite.codigo;
+  if (linkEl) linkEl.value = convite.link;
+  if (expiraEl) {
+    const d = new Date(convite.expiraEm);
+    expiraEl.textContent = `Válido até ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  openM('m-convite-circulo');
+}
+
+function abrirModalConvite() {
+  abrirModalConviteCirculo();
+}
+
+function copiarCodigoConvite() {
+  const codEl = document.getElementById('cv-codigo-txt') || document.getElementById('convite-circulo-codigo');
+  const codigo = codEl ? codEl.textContent : '';
+  if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(codigo).catch(err => console.error('Erro ao copiar código:', err));
+  }
+  exibirToastNotificacao(`Código "${codigo}" copiado para a área de transferência!`, '📋');
+}
+
+function copiarLinkConvite() {
+  copiarCodigoConvite();
+}
+
+function gerarNovoConviteModal() {
+  abrirModalConviteCirculo();
+}
+
+function abrirModalNotifPrefs() {
+  const prefs = S.preferenciasNotificacao || {};
+  const setChk = (ids, val) => {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.checked = Boolean(val);
+    });
+  };
+
+  setChk(['np-eventos', 'pref-notif-eventos'], prefs.eventos !== false);
+  setChk(['np-financas', 'pref-notif-financas'], prefs.financas !== false);
+  setChk(['np-listas', 'pref-notif-listas'], prefs.listas !== false);
+  setChk(['pref-notif-docs'], prefs.documentos !== false);
+  setChk(['pref-notif-mensagens'], prefs.mensagens !== false);
+  setChk(['np-ocultar-valores', 'pref-notif-ocultar-valores'], prefs.ocultarValores === true);
+
+  const setVal = (ids, val) => {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    });
+  };
+
+  setVal(['np-silencio-ini', 'pref-notif-silencio-ini'], prefs.silencioInicio || '22:00');
+  setVal(['np-silencio-fim', 'pref-notif-silencio-fim'], prefs.silencioFim || '07:00');
+
+  openM('m-notif-prefs');
+}
+
+function salvarModalNotifPrefs() {
+  const getChk = (...ids) => {
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) return el.checked;
+    }
+    return true;
+  };
+
+  const getVal = (fallback, ...ids) => {
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el && el.value) return el.value;
+    }
+    return fallback;
+  };
+
+  const novasPrefs = {
+    eventos: getChk('np-eventos', 'pref-notif-eventos'),
+    financas: getChk('np-financas', 'pref-notif-financas'),
+    listas: getChk('np-listas', 'pref-notif-listas'),
+    documentos: getChk('pref-notif-docs'),
+    mensagens: getChk('pref-notif-mensagens'),
+    ocultarValores: Boolean(document.getElementById('np-ocultar-valores')?.checked || document.getElementById('pref-notif-ocultar-valores')?.checked),
+    silencioInicio: getVal('22:00', 'np-silencio-ini', 'pref-notif-silencio-ini'),
+    silencioFim: getVal('07:00', 'np-silencio-fim', 'pref-notif-silencio-fim')
+  };
+
+  salvarPreferenciasNotificacao(novasPrefs);
+  closeM('m-notif-prefs');
+  exibirToastNotificacao('Preferências de notificação atualizadas!', '⚙️');
+  renderAtividadeFeed();
+}
+
+function salvarNotifPrefsModal() {
+  return salvarModalNotifPrefs();
 }
 
 // MODALS
@@ -3135,6 +4128,14 @@ function confirmarAbatimentoCartao(dadosOverride) {
     fat.pagoParcial = true;
   }
 
+  registrarNotificacaoFamilia({
+    tipo: 'financas',
+    titulo: 'Abatimento de Fatura',
+    texto: `Abatimento de ${fmt(valorAbater)} realizado no cartão ${(fatura.cartao && fatura.cartao.nome) || ''}`,
+    valor: valorAbater,
+    linkTela: 'resumo'
+  });
+
   save();
   closeM('m-abater-cartao');
   render();
@@ -3291,6 +4292,10 @@ function abrirModalGasto(){
   openM('m-gasto');
 }
 function abrirModalReceita(){ document.getElementById('r-data').value=dataDefaultParaModal(); openM('m-receita'); }
+function abrirModalDivida(){
+  atualizarSelectsTipoDivida();
+  openM('m-divida');
+}
 function abrirModalInvestimento(metaId){
   document.getElementById('inv-meta-id').value = metaId || '';
   document.getElementById('inv-data').value=new Date().toISOString().slice(0,10); 
@@ -3319,17 +4324,19 @@ async function extrairComImagem(file, tipoDoc){
     ? 'Você recebeu a foto ou PDF de um recibo, nota fiscal ou comprovante de pagamento brasileiro. Extraia o valor total pago e uma descrição curta (nome do estabelecimento ou produto/serviço). Responda APENAS em JSON puro, sem markdown, sem texto extra, no formato exato: {"descricao":"string curta","valor":number,"data":"DD/MM/AAAA ou vazio"}. Se não conseguir identificar com confiança, retorne {"descricao":"","valor":0,"data":""}.'
     : 'Você recebeu a foto ou PDF de um holerite, contracheque ou comprovante de depósito/PIX brasileiro. Extraia o valor líquido recebido e uma descrição curta (ex: "Salário", "PLR", "13º salário", "Bônus", "Férias"). Responda APENAS em JSON puro, sem markdown, sem texto extra, no formato exato: {"descricao":"string curta","valor":number,"data":"DD/MM/AAAA ou vazio"}. Se não conseguir identificar com confiança, retorne {"descricao":"","valor":0,"data":""}.';
 
-  const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      contents:[{role:'user',parts:[{text:prompt},{inline_data:{mime_type:file.type||'image/jpeg',data:base64}}]}],
-      generationConfig:{responseMimeType:'application/json',maxOutputTokens:300}
-    })
+  const resultado = await chamarGeminiComFallback({
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } }
+      ]
+    }],
+    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 300 }
   });
-  const data=await resp.json();
-  const text=data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if(!text) throw new Error(data.error?.message||'Sem resposta da IA');
+
+  const text = resultado.text;
+  if(!text) throw new Error('Sem resposta da IA nos modelos consultados');
   return JSON.parse(text);
 }
 
@@ -3374,6 +4381,13 @@ function addReceita(){
   const data=document.getElementById('r-data').value || new Date().toISOString().slice(0,10);
   if(!desc||!val||val<=0) return;
   S.receitas.push({id:Date.now(),desc,val,tipo,data,titular});
+  registrarNotificacaoFamilia({
+    tipo: 'financas',
+    titulo: 'Receita Registrada',
+    texto: `${desc} (${fmt(val)}) por ${titular || 'Família'}`,
+    valor: val,
+    linkTela: 'receitas'
+  });
   save();
   closeM('m-receita');
   render();
@@ -3476,6 +4490,14 @@ function addGasto(){
       dataPagto: data
     });
   }
+
+  registrarNotificacaoFamilia({
+    tipo: 'financas',
+    titulo: 'Novo Gasto Registrado',
+    texto: `${desc} (${fmt(val)}) por ${titular || 'Família'}`,
+    valor: val,
+    linkTela: 'gastos'
+  });
 
   save();
   closeM('m-gasto');
@@ -3736,7 +4758,7 @@ function quebrarAcordo(dividaId, dadosOverride = null) {
 
   // 1. Total amortizado: entrada paga + parcelas marcadas como pagas
   const entradaPaga = Number(d.acordo.entrada) || 0;
-  const parcelasPagas = (d.acordo.parcelas || []).filter(p => p.paga).reduce((s, p) => s + (Number(p.valor) || 0), 0);
+  const parcelasPagas = (d.acordo.parcelas || []).filter(p => p.paga).reduce((s, p) => s + (Number(p.valor ?? p.val) || 0), 0);
   const totalAmortizado = Math.round((entradaPaga + parcelasPagas) * 100) / 100;
 
   // 2. Saldo base: prioriza saldoOriginalPreAcordo, fallback para d.saldo ou valorTotal do acordo
@@ -3763,6 +4785,14 @@ function quebrarAcordo(dividaId, dadosOverride = null) {
     d.valorQuitado = null;
     d.dataQuitacao = null;
   }
+
+  registrarNotificacaoFamilia({
+    tipo: 'financas',
+    titulo: 'Acordo de Dívida Cancelado',
+    texto: `Acordo de "${d.credor || 'Dívida'}" cancelado. Saldo restante: ${fmt(novoSaldo)}`,
+    valor: novoSaldo,
+    linkTela: 'dividas'
+  });
 
   save();
   render();
@@ -3940,6 +4970,7 @@ function calcTotais(){
     faturasPagas,
     totalPago,
     saldoCaixaReal,
+    saldoReal: saldoCaixaReal,
     gastosAbertos,
     faturasAbertas,
     totalPendente,
@@ -4052,10 +5083,335 @@ function abrirModalDivida(){
   openM('m-divida');
 }
 
-// RENDER
+// ============================================================================
+// RENDERIZAÇÃO FAMILIAR & DESIGN SYSTEM (Etapa 1)
+// ============================================================================
+
+function atualizarBadgesHeader() {
+  if (typeof document === 'undefined') return;
+  const badgeEl = document.getElementById('notif-badge-count');
+  if (!badgeEl) return;
+
+  const naoLidas = (S.notificacoes || []).filter(n => !n.lida).length;
+  if (naoLidas > 0) {
+    badgeEl.textContent = naoLidas > 99 ? '99+' : String(naoLidas);
+    badgeEl.style.display = 'inline-flex';
+  } else {
+    badgeEl.style.display = 'none';
+  }
+}
+
+function renderHeaderCirculo() {
+  if (typeof document === 'undefined') return;
+
+  // Círculo ativo
+  const circulo = obterCirculoAtivo();
+  const topNome = document.getElementById('top-circulo-nome');
+  if (topNome && circulo) {
+    topNome.textContent = circulo.nome;
+  }
+
+  // Membro ativo
+  const membroAtivo = obterMembroAtivo();
+  const avatarBtn = document.getElementById('header-avatar-btn');
+  const avatarTxt = document.getElementById('header-avatar-txt');
+  const avatarCrown = document.getElementById('header-avatar-crown');
+
+  if (avatarTxt && membroAtivo) {
+    avatarTxt.textContent = membroAtivo.iniciais || 'FM';
+  }
+  if (avatarBtn && membroAtivo) {
+    avatarBtn.style.background = membroAtivo.cor || '#5581E3';
+  }
+  if (avatarCrown && membroAtivo) {
+    avatarCrown.style.display = membroAtivo.papel === 'admin' ? 'block' : 'none';
+  }
+
+  // Badges
+  atualizarBadgesHeader();
+}
+
+function renderMuralInicio() {
+  if (typeof document === 'undefined') return;
+  const grid = document.getElementById('grid-mural-inicio') || document.getElementById('grid-modulos-inicio');
+  if (!grid) return;
+
+  const membroAtivo = obterMembroAtivo();
+  const isCrianca = membroAtivo && membroAtivo.papel === 'crianca';
+
+  // Filtra módulos: se for perfil criança, blinda e oculta orçamento
+  const modulosVisiveis = (S.modulosInicio || []).filter(modId => {
+    if (isCrianca && modId === 'orcamento') return false;
+    return true;
+  });
+
+  if (modulosVisiveis.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align:center; padding:32px 16px; background:var(--card-bg); border-radius:var(--radius); border:1px dashed var(--border2);">
+        <p style="font-size:28px; margin-bottom:8px;">🎨</p>
+        <p style="font-weight:700; font-size:15px; margin-bottom:4px;">Seu Mural está vazio</p>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">Adicione recursos para organizar a rotina e o dia a dia da família.</p>
+        <button class="btn btn-primary" onclick="go('explorar')" style="max-width:220px; margin:0 auto;">Explorar Recursos</button>
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = modulosVisiveis.map(modId => {
+    const modDef = MODULOS_INICIO_CATALOGO.find(m => m.id === modId) || {
+      id: modId,
+      nome: modId,
+      desc: 'Módulo do Círculo Familiar',
+      icone: '📦',
+      cor: '#5581E3',
+      bgIcon: 'rgba(85,129,227,0.14)',
+      telaAlvo: 'explorar'
+    };
+
+    // Card Especial do Orçamento Financeiro
+    if (modDef.id === 'orcamento') {
+      const totais = calcTotais();
+      const corSaldo = (totais.saldoCaixaReal ?? totais.saldoReal) < 0 ? 'var(--red)' : 'var(--green)';
+      return `
+        <div class="modulo-card card" style="grid-column: 1 / -1; cursor:pointer;" onclick="go('resumo')">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div class="modulo-icon-bubble" style="background:${modDef.bgIcon}; font-size:22px;">
+                ${modDef.icone}
+              </div>
+              <div>
+                <p style="font-weight:700; font-size:16px; margin:0;">${escapeHtml(modDef.nome)}</p>
+                <p style="font-size:12px; color:var(--muted); margin:0;">Visão financeira consolidada</p>
+              </div>
+            </div>
+            <span style="font-size:12px; color:var(--blue); font-weight:700;">Ver Detalhes →</span>
+          </div>
+
+          <div style="background:var(--bg3); border-radius:var(--radius-sm); padding:12px; display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:8px;">
+            <div>
+              <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Saldo em Caixa Real</p>
+              <p style="font-size:18px; font-weight:800; color:${corSaldo}; margin:0;">${fmt(totais.saldoCaixaReal ?? totais.saldoReal)}</p>
+            </div>
+            <div>
+              <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Receitas do Mês</p>
+              <p style="font-size:15px; font-weight:700; color:var(--green); margin:0;">${fmt(totais.totalRec)}</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Cards Padrão do Grid Familiar
+    return `
+      <div class="modulo-card card" style="cursor:pointer;" onclick="go('${modDef.telaAlvo || 'explorar'}')">
+        <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+          ${modDef.icone}
+        </div>
+        <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+        <p class="modulo-card-desc">${escapeHtml(modDef.desc)}</p>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAbaExplorar() {
+  if (typeof document === 'undefined') return;
+  const grid = document.getElementById('lista-modulos-explorar') || document.getElementById('grid-catalogo-explorar');
+  if (!grid) return;
+
+  grid.innerHTML = MODULOS_INICIO_CATALOGO.map(modDef => {
+    const estaNoInicio = (S.modulosInicio || []).includes(modDef.id);
+    const badgeTipo = modDef.categoria === 'essencial'
+      ? '<span style="background:rgba(16,185,129,0.15); color:var(--green); font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">Essencial</span>'
+      : '<span style="background:rgba(85,129,227,0.15); color:var(--blue); font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">Avançado</span>';
+
+    return `
+      <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; margin-bottom:10px;">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            ${badgeTipo}
+          </div>
+          <p style="font-weight:700; font-size:15px; margin-bottom:4px;">${escapeHtml(modDef.nome)}</p>
+          <p style="font-size:12px; color:var(--muted); line-height:1.4; margin-bottom:12px;">${escapeHtml(modDef.desc)}</p>
+        </div>
+
+        <div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button class="btn ${estaNoInicio ? 'btn-primary' : ''}" style="flex:1; padding:8px; font-size:12px;" onclick="toggleModuloInicio('${modDef.id}')">
+              ${estaNoInicio ? '✓ No Mural' : '+ Fixar no Mural'}
+            </button>
+            ${estaNoInicio ? `
+              <button class="btn" style="padding:8px 10px; font-size:11px;" title="Mover para cima" onclick="reordenarModuloInicio('${modDef.id}', 'up')">▲</button>
+              <button class="btn" style="padding:8px 10px; font-size:11px;" title="Mover para baixo" onclick="reordenarModuloInicio('${modDef.id}', 'down')">▼</button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderMinhaFamilia() {
+  if (typeof document === 'undefined') return;
+
+  const circulo = obterCirculoAtivo();
+  const boxNome = document.getElementById('fam-circulo-nome-box');
+  if (boxNome && circulo) boxNome.textContent = circulo.nome;
+
+  const tagCod = document.getElementById('fam-codigo-tag');
+  if (tagCod && circulo) tagCod.textContent = circulo.codigoConvite ? `Código: ${circulo.codigoConvite}` : 'Código Ativo';
+
+  const conviteCodigo = document.getElementById('familia-codigo-convite-card') || document.getElementById('cv-codigo-txt');
+  if (conviteCodigo && circulo) {
+    conviteCodigo.textContent = circulo.codigoConvite || 'FAM-INICIO';
+  }
+
+  // Pílulas de simulação de membro ativo
+  const pillsEl = document.getElementById('seletor-membro-ativo-pills');
+  if (pillsEl) {
+    pillsEl.innerHTML = (S.membrosPerfil || []).map(m => {
+      const isAtivo = m.id === S.membroAtivoId;
+      return `<button type="button" class="filtro-pill ${isAtivo ? 'sel' : ''}" style="${isAtivo ? 'background:var(--primary);color:#fff;' : ''}" onclick="alternarMembroAtivo('${m.id}')">${escapeHtml(m.nome)} (${m.papel})</button>`;
+    }).join('');
+  }
+
+  const listaMembros = document.getElementById('lista-membros-familia');
+  if (listaMembros) {
+    listaMembros.innerHTML = (S.membrosPerfil || []).map(m => {
+      const isAtivo = m.id === S.membroAtivoId;
+      const papelLabel = m.papel === 'admin' ? 'Administrador' : m.papel === 'crianca' ? 'Criança (Protegido)' : 'Membro Familiar';
+      const papelCor = m.papel === 'admin' ? 'var(--blue)' : m.papel === 'crianca' ? 'var(--green)' : 'var(--muted)';
+
+      return `
+        <div class="card" style="margin-bottom:10px; border:${isAtivo ? '2px solid var(--blue)' : '1px solid var(--border)'};">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div style="width:44px; height:44px; border-radius:50%; background:${m.cor || '#5581E3'}; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:15px; position:relative;">
+                ${escapeHtml(m.iniciais || 'FM')}
+                ${m.papel === 'admin' ? '<span style="position:absolute; top:-4px; right:-4px; font-size:12px;">👑</span>' : ''}
+              </div>
+              <div>
+                <p style="font-weight:700; font-size:15px; margin:0 0 2px;">
+                  ${escapeHtml(m.nome)}
+                  ${isAtivo ? '<span style="font-size:11px; background:var(--blue-dim); color:var(--blue); padding:2px 6px; border-radius:10px; font-weight:700; margin-left:6px;">Você</span>' : ''}
+                </p>
+                <p style="font-size:12px; color:${papelCor}; font-weight:600; margin:0;">${papelLabel}</p>
+                ${m.aniversario ? `<p style="font-size:11px; color:var(--muted); margin:2px 0 0;">🎂 Aniversário: ${escapeHtml(m.aniversario)}</p>` : ''}
+              </div>
+            </div>
+
+            <div style="display:flex; gap:6px; align-items:center;">
+              ${!isAtivo ? `<button class="btn" style="padding:6px 10px; font-size:11px;" onclick="alternarMembroAtivo('${m.id}')">Ativar</button>` : ''}
+              <button class="btn" style="padding:6px 10px; font-size:11px;" onclick="abrirModalMembro('${m.id}')">Editar</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function filtrarAtividadeTipo(tipo) {
+  filtrarAtividadeFeed(tipo);
+}
+
+function filtrarAtividadeFeed(tipo) {
+  filtroAtividadeAtual = tipo;
+  if (typeof document !== 'undefined') {
+    const idMap = {
+      todos: 'flt-ativ-todos',
+      financas: 'flt-ativ-financas',
+      financeiro: 'flt-ativ-financas',
+      listas: 'flt-ativ-listas',
+      lista: 'flt-ativ-listas',
+      eventos: 'flt-ativ-eventos',
+      evento: 'flt-ativ-eventos',
+      sistema: 'flt-ativ-sistema'
+    };
+
+    ['flt-ativ-todos', 'flt-ativ-financas', 'flt-ativ-listas', 'flt-ativ-eventos', 'flt-ativ-sistema'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.remove('sel');
+    });
+
+    const targetId = idMap[tipo] || 'flt-ativ-todos';
+    const activeBtn = document.getElementById(targetId);
+    if (activeBtn) activeBtn.classList.add('sel');
+
+    document.querySelectorAll('#filtros-feed-atividade button').forEach(btn => {
+      if (btn.dataset.tipo === tipo) {
+        btn.classList.add('active');
+        btn.style.background = 'var(--blue)';
+        btn.style.color = '#fff';
+      } else {
+        btn.classList.remove('active');
+        btn.style.background = 'var(--bg3)';
+        btn.style.color = 'var(--text)';
+      }
+    });
+  }
+  renderAtividadeFeed();
+}
+
+function renderAtividadeFeed() {
+  if (typeof document === 'undefined') return;
+  const feed = document.getElementById('lista-atividade-feed') || document.getElementById('feed-atividade-lista');
+  if (!feed) return;
+
+  const itens = obterFeedAtividade(filtroAtividadeAtual);
+
+  if (itens.length === 0) {
+    feed.innerHTML = `
+      <div style="text-align:center; padding:32px 16px; color:var(--muted);">
+        <p style="font-size:28px; margin-bottom:8px;">⚡</p>
+        <p style="font-weight:600; font-size:14px;">Nenhuma atividade recente registrada.</p>
+        <p style="font-size:12px;">Gastos, receitas, recados e tarefas aparecerão aqui.</p>
+      </div>
+    `;
+    return;
+  }
+
+  feed.innerHTML = itens.map(n => {
+    const icone = (n.tipo === 'financas' || n.tipo === 'financeiro') ? '💰' : (n.tipo === 'listas' || n.tipo === 'lista') ? '🛒' : (n.tipo === 'documentos') ? '📂' : '🔔';
+    const corBg = (n.tipo === 'financas' || n.tipo === 'financeiro') ? 'rgba(16,185,129,0.14)' : 'rgba(85,129,227,0.14)';
+    const dataObj = n.criadoEm ? new Date(n.criadoEm) : new Date();
+    const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const dataFormatada = dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+    return `
+      <div class="card" style="margin-bottom:8px; padding:12px; display:flex; gap:12px; align-items:flex-start; ${!n.lida ? 'border-left: 3px solid var(--blue);' : ''}">
+        <div style="width:36px; height:36px; border-radius:50%; background:${corBg}; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;">
+          ${icone}
+        </div>
+        <div style="flex:1;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <p style="font-weight:700; font-size:14px; margin:0 0 2px;">${escapeHtml(n.titulo)}</p>
+            <span style="font-size:11px; color:var(--muted);">${dataFormatada} às ${horaFormatada}</span>
+          </div>
+          <p style="font-size:13px; color:var(--text); margin:0; line-height:1.35;">${escapeHtml(n.texto)}</p>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// RENDER PRINCIPAL
 function render(){
   processarInadimplencia60Dias();
   if (typeof document === 'undefined' || !document.getElementById || !document.getElementById('app') || typeof document.querySelector !== 'function') return;
+
+  // Renderizações do Círculo Familiar (Etapa 1)
+  aplicarTema(S.tema || 'claro');
+  renderHeaderCirculo();
+  renderMuralInicio();
+  renderAbaExplorar();
+  renderMinhaFamilia();
+  renderAtividadeFeed();
+
+  // Renderizações Contábeis Legadas (Zero Regressão)
   atualizarDatalistTitulares();
   atualizarSelectsTipoDivida();
   renderCategoriasModalGasto();
@@ -4783,16 +6139,17 @@ async function sendMsg(){
 
   try {
     const messages=[{role:'user',parts:[{text:buildCtx()+'\n\nPrimeira pergunta: '+S.chat[0]?.parts[0]?.text}]},...S.chat.slice(1)];
-    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:messages,generationConfig:{maxOutputTokens:1000}})
+    const resultado = await chamarGeminiComFallback({
+      contents: messages,
+      generationConfig: { maxOutputTokens: 1000 }
     });
-    const data=await resp.json();
-    const reply=data.candidates?.[0]?.content?.parts?.[0]?.text||'Erro ao obter resposta. Verifique sua API Key.';
+    const reply = resultado.text || 'Erro ao obter resposta da inteligência artificial.';
     S.chat.push({role:'model',parts:[{text:reply}]});
     save();
-  } catch(e){ S.chat.push({role:'model',parts:[{text:'Erro de conexão. Tente novamente.'}]}); }
+  } catch(e){
+    console.error('Erro em sendMsg com roteador Gemini:', e);
+    S.chat.push({role:'model',parts:[{text:'Erro: ' + (e.message || 'Erro de conexão ou indisponibilidade de cota nos modelos Gemini.')}]});
+  }
 
   document.getElementById(loadId)?.remove();
   renderChat();
@@ -4814,6 +6171,72 @@ if(typeof navigator !== 'undefined' && 'serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(err => {
     console.error('Erro ao registrar Service Worker:', err);
   });
+}
+
+// VINCULAÇÃO GLOBAL PARA NAVEGADOR (Resolução de Handlers onclick no HTML)
+if (typeof window !== 'undefined') {
+  window.go = go;
+  window.openM = openM;
+  window.closeM = closeM;
+  window.alternarTema = alternarTema;
+  window.aplicarTema = aplicarTema;
+  window.setCarouselSlide = setCarouselSlide;
+  window.proximoSlideCarrossel = proximoSlideCarrossel;
+  window.abrirModalCirculo = abrirModalCirculo;
+  window.salvarNovoCirculo = salvarNovoCirculo;
+  window.salvarNovoCirculoModal = salvarNovoCirculoModal;
+  window.abrirModalMembro = abrirModalMembro;
+  window.selecionarCorMembro = selecionarCorMembro;
+  window.salvarModalMembro = salvarModalMembro;
+  window.salvarMembroModal = salvarMembroModal;
+  window.excluirModalMembro = excluirModalMembro;
+  window.excluirMembroModal = excluirMembroModal;
+  window.abrirModalConviteCirculo = abrirModalConviteCirculo;
+  window.abrirModalConvite = abrirModalConvite;
+  window.copiarCodigoConvite = copiarCodigoConvite;
+  window.copiarLinkConvite = copiarLinkConvite;
+  window.gerarNovoConviteModal = gerarNovoConviteModal;
+  window.abrirModalNotifPrefs = abrirModalNotifPrefs;
+  window.salvarModalNotifPrefs = salvarModalNotifPrefs;
+  window.salvarNotifPrefsModal = salvarNotifPrefsModal;
+  window.marcarNotificacoesLidas = marcarNotificacoesLidas;
+  window.filtrarAtividadeTipo = filtrarAtividadeTipo;
+  window.filtrarAtividadeFeed = filtrarAtividadeFeed;
+  window.abrirFabMenu = abrirFabMenu;
+  window.fecharFabMenu = fecharFabMenu;
+  window.toggleFabMenu = toggleFabMenu;
+  window.abrirMenuAcaoRapida = abrirMenuAcaoRapida;
+  window.toggleModuloInicio = toggleModuloInicio;
+  window.reordenarModuloInicio = reordenarModuloInicio;
+  window.alternarMembroAtivo = alternarMembroAtivo;
+  window.exibirToastNotificacao = exibirToastNotificacao;
+  window.abrirModalReceita = abrirModalReceita;
+  window.abrirModalGasto = abrirModalGasto;
+  window.abrirModalDivida = abrirModalDivida;
+  window.abrirModalInvestimento = abrirModalInvestimento;
+  window.fazerLogin = fazerLogin;
+  window.fazerCadastro = fazerCadastro;
+  window.salvarKey = salvarKey;
+  window.pularKey = pularKey;
+  window.atualizarKey = atualizarKey;
+  window.setModoVisao = setModoVisao;
+  window.mudarAno = mudarAno;
+  window.ask = ask;
+  window.sendMsg = sendMsg;
+  window.addReceita = addReceita;
+  window.addGasto = addGasto;
+  window.addDivida = addDivida;
+  window.addMeta = addMeta;
+  window.addInvestimento = addInvestimento;
+  window.addMembroFamilia = addMembroFamilia;
+  window.addCategoriaGasto = addCategoriaGasto;
+  window.addTipoDivida = addTipoDivida;
+  window.syncDrive = syncDrive;
+  window.sair = sair;
+  window.salvarFamiliaId = salvarFamiliaId;
+  window.selTag = selTag;
+  window.salvarNegociacaoGasto = salvarNegociacaoGasto;
+  window.confirmarAdiantamento = confirmarAdiantamento;
 }
 
 // EXPORTAÇÃO PARA TESTES / NODE.JS
@@ -4869,6 +6292,91 @@ if (typeof module !== 'undefined' && module.exports) {
     marcarQuitada,
     abrirAcordo,
     renderDividas,
+    go,
+    openM,
+    closeM,
+    // Super-App Familiar v2.0 (Etapa 1)
+    PALETA_FAMILIAR,
+    MODELOS_GEMINI_FALLBACK,
+    MODULOS_INICIO_CATALOGO,
+    migrarParaUpgradeFamiliarV2,
+    aplicarTema,
+    alternarTema,
+    obterCirculoAtivo,
+    criarCirculo,
+    selecionarCirculo,
+    gerarConviteCirculo,
+    obterMembroAtivo,
+    alternarMembroAtivo,
+    salvarMembroCirculo,
+    excluirMembroCirculo,
+    verificarHorarioSilencio,
+    registrarNotificacaoFamilia,
+    obterFeedAtividade,
+    marcarNotificacoesLidas,
+    salvarPreferenciasNotificacao,
+    toggleModuloInicio,
+    reordenarModuloInicio,
+    setCarouselSlide,
+    proximoSlideCarrossel,
+    SLIDES_CARROSSEL,
+    abrirFabMenu,
+    fecharFabMenu,
+    toggleFabMenu,
+    abrirMenuAcaoRapida,
+    filtrarAtividadeTipo,
+    filtrarAtividadeFeed,
+    abrirModalCirculo,
+    salvarNovoCirculo,
+    salvarNovoCirculoModal,
+    abrirModalMembro,
+    selecionarCorMembro,
+    salvarModalMembro,
+    salvarMembroModal,
+    excluirModalMembro,
+    excluirMembroModal,
+    abrirModalConviteCirculo,
+    abrirModalConvite,
+    copiarCodigoConvite,
+    copiarLinkConvite,
+    gerarNovoConviteModal,
+    abrirModalNotifPrefs,
+    salvarModalNotifPrefs,
+    salvarNotifPrefsModal,
+    exibirToastNotificacao,
+    renderHeaderCirculo,
+    renderMuralInicio,
+    renderAbaExplorar,
+    renderMinhaFamilia,
+    renderAtividadeFeed,
+    abrirModalReceita,
+    abrirModalGasto,
+    abrirModalDivida,
+    abrirModalInvestimento,
+    fazerLogin,
+    fazerCadastro,
+    salvarKey,
+    pularKey,
+    atualizarKey,
+    setModoVisao,
+    mudarAno,
+    ask,
+    sendMsg,
+    addReceita,
+    addGasto,
+    addDivida,
+    addMeta,
+    addInvestimento,
+    addMembroFamilia,
+    addCategoriaGasto,
+    addTipoDivida,
+    syncDrive,
+    sair,
+    salvarFamiliaId,
+    selTag,
+    salvarNegociacaoGasto,
+    confirmarAdiantamento,
+    chamarGeminiComFallback,
     getState: () => S,
     S
   };
