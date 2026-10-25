@@ -41,7 +41,8 @@ const MODULOS_INICIO_CATALOGO = [
   { id: 'receitas_cul', nome: 'Receitas', desc: 'Pratos favoritos da família', icone: '📖', cor: '#F97316', bgIcon: 'rgba(249,115,22,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
   { id: 'mensagens', nome: 'Mural / Mensagens', desc: 'Recados fixados no mural', icone: '💬', cor: '#06B6D4', bgIcon: 'rgba(6,182,212,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
   { id: 'horario', nome: 'Horário Escolar', desc: 'Aulas e atividades dos filhos', icone: '🎒', cor: '#A855F7', bgIcon: 'rgba(168,85,247,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
-  { id: 'contatos', nome: 'Contatos Úteis', desc: 'Telefones de emergência e médicos', icone: '📞', cor: '#64748B', bgIcon: 'rgba(100,116,139,0.14)', categoria: 'essencial', telaAlvo: 'explorar' }
+  { id: 'contatos', nome: 'Contatos Úteis', desc: 'Telefones de emergência e médicos', icone: '📞', cor: '#64748B', bgIcon: 'rgba(100,116,139,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
+  { id: 'beneficios', nome: 'Vales VA / VR', desc: 'Carteiras de alimentação e refeição', icone: '🥗', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'gastos' }
 ];
 
 let S = {
@@ -84,6 +85,13 @@ let S = {
   membrosFamilia:['Alex', 'Gabi'],
   categoriasGastos:[...DEFAULT_CATEGORIAS_GASTOS],
   tiposDivida:[...DEFAULT_TIPOS_DIVIDA],
+  // Super-App Familiar v2.0 (Etapa 4 - Carteiras VA/VR e Orçamento)
+  carteirasBeneficio: [],
+  movimentacoesBeneficio: [],
+  configOrcamento: {
+    diaInicioCiclo: 1,
+    filtroOrigemAtivo: 'todos'
+  },
   chat:[],
   apiKey:'',
   onboardingDone:false
@@ -728,6 +736,26 @@ function migrarParaUpgradeFamiliarV2() {
         criadoEm: agoraIsoEtapa3
       }
     ];
+  }
+
+  // 10. Carteiras de Benefícios (VA / VR) e Orçamento Familiar (Etapa 4)
+  if (!Array.isArray(S.carteirasBeneficio)) {
+    S.carteirasBeneficio = [];
+  }
+  if (!Array.isArray(S.movimentacoesBeneficio)) {
+    S.movimentacoesBeneficio = [];
+  }
+  if (!S.configOrcamento || typeof S.configOrcamento !== 'object') {
+    S.configOrcamento = {
+      diaInicioCiclo: 1,
+      filtroOrigemAtivo: 'todos'
+    };
+  }
+  if (!S.configOrcamento.diaInicioCiclo) {
+    S.configOrcamento.diaInicioCiclo = 1;
+  }
+  if (!S.configOrcamento.filtroOrigemAtivo) {
+    S.configOrcamento.filtroOrigemAtivo = 'todos';
   }
 }
 
@@ -1748,20 +1776,23 @@ function converterListaEmGasto(listaId, dadosOverride = {}) {
 
   if (!Array.isArray(S.gastos)) S.gastos = [];
 
-  const novoGasto = {
+  const origemSel = dadosOverride.origemPagamento || dadosOverride.forcarOrigem || 'auto';
+  const novoGastoBase = {
     id: Date.now(),
     desc: descFinal,
     val: valorFinal,
     cat: catFinal,
     titular: titularFinal,
     data: dataFinal,
-    pago: true,
-    dataPagto: dataFinal,
+    origemPagamento: origemSel,
     origemListaId: listaId,
     parcelado: false,
-    recorrente: false
+    recorrente: false,
+    pago: true,
+    dataPagto: dataFinal
   };
 
+  const novoGasto = registrarGastoComBeneficio(novoGastoBase);
   S.gastos.push(novoGasto);
   adicionarNaFilaSync('lancamentos_financeiros', 'insert', novoGasto);
 
@@ -2026,7 +2057,8 @@ function confirmarConverterGastoModal() {
     return;
   }
 
-  const res = converterListaEmGasto(listaParaConverterId, { valor, desc, titular, cat, data, limparComprados });
+  const origemSel = document.getElementById('cvg-origem-pagamento')?.value || 'auto';
+  const res = converterListaEmGasto(listaParaConverterId, { valor, desc, titular, cat, data, limparComprados, origemPagamento: origemSel });
   if (res.ok) {
     closeM('m-converter-gasto-lista');
     listaParaConverterId = null;
@@ -3927,21 +3959,29 @@ function renderCalendario() {
   }
 }
 
-function loadState(){
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const rawData = localStorage.getItem('dnm_data');
-      if (rawData && !localStorage.getItem('dnm_backup_v1')) {
-        localStorage.setItem('dnm_backup_v1', rawData);
-        localStorage.setItem('dnm_backup_v1_timestamp', new Date().toISOString());
-      }
-      if (rawData) {
-        const parsed = JSON.parse(rawData);
-        Object.assign(S, parsed);
-      }
+function loadState(overrideState){
+  if (overrideState && typeof overrideState === 'object') {
+    Object.assign(S, overrideState);
+    if (Array.isArray(overrideState.membrosPerfil) && overrideState.membrosPerfil.length > 0) {
+      S.membrosPerfil = overrideState.membrosPerfil;
+      S.membrosFamilia = overrideState.membrosPerfil.map(m => m.nome);
     }
-  } catch(e){
-    console.error('Erro ao ler dnm_data do localStorage:', e);
+  } else {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const rawData = localStorage.getItem('dnm_data');
+        if (rawData && !localStorage.getItem('dnm_backup_v1')) {
+          localStorage.setItem('dnm_backup_v1', rawData);
+          localStorage.setItem('dnm_backup_v1_timestamp', new Date().toISOString());
+        }
+        if (rawData) {
+          const parsed = JSON.parse(rawData);
+          Object.assign(S, parsed);
+        }
+      }
+    } catch(e){
+      console.error('Erro ao ler dnm_data do localStorage:', e);
+    }
   }
 
   // Migração segura para o Super-App Familiar v2.0 (Etapa 1)
@@ -4782,6 +4822,7 @@ function setFiltroTitularReceita(titular) {
 }
 
 function renderFiltroTitulares(containerId, titularSelecionado, onClickFnName) {
+  if (typeof document === 'undefined') return;
   const el = document.getElementById(containerId);
   if (!el) return;
   const titulares = obterTitularesUnicos();
@@ -7322,18 +7363,22 @@ function addGasto(){
       });
     }
   } else {
-    S.gastos.push({
+    const origemSel = document.getElementById('g-origem-pagamento')?.value || 'auto';
+    const novoGastoBase = {
       id: Date.now(),
       desc,
       val,
       cat,
       data,
       titular,
+      origemPagamento: origemSel,
       parcelado: false,
       recorrente: false,
       pago: true,
       dataPagto: data
-    });
+    };
+    const gastoFinal = registrarGastoComBeneficio(novoGastoBase);
+    S.gastos.push(gastoFinal);
   }
 
   registrarNotificacaoFamilia({
@@ -7349,6 +7394,8 @@ function addGasto(){
   render();
   document.getElementById('g-desc').value=''; document.getElementById('g-val').value='';
   if(document.getElementById('g-titular')) document.getElementById('g-titular').value='';
+  const gOrig = document.getElementById('g-origem-pagamento'); if (gOrig) gOrig.value = 'auto';
+  const gPrev = document.getElementById('g-preview-beneficio'); if (gPrev) { gPrev.style.display = 'none'; gPrev.innerHTML = ''; }
   const gf=document.getElementById('g-file'); if(gf) gf.value='';
   const gst=document.getElementById('g-ocr-status'); if(gst) gst.textContent='';
   document.getElementById('g-is-parcelado').checked = false;
@@ -7391,7 +7438,21 @@ function addMeta(){
   document.getElementById('mt-nome').value=''; document.getElementById('mt-total').value=''; document.getElementById('mt-atual').value='';
 }
 
-function del(arr,id){ return arr.filter(i=>i.id!==id); }
+function del(arr, id) {
+  if (arr === S.gastos) {
+    estornarBeneficioDeGasto(id);
+  }
+  return arr.filter(i => i.id !== id);
+}
+
+function delGasto(id) {
+  estornarBeneficioDeGasto(id);
+  if (Array.isArray(S.gastos)) {
+    S.gastos = S.gastos.filter(g => g.id !== id);
+  }
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+}
 
 // INVESTIMENTOS — evolução automática por juros compostos mensais
 function addInvestimento(){
@@ -7676,8 +7737,11 @@ function calcSaldoAcumuladoAnterior(targetYM) {
   let acumulado = 0;
   for (const ym of mesesOrdenados) {
     const rec = (S.receitas || []).filter(r => (r.data||'').slice(0,7) === ym).reduce((s,r) => s + r.val, 0);
-    // Gastos do mês pagos no mês anterior (gastos negociados não consumiram caixa no mês original)
-    const gasPagos = (S.gastos || []).filter(g => (g.data||'').slice(0,7) === ym && g.pago && !g.negociado).reduce((s,g) => s + g.val, 0);
+    // Gastos do mês pagos no mês anterior (apenas a parcela que efetivamente saiu do salário)
+    const gasPagos = (S.gastos || []).filter(g => (g.data||'').slice(0,7) === ym && g.pago && !g.negociado).reduce((s,g) => {
+      const vSalario = g.valorPagoSalario !== undefined ? Number(g.valorPagoSalario) : Math.max(0, (Number(g.val) || 0) - (Number(g.valorPagoBeneficio) || 0));
+      return s + vSalario;
+    }, 0);
     // Fatia B: Faturas de cartão de crédito pagas nos meses anteriores
     const fatPagos = (S.faturasCartao || []).filter(f => f.mes === ym).reduce((s,f) => s + (Number(f.valorPago) || 0), 0);
     const inv = (S.investimentos || []).filter(i => (i.dataInicio||'').slice(0,7) === ym).reduce((s,i) => s + (i.valorInicial || 0), 0);
@@ -7723,7 +7787,20 @@ function calcTotais(){
   });
   totalFaturasCartao = Math.round(totalFaturasCartao * 100) / 100;
 
-  const totalGas = Math.round((gas.reduce((s,g) => s + g.val, 0) + totalFaturasCartao) * 100) / 100;
+  // Regra de Ouro (Etapa 4): frações pagas com VA/VR (valorPagoBeneficio) NÃO reduzem o salário disponível
+  const getValorSalario = (g) => {
+    if (g.valorPagoSalario !== undefined) return Number(g.valorPagoSalario) || 0;
+    const vBeneficio = Number(g.valorPagoBeneficio) || 0;
+    return Math.max(0, Math.round(((Number(g.val) || 0) - vBeneficio) * 100) / 100);
+  };
+  const getValorBeneficio = (g) => Number(g.valorPagoBeneficio) || 0;
+
+  const totalGasSalario = Math.round((gas.reduce((s,g) => s + getValorSalario(g), 0) + totalFaturasCartao) * 100) / 100;
+  const totalGasBruto = Math.round((gas.reduce((s,g) => s + g.val, 0) + totalFaturasCartao) * 100) / 100;
+  const totalGasBeneficios = Math.round(gas.reduce((s,g) => s + getValorBeneficio(g), 0) * 100) / 100;
+
+  // Saldo bancário e caixa consomem estritamente totalGasSalario
+  const totalGas = totalGasSalario;
   
   // Aportes de investimentos no mês
   const invMes = investimentosDoMes(mesAtual);
@@ -7738,7 +7815,7 @@ function calcTotais(){
   const totalDiv = Math.round(abertas.reduce((s,d) => s + saldoRestante(d), 0) * 100) / 100;
   const custoJuros = Math.round(abertas.filter(d => !d.acordo).reduce((s,d) => s + (d.saldo * (d.juros/100)), 0) * 100) / 100;
   
-  // Saldo líquido do mês corrente: Receitas - Gastos - Aportes
+  // Saldo líquido do mês corrente: Receitas - Gastos Salário - Aportes
   const saldoMes = Math.round((totalRec - totalGas - totalInv) * 100) / 100;
   
   // Sobras acumuladas de meses anteriores
@@ -7751,8 +7828,8 @@ function calcTotais(){
   // 1. Disponível total em caixa (receitas do mês + sobras de caixa anteriores)
   const totalDisponivel = Math.round((totalRec + saldoAnterior) * 100) / 100;
 
-  // 2. Gastos avulsos marcados como pagos até o momento
-  const gastosPagos = Math.round(gas.filter(g => g.pago).reduce((s,g) => s + g.val, 0) * 100) / 100;
+  // 2. Gastos avulsos marcados como pagos até o momento (apenas fração paga em dinheiro/salário)
+  const gastosPagos = Math.round(gas.filter(g => g.pago).reduce((s,g) => s + getValorSalario(g), 0) * 100) / 100;
 
   // 3. Faturas de cartões de crédito pagas ou parcialmente pagas no mês
   const faturasPagas = Math.round((S.cartoes || []).filter(c => c.ativo !== false).reduce((s,c) => {
@@ -7766,8 +7843,8 @@ function calcTotais(){
   // 5. Saldo em Caixa Real em Tempo Real ("Painel Verdinho")
   const saldoCaixaReal = Math.round((totalDisponivel - totalPago) * 100) / 100;
 
-  // 6. Gastos avulsos em aberto (pendentes)
-  const gastosAbertos = Math.round(gas.filter(g => !g.pago).reduce((s,g) => s + g.val, 0) * 100) / 100;
+  // 6. Gastos avulsos em aberto (pendentes do salário)
+  const gastosAbertos = Math.round(gas.filter(g => !g.pago).reduce((s,g) => s + getValorSalario(g), 0) * 100) / 100;
 
   // 7. Faturas de cartões em aberto (saldo pendente de quitação no mês atual)
   const faturasAbertas = Math.round((S.cartoes || []).filter(c => c.ativo !== false).reduce((s, c) => {
@@ -7803,9 +7880,16 @@ function calcTotais(){
   // 9. Previsão de sobra final do mês (Saldo Projetado)
   // Invariante estrita da ADR-002: saldoProjetado === saldoCaixaReal - totalPendente
   const saldoProjetado = Math.round((saldoCaixaReal - totalPendente) * 100) / 100;
+
+  // 10. Totais de benefícios VA / VR da família (Etapa 4)
+  const totalBeneficiosDisponivel = Math.round((S.carteirasBeneficio || []).reduce((s, c) => s + (Number(c.saldoAtual) || 0), 0) * 100) / 100;
+  const totalBeneficiosRecargaPrevista = Math.round((S.carteirasBeneficio || []).reduce((s, c) => {
+    const met = calcularMetricasCarteiraBeneficio(c.id);
+    return s + (met && met.statusRecarga === 'prevista' ? (Number(c.recargaMensal) || 0) : 0);
+  }, 0) * 100) / 100;
   
   return {
-    totalRec, totalGas, totalInv, totalFaturasCartao,
+    totalRec, totalGas, totalGasSalario, totalGasBruto, totalGasBeneficios, totalInv, totalFaturasCartao,
     gasRec, gasLaz, gasNP, gasVg,
     totalDiv, custoJuros,
     saldoMes, saldoAnterior, saldoDisp,
@@ -7819,7 +7903,10 @@ function calcTotais(){
     gastosAbertos,
     faturasAbertas,
     totalPendente,
-    saldoProjetado
+    saldoProjetado,
+    // Etapa 4: Benefícios VA / VR
+    totalBeneficiosDisponivel,
+    totalBeneficiosRecargaPrevista
   };
 }
 
@@ -7984,9 +8071,9 @@ function renderMuralInicio() {
   const membroAtivo = obterMembroAtivo();
   const isCrianca = membroAtivo && membroAtivo.papel === 'crianca';
 
-  // Filtra módulos: se for perfil criança, blinda e oculta orçamento
+  // Filtra módulos: se for perfil criança, blinda e oculta orçamento e benefícios
   const modulosVisiveis = (S.modulosInicio || []).filter(modId => {
-    if (isCrianca && modId === 'orcamento') return false;
+    if (isCrianca && (modId === 'orcamento' || modId === 'beneficios')) return false;
     return true;
   });
 
@@ -8012,6 +8099,27 @@ function renderMuralInicio() {
       bgIcon: 'rgba(85,129,227,0.14)',
       telaAlvo: 'explorar'
     };
+
+    // Card Especial de Benefícios VA / VR (Etapa 4)
+    if (modDef.id === 'beneficios') {
+      const totais = calcTotais();
+      const carteiras = S.carteirasBeneficio || [];
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalCarteirasBeneficio()">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:rgba(16,185,129,0.14);">
+              🥗
+            </div>
+            <span style="font-size:11px; font-weight:700; color:var(--green);">${carteiras.length} ${carteiras.length === 1 ? 'carteira' : 'carteiras'}</span>
+          </div>
+          <p class="modulo-card-title">Vales VA / VR</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">Saldo: ${fmt(totais.totalBeneficiosDisponivel)}</p>
+          <div style="font-size:11px; color:var(--muted);">
+            <span>Alimentação e Refeição</span>
+          </div>
+        </div>
+      `;
+    }
 
     // Card Especial do Orçamento Financeiro
     if (modDef.id === 'orcamento') {
@@ -8041,6 +8149,12 @@ function renderMuralInicio() {
               <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Receitas do Mês</p>
               <p style="font-size:15px; font-weight:700; color:var(--green); margin:0;">${fmt(totais.totalRec)}</p>
             </div>
+            ${totais.totalBeneficiosDisponivel > 0 ? `
+              <div style="grid-column: 1 / -1; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:11px; color:var(--muted);">🥗 Vales VA / VR Disponíveis:</span>
+                <span style="font-size:12px; font-weight:700; color:var(--green);">${fmt(totais.totalBeneficiosDisponivel)}</span>
+              </div>
+            ` : ''}
           </div>
         </div>
       `;
@@ -8624,8 +8738,10 @@ function renderReceitas(){
 }
 
 function renderGastos(){
+  if (typeof document === 'undefined' || !document.getElementById) return;
   renderFiltroTitulares('filtro-titular-gastos', filtroTitularGasto, 'setFiltroTitularGasto');
   renderCartoesTopo();
+  renderBeneficiosTopo();
   const t=calcTotais();
   const bd=document.getElementById('breakdown-gastos');
   const listaMes=gastosDoMes();
@@ -8741,7 +8857,13 @@ function renderGastos(){
   const el=document.getElementById('lista-gastos');
   const badges={recorrente:'b-rec',nao_planejado:'b-unp',lazer:'b-laz',viagem:'b-vg'};
   
-  const previstos = gastosPrevistosDoMes().filter(g => filtroTitularGasto === 'todos' || g.titular === filtroTitularGasto);
+  const fltOrigem = S.configOrcamento?.filtroOrigemAtivo || 'todos';
+  const selOrigem = document.getElementById('filtro-origem-gastos');
+  if (selOrigem && selOrigem.value !== fltOrigem) {
+    selOrigem.value = fltOrigem;
+  }
+
+  let previstos = gastosPrevistosDoMes().filter(g => filtroTitularGasto === 'todos' || g.titular === filtroTitularGasto);
 
   // Faturas consolidadas de cartões de crédito no mês (compras individuais não poluem a lista)
   const cartoesComFatura = (S.cartoes || []).filter(c => {
@@ -8755,7 +8877,7 @@ function renderGastos(){
     return f.valorTotalFatura > 0 || (fatReg && fatReg.pago);
   });
 
-  const faturasHtml = cartoesComFatura.map(c => {
+  let faturasHtml = cartoesComFatura.map(c => {
     const f = calcularFaturaMes(c.id, mesAtual);
     const fatReg = (S.faturasCartao || []).find(x => x.cartaoId === c.id && x.mes === mesAtual);
     const titBadge = c.titular ? `<span class="badge b-titular">${escapeHtml(c.titular)}</span>` : '';
@@ -8787,8 +8909,21 @@ function renderGastos(){
     </div>`;
   }).join('');
 
-  if(!previstos.length && !inadFiltrada.length && !cartoesComFatura.length){
-    el.innerHTML='<p style="color:var(--muted);font-size:14px;padding:8px 0;">Nenhum gasto neste mês.</p>';
+  // Aplicação do filtro de origem (todos, salario, VA, VR, cartao)
+  if (fltOrigem === 'salario') {
+    previstos = previstos.filter(g => (g.valorPagoSalario !== undefined ? g.valorPagoSalario > 0 : !g.valorPagoBeneficio));
+  } else if (fltOrigem === 'VA') {
+    previstos = previstos.filter(g => g.origemBeneficio === 'VA' || (g.valorPagoBeneficio > 0 && g.origemBeneficio === 'VA'));
+    faturasHtml = '';
+  } else if (fltOrigem === 'VR') {
+    previstos = previstos.filter(g => g.origemBeneficio === 'VR' || (g.valorPagoBeneficio > 0 && g.origemBeneficio === 'VR'));
+    faturasHtml = '';
+  } else if (fltOrigem === 'cartao') {
+    previstos = previstos.filter(g => g.tipoDivida === 'cartao' || g.parcelado);
+  }
+
+  if(!previstos.length && !inadFiltrada.length && !faturasHtml){
+    el.innerHTML='<p style="color:var(--muted);font-size:14px;padding:8px 0;">Nenhum gasto encontrado para os filtros selecionados.</p>';
     return;
   }
   
@@ -8801,6 +8936,19 @@ function renderGastos(){
     const negociadoBadge = g.negociado ? `<span class="badge" style="background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.3);">🤝 Negociado</span>` : '';
     const migradoBadge = g.migradoDivida ? `<span class="badge" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);">🔴 Migrado p/ Dívidas</span>` : '';
 
+    let benefBadge = '';
+    if (g.valorPagoBeneficio > 0) {
+      if (g.splitBeneficio) {
+        benefBadge = `<span class="badge badge-split" title="Pago ${fmt(g.valorPagoBeneficio)} no ${escapeHtml(g.origemBeneficio || 'Vale')} e ${fmt(g.valorPagoSalario)} no Salário">⚡ Split (${escapeHtml(g.origemBeneficio || 'Vale')} + Salário)</span>`;
+      } else if (g.origemBeneficio === 'VA') {
+        benefBadge = `<span class="badge badge-va" title="Pago 100% com Vale-Alimentação">🥗 VA 100%</span>`;
+      } else if (g.origemBeneficio === 'VR') {
+        benefBadge = `<span class="badge badge-vr" title="Pago 100% com Vale-Refeição">🍽️ VR 100%</span>`;
+      } else {
+        benefBadge = `<span class="badge badge-va">🥗 Benefício</span>`;
+      }
+    }
+
     // Gastos já migrados para a aba de dívidas não exibem botões de pagar ou negociar para garantir integridade
     const statusHtml = (g.negociado || g.migradoDivida) ? '' : `<button class="status-btn ${g.pago?'pago':'pendente'}" onclick="togglePagoGasto(${g.id})">${g.pago?'✓ Pago':'⏳ Aberto'}</button>`;
     const adiantarHtml = (g.parcelado && !g.migradoDivida) ? `<button class="btn-adiantar" onclick="abrirModalAdiantar('${escapeHtml(g.grupoId)}')">⏩ Adiantar</button>` : '';
@@ -8811,6 +8959,7 @@ function renderGastos(){
         <span class="item-name">${escapeHtml(g.desc)}</span>
         <span class="badge ${badges[g.cat]||'b-rec'}">${escapeHtml(getNomeCategoria(g.cat))}</span>
         ${titBadge}
+        ${benefBadge}
         ${parcBadge}
         ${recBadge}
         ${negociadoBadge}
@@ -8821,7 +8970,7 @@ function renderGastos(){
         ${statusHtml}
         ${adiantarHtml}
         ${negociarHtml}
-        <span class="item-del" onclick="if(confirm('Excluir este gasto?')){S.gastos=del(S.gastos,${g.id});save();render();}">×</span>
+        <span class="item-del" onclick="if(confirm('Excluir este gasto?')){delGasto(${g.id});}">×</span>
       </div>
     </div>`;
   }).join('');
@@ -9085,6 +9234,945 @@ function renderChat(){
   el.scrollTop=99999;
 }
 
+// ======================================================================
+// SUPER-APP FAMILIAR v2.0 - ETAPA 4: CARTEIRAS DE BENEFÍCIOS (VA / VR) & ORÇAMENTO
+// ======================================================================
+
+/**
+ * Retorna a quantidade de dias existentes no mês e ano informados.
+ */
+function obterDiasNoMes(ano, mes1a12) {
+  const y = Number(ano) || new Date().getFullYear();
+  const m = Number(mes1a12) || (new Date().getMonth() + 1);
+  return new Date(y, m, 0).getDate();
+}
+
+/**
+ * Ajusta o dia de recarga configurado para não ultrapassar o último dia de meses curtos.
+ * Por exemplo, dia 31 em fevereiro (28/29 dias) ou abril (30 dias) vira o último dia do mês.
+ */
+function obterDataRecargaNoMes(diaConfigurado, ano, mes1a12) {
+  const maxDias = obterDiasNoMes(ano, mes1a12);
+  const diaAlvo = Math.max(1, Math.min(31, parseInt(diaConfigurado, 10) || 25));
+  return Math.min(diaAlvo, maxDias);
+}
+
+/**
+ * Calcula métricas e indicadores de uma carteira de benefício:
+ * - Dias até a próxima recarga
+ * - Cota diária recomendada (saldoAtual / diasAteRecarga)
+ * - Status da recarga ('prevista' antes da data, 'creditada' a partir da data)
+ * - Alerta de saldo baixo (< 15% da recarga mensal)
+ */
+function calcularMetricasCarteiraBeneficio(carteiraId, dataReferenciaISO) {
+  if (!S || !Array.isArray(S.carteirasBeneficio)) return null;
+  const carteira = S.carteirasBeneficio.find(c => c.id === carteiraId);
+  if (!carteira) return null;
+
+  let ano, mes1a12, diaHoje;
+  if (dataReferenciaISO && typeof dataReferenciaISO === 'string' && dataReferenciaISO.length >= 10) {
+    const partes = dataReferenciaISO.slice(0, 10).split('-').map(Number);
+    ano = partes[0];
+    mes1a12 = partes[1];
+    diaHoje = partes[2];
+  } else {
+    const agora = new Date();
+    ano = agora.getFullYear();
+    mes1a12 = agora.getMonth() + 1;
+    diaHoje = agora.getDate();
+  }
+
+  const diaRecargaEsteMes = obterDataRecargaNoMes(carteira.diaRecarga, ano, mes1a12);
+  let diasAteRecarga = 0;
+  let statusRecarga = 'creditada';
+  let proximaDataISO = '';
+
+  if (diaHoje < diaRecargaEsteMes) {
+    statusRecarga = 'prevista';
+    diasAteRecarga = diaRecargaEsteMes - diaHoje;
+    proximaDataISO = `${ano}-${String(mes1a12).padStart(2, '0')}-${String(diaRecargaEsteMes).padStart(2, '0')}`;
+  } else {
+    statusRecarga = 'creditada';
+    let proxMes = mes1a12 + 1;
+    let proxAno = ano;
+    if (proxMes > 12) {
+      proxMes = 1;
+      proxAno++;
+    }
+    const diaRecargaProxMes = obterDataRecargaNoMes(carteira.diaRecarga, proxAno, proxMes);
+    proximaDataISO = `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaRecargaProxMes).padStart(2, '0')}`;
+
+    // Diferença em dias com UTC puro para imunidade total a fusos horários locais
+    const dataHojeUtc = Date.UTC(ano, mes1a12 - 1, diaHoje);
+    const dataProxUtc = Date.UTC(proxAno, proxMes - 1, diaRecargaProxMes);
+    diasAteRecarga = Math.max(1, Math.round((dataProxUtc - dataHojeUtc) / (1000 * 60 * 60 * 24)));
+  }
+
+  const saldoAtual = Math.round((Number(carteira.saldoAtual) || 0) * 100) / 100;
+  const recargaMensal = Math.round((Number(carteira.recargaMensal) || 0) * 100) / 100;
+  const divisorDias = Math.max(1, diasAteRecarga);
+  const cotaDiaria = Math.round((saldoAtual / divisorDias) * 100) / 100;
+  const alertaSaldoBaixo = recargaMensal > 0 && saldoAtual < (recargaMensal * 0.15);
+  const percentualRestante = recargaMensal > 0 ? Math.round((saldoAtual / recargaMensal) * 100) : 0;
+
+  return {
+    carteiraId: carteira.id,
+    nome: carteira.nome,
+    tipo: carteira.tipo,
+    titular: carteira.titular,
+    saldoAtual,
+    recargaMensal,
+    diaRecarga: carteira.diaRecarga || 25,
+    diasAteRecarga,
+    cotaDiaria: Math.max(0, cotaDiaria),
+    statusRecarga,
+    proximaDataRecargaISO: proximaDataISO,
+    alertaSaldoBaixo,
+    percentualRestante
+  };
+}
+
+/**
+ * Processa recargas automáticas de VA e VR para as carteiras cadastradas.
+ * REGRA ESSENCIAL: O saldo NUNCA é zerado na virada do mês! Ele acumula
+ * (ex.: sobrou 150 + recarga 800 = 950).
+ */
+function processarRecargasBeneficiosAutomaticas(dataReferenciaISO) {
+  if (!S || !Array.isArray(S.carteirasBeneficio) || S.carteirasBeneficio.length === 0) {
+    return [];
+  }
+
+  let ano, mes1a12, diaHoje;
+  if (dataReferenciaISO && typeof dataReferenciaISO === 'string' && dataReferenciaISO.length >= 10) {
+    const partes = dataReferenciaISO.slice(0, 10).split('-').map(Number);
+    ano = partes[0];
+    mes1a12 = partes[1];
+    diaHoje = partes[2];
+  } else {
+    const agora = new Date();
+    ano = agora.getFullYear();
+    mes1a12 = agora.getMonth() + 1;
+    diaHoje = agora.getDate();
+  }
+  const mesYM = `${ano}-${String(mes1a12).padStart(2, '0')}`;
+
+  const recargasExecutadas = [];
+  if (!Array.isArray(S.movimentacoesBeneficio)) S.movimentacoesBeneficio = [];
+
+  S.carteirasBeneficio.forEach(carteira => {
+    carteira.recargasProcessadas = Array.isArray(carteira.recargasProcessadas) ? carteira.recargasProcessadas : [];
+    // Se já processou recarga para este mês, não duplica
+    if (carteira.recargasProcessadas.includes(mesYM)) {
+      return;
+    }
+
+    const diaRecargaEfetivo = obterDataRecargaNoMes(carteira.diaRecarga, ano, mes1a12);
+    // Se a data de referência já atingiu ou passou o dia de recarga no mês
+    if (diaHoje >= diaRecargaEfetivo) {
+      const valorRecarga = Math.round((Number(carteira.recargaMensal) || 0) * 100) / 100;
+      if (valorRecarga > 0) {
+        // Acúmulo sem perda de saldo residual anterior
+        carteira.saldoAtual = Math.round(((Number(carteira.saldoAtual) || 0) + valorRecarga) * 100) / 100;
+        carteira.recargasProcessadas.push(mesYM);
+
+        const mov = {
+          id: 'mov_rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          carteiraId: carteira.id,
+          tipo: 'recarga',
+          valor: valorRecarga,
+          dataISO: dataReferenciaISO ? String(dataReferenciaISO) : new Date().toISOString(),
+          mesYM,
+          gastoId: null,
+          descricao: `Recarga mensal programada (${carteira.tipo} - ${carteira.nome})`,
+          saldoApos: carteira.saldoAtual
+        };
+        S.movimentacoesBeneficio.push(mov);
+        recargasExecutadas.push({ carteiraId: carteira.id, valor: valorRecarga, saldoAtual: carteira.saldoAtual });
+      }
+    }
+  });
+
+  if (recargasExecutadas.length > 0) {
+    if (typeof save === 'function') save();
+  }
+  return recargasExecutadas;
+}
+
+/**
+ * Permite antecipar ou forçar uma recarga mensal para uma carteira específica.
+ */
+function creditarRecargaManual(carteiraId, mesYM) {
+  if (!S || !Array.isArray(S.carteirasBeneficio)) return { ok: false, motivo: 'sem_carteiras' };
+  const carteira = S.carteirasBeneficio.find(c => c.id === carteiraId);
+  if (!carteira) return { ok: false, motivo: 'carteira_nao_encontrada' };
+
+  const ymAlvo = mesYM || mesAtual;
+  carteira.recargasProcessadas = Array.isArray(carteira.recargasProcessadas) ? carteira.recargasProcessadas : [];
+  if (carteira.recargasProcessadas.includes(ymAlvo)) {
+    return { ok: false, motivo: 'ja_recarregada_no_mes', carteira };
+  }
+
+  const valor = Math.round((Number(carteira.recargaMensal) || 0) * 100) / 100;
+  carteira.saldoAtual = Math.round(((Number(carteira.saldoAtual) || 0) + valor) * 100) / 100;
+  carteira.recargasProcessadas.push(ymAlvo);
+
+  if (!Array.isArray(S.movimentacoesBeneficio)) S.movimentacoesBeneficio = [];
+  S.movimentacoesBeneficio.push({
+    id: 'mov_rec_man_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    carteiraId: carteira.id,
+    tipo: 'recarga',
+    valor,
+    dataISO: new Date().toISOString(),
+    mesYM: ymAlvo,
+    gastoId: null,
+    descricao: `Recarga manual antecipada (${carteira.tipo} - ${carteira.nome})`,
+    saldoApos: carteira.saldoAtual
+  });
+
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+  return { ok: true, carteira, valorCreditado: valor };
+}
+
+/**
+ * Calcula a divisão de pagamento entre Benefício (VA/VR) e Salário (Split).
+ * - Se o saldo cobrir 100%, débito total do benefício e R$ 0 do salário.
+ * - Se o saldo for insuficiente, debita o saldo existente do vale e a diferença vai para o salário.
+ * - Suporta forçar VA, VR, Salário ou detecção automática por palavras-chave.
+ */
+function calcularDivisaoPagamentoBeneficio(opts = {}) {
+  const valorTotal = Math.round((Number(opts.valorTotal) || 0) * 100) / 100;
+  if (valorTotal <= 0) {
+    return {
+      valorTotal: 0,
+      valorPagoBeneficio: 0,
+      valorPagoSalario: 0,
+      carteiraId: null,
+      tipoBeneficio: null,
+      split: false,
+      descricaoSplit: 'R$ 0,00'
+    };
+  }
+
+  const forcarOrigem = opts.forcarOrigem || 'auto';
+  const forcarCarteiraId = opts.forcarCarteiraId || null;
+  const membroId = opts.membroId || null;
+  const titular = (opts.titular || '').trim();
+  const categoria = (opts.categoria || '').toLowerCase();
+  const descricao = (opts.descricao || '').toLowerCase();
+  const subcategoria = (opts.subcategoria || '').toLowerCase();
+
+  if (forcarOrigem === 'salario') {
+    return {
+      valorTotal,
+      valorPagoBeneficio: 0,
+      valorPagoSalario: valorTotal,
+      carteiraId: null,
+      tipoBeneficio: null,
+      split: false,
+      descricaoSplit: '100% no Salário'
+    };
+  }
+
+  let tipoAlvo = null;
+  if (forcarOrigem === 'VA') {
+    tipoAlvo = 'VA';
+  } else if (forcarOrigem === 'VR') {
+    tipoAlvo = 'VR';
+  } else {
+    const textoCompleto = `${categoria} ${subcategoria} ${descricao}`;
+    const termosVA = ['mercado', 'supermercado', 'hortifruti', 'mercearia', 'acougue', 'padaria', 'alimentacao', 'feira', 'sacolao', 'compras', 'atacadista', 'hipermercado'];
+    const termosVR = ['refeicao', 'restaurante', 'almoco', 'jantar', 'lanche', 'delivery', 'ifood', 'rappi', 'pizzaria', 'hamburgueria', 'comida', 'bar', 'cafeteria'];
+
+    const ehVA = termosVA.some(t => textoCompleto.includes(t));
+    const ehVR = termosVR.some(t => textoCompleto.includes(t));
+
+    if (ehVA && !ehVR) {
+      tipoAlvo = 'VA';
+    } else if (ehVR && !ehVA) {
+      tipoAlvo = 'VR';
+    } else if (ehVA && ehVR) {
+      tipoAlvo = termosVR.some(t => descricao.includes(t)) ? 'VR' : 'VA';
+    } else {
+      tipoAlvo = null;
+    }
+  }
+
+  if (!tipoAlvo && !forcarCarteiraId) {
+    return {
+      valorTotal,
+      valorPagoBeneficio: 0,
+      valorPagoSalario: valorTotal,
+      carteiraId: null,
+      tipoBeneficio: null,
+      split: false,
+      descricaoSplit: '100% no Salário'
+    };
+  }
+
+  const carteiras = S.carteirasBeneficio || [];
+  let carteiraCandidata = null;
+
+  if (forcarCarteiraId) {
+    carteiraCandidata = carteiras.find(c => c.id === forcarCarteiraId);
+  } else {
+    // 1. Tenta carteira do titular com saldo positivo
+    if (membroId) {
+      carteiraCandidata = carteiras.find(c => c.membroId === membroId && c.tipo === tipoAlvo && Number(c.saldoAtual) > 0);
+    }
+    if (!carteiraCandidata && titular) {
+      carteiraCandidata = carteiras.find(c => (c.titular || '').toLowerCase() === titular.toLowerCase() && c.tipo === tipoAlvo && Number(c.saldoAtual) > 0);
+    }
+    // 2. Se o titular não tiver saldo, tenta qualquer carteira do mesmo tipo com saldo positivo
+    if (!carteiraCandidata) {
+      carteiraCandidata = carteiras.find(c => c.tipo === tipoAlvo && Number(c.saldoAtual) > 0);
+    }
+    // 3. Fallback: carteira do titular mesmo sem saldo ou primeira do tipo
+    if (!carteiraCandidata && titular) {
+      carteiraCandidata = carteiras.find(c => (c.titular || '').toLowerCase() === titular.toLowerCase() && c.tipo === tipoAlvo);
+    }
+    if (!carteiraCandidata) {
+      carteiraCandidata = carteiras.find(c => c.tipo === tipoAlvo);
+    }
+  }
+
+  if (!carteiraCandidata) {
+    return {
+      valorTotal,
+      valorPagoBeneficio: 0,
+      valorPagoSalario: valorTotal,
+      carteiraId: null,
+      tipoBeneficio: null,
+      split: false,
+      descricaoSplit: '100% no Salário'
+    };
+  }
+
+  const saldoDisponivel = Math.max(0, Math.round((Number(carteiraCandidata.saldoAtual) || 0) * 100) / 100);
+
+  // Cenário 1: Benefício cobre 100% do gasto
+  if (saldoDisponivel >= valorTotal) {
+    return {
+      valorTotal,
+      valorPagoBeneficio: valorTotal,
+      valorPagoSalario: 0,
+      carteiraId: carteiraCandidata.id,
+      tipoBeneficio: carteiraCandidata.tipo,
+      split: false,
+      descricaoSplit: `100% no ${carteiraCandidata.tipo}`
+    };
+  }
+
+  // Cenário 2: Split Automático (saldo parcial no benefício + restante no salário)
+  if (saldoDisponivel > 0 && saldoDisponivel < valorTotal) {
+    const valorPagoSalario = Math.round((valorTotal - saldoDisponivel) * 100) / 100;
+    return {
+      valorTotal,
+      valorPagoBeneficio: saldoDisponivel,
+      valorPagoSalario,
+      carteiraId: carteiraCandidata.id,
+      tipoBeneficio: carteiraCandidata.tipo,
+      split: true,
+      descricaoSplit: `Split: ${carteiraCandidata.tipo} ${fmt(saldoDisponivel)} + Salário ${fmt(valorPagoSalario)}`
+    };
+  }
+
+  // Cenário 3: Saldo de benefício zerado -> 100% no salário
+  return {
+    valorTotal,
+    valorPagoBeneficio: 0,
+    valorPagoSalario: valorTotal,
+    carteiraId: carteiraCandidata.id,
+    tipoBeneficio: carteiraCandidata.tipo,
+    split: false,
+    descricaoSplit: `100% no Salário (${carteiraCandidata.tipo} zerado)`
+  };
+}
+
+/**
+ * Registra um gasto consumindo benefício (se aplicável) e debitando o saldo da carteira.
+ */
+function registrarGastoComBeneficio(dadosGasto) {
+  if (!dadosGasto || typeof dadosGasto !== 'object') return null;
+
+  const divisao = calcularDivisaoPagamentoBeneficio({
+    valorTotal: dadosGasto.val,
+    categoria: dadosGasto.cat,
+    subcategoria: dadosGasto.subcategoria,
+    descricao: dadosGasto.desc,
+    titular: dadosGasto.titular,
+    membroId: dadosGasto.membroId,
+    forcarOrigem: dadosGasto.origemPagamento || dadosGasto.forcarOrigem,
+    forcarCarteiraId: dadosGasto.carteiraBeneficioId || dadosGasto.forcarCarteiraId
+  });
+
+  const gastoPreparado = Object.assign({}, dadosGasto, {
+    val: divisao.valorTotal,
+    valorPagoBeneficio: divisao.valorPagoBeneficio,
+    valorPagoSalario: divisao.valorPagoSalario,
+    carteiraBeneficioId: divisao.carteiraId,
+    origemBeneficio: divisao.tipoBeneficio,
+    splitBeneficio: divisao.split
+  });
+
+  if (divisao.valorPagoBeneficio > 0 && divisao.carteiraId) {
+    const carteira = (S.carteirasBeneficio || []).find(c => c.id === divisao.carteiraId);
+    if (carteira) {
+      carteira.saldoAtual = Math.max(0, Math.round(((Number(carteira.saldoAtual) || 0) - divisao.valorPagoBeneficio) * 100) / 100);
+
+      if (!Array.isArray(S.movimentacoesBeneficio)) S.movimentacoesBeneficio = [];
+      const movDeb = {
+        id: 'mov_deb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        carteiraId: carteira.id,
+        tipo: 'debito',
+        valor: divisao.valorPagoBeneficio,
+        dataISO: gastoPreparado.data ? `${gastoPreparado.data}T12:00:00.000Z` : new Date().toISOString(),
+        mesYM: (gastoPreparado.data || '').slice(0, 7) || mesAtual,
+        gastoId: gastoPreparado.id,
+        descricao: `Débito compra: ${gastoPreparado.desc || 'Gasto'}`,
+        saldoApos: carteira.saldoAtual
+      };
+      S.movimentacoesBeneficio.push(movDeb);
+    }
+  }
+
+  return gastoPreparado;
+}
+
+/**
+ * Estorna o valor de benefício de um gasto de volta à carteira correspondente.
+ * Registra movimentação do tipo 'estorno'.
+ */
+function estornarBeneficioDeGasto(gastoId) {
+  if (!S || !Array.isArray(S.gastos)) return false;
+  const gasto = S.gastos.find(g => g.id === gastoId);
+  if (!gasto) return false;
+
+  const valorBeneficio = Number(gasto.valorPagoBeneficio) || 0;
+  const carteiraId = gasto.carteiraBeneficioId;
+
+  if (valorBeneficio > 0 && carteiraId && Array.isArray(S.carteirasBeneficio)) {
+    const carteira = S.carteirasBeneficio.find(c => c.id === carteiraId);
+    if (carteira) {
+      carteira.saldoAtual = Math.round(((Number(carteira.saldoAtual) || 0) + valorBeneficio) * 100) / 100;
+
+      if (!Array.isArray(S.movimentacoesBeneficio)) S.movimentacoesBeneficio = [];
+      const movEst = {
+        id: 'mov_est_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        carteiraId: carteira.id,
+        tipo: 'estorno',
+        valor: valorBeneficio,
+        dataISO: new Date().toISOString(),
+        mesYM: (gasto.data || '').slice(0, 7) || mesAtual,
+        gastoId: gasto.id,
+        descricao: `Estorno de gasto excluído: ${gasto.desc || 'Gasto'}`,
+        saldoApos: carteira.saldoAtual
+      };
+      S.movimentacoesBeneficio.push(movEst);
+    }
+  }
+
+  gasto.valorPagoBeneficio = 0;
+  gasto.valorPagoSalario = gasto.val;
+  gasto.carteiraBeneficioId = null;
+  return true;
+}
+
+/**
+ * Cadastra ou edita uma carteira de benefício.
+ * Blindado contra vinculação a perfis do tipo 'crianca'.
+ */
+function criarOuEditarCarteiraBeneficio(dados) {
+  if (!dados || typeof dados !== 'object') return { ok: false, motivo: 'dados_invalidos' };
+  if (!S) S = {};
+  if (!Array.isArray(S.carteirasBeneficio)) S.carteirasBeneficio = [];
+
+  const membroAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    if (typeof alert === 'function') {
+      alert('Benefícios corporativos (VA/VR) só podem ser gerenciados por membros responsáveis adultos.');
+    }
+    return { ok: false, motivo: 'perfil_crianca_bloqueado' };
+  }
+
+  const membro = (S.membrosPerfil || []).find(m => (dados.membroId && m.id === dados.membroId) || (dados.titular && (m.nome || '').toLowerCase() === (dados.titular || '').toLowerCase()));
+  if (membro && membro.papel === 'crianca') {
+    if (typeof alert === 'function') {
+      alert('Benefícios corporativos (VA/VR) só podem ser atribuídos a membros responsáveis adultos.');
+    }
+    return { ok: false, motivo: 'perfil_crianca_bloqueado' };
+  }
+
+  const tipo = (dados.tipo === 'VR') ? 'VR' : 'VA';
+  const nome = (dados.nome || `${tipo} ${membro ? membro.nome : 'Família'}`).trim();
+  const recargaMensal = Math.max(0, Math.round((Number(dados.recargaMensal) || 0) * 100) / 100);
+  const diaRecarga = Math.min(31, Math.max(1, parseInt(dados.diaRecarga, 10) || 25));
+  const permitirOutroVale = dados.permitirOutroVale !== false;
+  const titular = membro ? membro.nome : (dados.titular || 'Família');
+  const membroId = membro ? membro.id : (dados.membroId || 'm_1');
+  const circuloId = S.circuloAtivoId || 'circ_1';
+
+  let carteira = null;
+  if (dados.id) {
+    carteira = S.carteirasBeneficio.find(c => c.id === dados.id);
+  }
+
+  if (carteira) {
+    carteira.tipo = tipo;
+    carteira.nome = nome;
+    carteira.titular = titular;
+    carteira.membroId = membroId;
+    carteira.recargaMensal = recargaMensal;
+    carteira.diaRecarga = diaRecarga;
+    carteira.permitirOutroVale = permitirOutroVale;
+    if (dados.saldoAtual !== undefined) {
+      carteira.saldoAtual = Math.round((Number(dados.saldoAtual) || 0) * 100) / 100;
+    }
+  } else {
+    const saldoInicial = Math.max(0, Math.round((Number(dados.saldoAtual !== undefined ? dados.saldoAtual : dados.saldoInicial) || 0) * 100) / 100);
+    carteira = {
+      id: 'cb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      circuloId,
+      membroId,
+      titular,
+      tipo,
+      nome,
+      recargaMensal,
+      saldoAtual: saldoInicial,
+      diaRecarga,
+      permitirOutroVale,
+      categoriasMapeadas: tipo === 'VA' ? ['mercado', 'hortifruti', 'alimentacao'] : ['restaurante', 'refeicao', 'delivery'],
+      recargasProcessadas: []
+    };
+    S.carteirasBeneficio.push(carteira);
+
+    if (saldoInicial > 0) {
+      if (!Array.isArray(S.movimentacoesBeneficio)) S.movimentacoesBeneficio = [];
+      S.movimentacoesBeneficio.push({
+        id: 'mov_ini_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        carteiraId: carteira.id,
+        tipo: 'recarga',
+        valor: saldoInicial,
+        dataISO: new Date().toISOString(),
+        mesYM: mesAtual,
+        gastoId: null,
+        descricao: `Saldo inicial da carteira (${tipo} - ${nome})`,
+        saldoApos: saldoInicial
+      });
+    }
+  }
+
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+  return { ok: true, carteira };
+}
+
+/**
+ * Exclui uma carteira de benefício.
+ */
+function excluirCarteiraBeneficio(carteiraId) {
+  if (!S || !Array.isArray(S.carteirasBeneficio)) return false;
+  S.carteirasBeneficio = S.carteirasBeneficio.filter(c => c.id !== carteiraId);
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+  return true;
+}
+
+// --- CONTROLE DE UI & TELAS (Etapa 4) ---
+
+function setTabBeneficios(tab) {
+  if (typeof document === 'undefined') return;
+  const tabs = ['lista', 'extrato', 'form'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`tb-beneficios-${t}`);
+    const painel = document.getElementById(`painel-beneficios-${t}`);
+    if (btn) btn.classList.toggle('sel', t === tab);
+    if (painel) painel.style.display = t === tab ? 'block' : 'none';
+  });
+
+  if (tab === 'lista') renderCarteirasBeneficioModal();
+  if (tab === 'extrato') renderExtratoBeneficiosModal();
+}
+
+function abrirModalCarteirasBeneficio() {
+  if (typeof document === 'undefined') return;
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    if (typeof alert === 'function') {
+      alert('Acesso restrito aos responsáveis adultos.');
+    }
+    return;
+  }
+
+  processarRecargasBeneficiosAutomaticas();
+  setTabBeneficios('lista');
+  openM('m-carteiras-beneficio');
+}
+
+function renderCarteirasBeneficioModal() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('lista-carteiras-beneficio');
+  if (!container) return;
+
+  const carteiras = S.carteirasBeneficio || [];
+  if (carteiras.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:24px 12px;background:var(--bg3);border-radius:var(--radius-sm);border:1px dashed var(--border2);">
+        <p style="font-size:28px;margin-bottom:6px;">🥗</p>
+        <p style="font-weight:700;font-size:14px;margin-bottom:2px;">Nenhuma carteira de benefício</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Cadastre seu Vale-Alimentação (VA) ou Vale-Refeição (VR) para automatizar o orçamento familiar.</p>
+        <button type="button" class="btn btn-primary" onclick="abrirFormNovaCarteiraBeneficio()">+ Cadastrar Vale</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = carteiras.map(c => {
+    const met = calcularMetricasCarteiraBeneficio(c.id);
+    const badgeCor = c.tipo === 'VA' ? 'badge-va' : 'badge-vr';
+    const alertaHtml = met && met.alertaSaldoBaixo ? `<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;">⚠️ Saldo Baixo (&lt; 15%)</span>` : '';
+    const proxRecargaTxt = met && met.statusRecarga === 'prevista' ? `Recarga em ${met.diasAteRecarga} dias (dia ${c.diaRecarga})` : `Recarga feita este mês (próx: ${met ? met.diasAteRecarga : 30}d)`;
+
+    return `
+      <div class="card card-beneficio-item" style="border-left: 4px solid ${c.tipo === 'VA' ? 'var(--green)' : 'var(--yellow)'};">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+              <span class="badge ${badgeCor}">${c.tipo}</span>
+              <strong style="font-size:14px;">${escapeHtml(c.nome)}</strong>
+            </div>
+            <p style="font-size:11px;color:var(--muted);margin:0;">Titular: ${escapeHtml(c.titular || 'Família')} • Recarga mensal: ${fmt(c.recargaMensal)}</p>
+          </div>
+          <button type="button" class="btn" style="width:auto;margin:0;padding:4px 9px;font-size:11px;" onclick="editarCarteiraBeneficioModal('${c.id}')">✏️ Editar</button>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px;background:var(--bg3);padding:8px 12px;border-radius:10px;">
+          <div>
+            <p style="font-size:11px;color:var(--muted);margin:0 0 2px;">Saldo Disponível</p>
+            <p style="font-size:20px;font-weight:800;color:${c.tipo === 'VA' ? 'var(--green)' : 'var(--yellow)'};margin:0;">${fmt(c.saldoAtual)}</p>
+          </div>
+          <div style="text-align:right;">
+            <p style="font-size:11px;color:var(--muted);margin:0 0 2px;">Cota Diária</p>
+            <p style="font-size:13px;font-weight:700;margin:0;">${fmt(met ? met.cotaDiaria : 0)}/dia</p>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:var(--muted);">
+          <span>📅 ${proxRecargaTxt}</span>
+          ${alertaHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function abrirFormNovaCarteiraBeneficio() {
+  document.getElementById('cb-edit-id').value = '';
+  document.getElementById('cb-form-titulo').textContent = 'Cadastrar Nova Carteira';
+  document.getElementById('cb-nome').value = '';
+  document.getElementById('cb-recarga').value = '';
+  document.getElementById('cb-saldo-inicial').value = '';
+  document.getElementById('cb-dia-recarga').value = '25';
+  document.getElementById('cb-permitir-outro-vale').checked = true;
+  document.getElementById('cb-btn-excluir').style.display = 'none';
+
+  const titSel = document.getElementById('cb-titular');
+  if (titSel) {
+    const membrosAdultos = (S.membrosPerfil || []).filter(m => m.papel !== 'crianca');
+    titSel.innerHTML = membrosAdultos.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.nome)}</option>`).join('');
+  }
+
+  setTabBeneficios('form');
+}
+
+function editarCarteiraBeneficioModal(carteiraId) {
+  const carteira = (S.carteirasBeneficio || []).find(c => c.id === carteiraId);
+  if (!carteira) return;
+
+  document.getElementById('cb-edit-id').value = carteira.id;
+  document.getElementById('cb-form-titulo').textContent = `Editar Carteira (${carteira.tipo})`;
+  document.getElementById('cb-tipo').value = carteira.tipo;
+  document.getElementById('cb-nome').value = carteira.nome;
+  document.getElementById('cb-recarga').value = carteira.recargaMensal;
+  document.getElementById('cb-saldo-inicial').value = carteira.saldoAtual;
+  document.getElementById('cb-dia-recarga').value = carteira.diaRecarga || 25;
+  document.getElementById('cb-permitir-outro-vale').checked = carteira.permitirOutroVale !== false;
+  document.getElementById('cb-btn-excluir').style.display = 'block';
+
+  const titSel = document.getElementById('cb-titular');
+  if (titSel) {
+    const membrosAdultos = (S.membrosPerfil || []).filter(m => m.papel !== 'crianca');
+    titSel.innerHTML = membrosAdultos.map(m => `<option value="${escapeHtml(m.id)}" ${m.id === carteira.membroId ? 'selected' : ''}>${escapeHtml(m.nome)}</option>`).join('');
+  }
+
+  setTabBeneficios('form');
+}
+
+function salvarCarteiraBeneficioModal() {
+  const id = document.getElementById('cb-edit-id')?.value || null;
+  const tipo = document.getElementById('cb-tipo')?.value || 'VA';
+  const nome = (document.getElementById('cb-nome')?.value || '').trim();
+  const membroId = document.getElementById('cb-titular')?.value || null;
+  const recargaMensal = parseFloat(document.getElementById('cb-recarga')?.value) || 0;
+  const saldoAtual = parseFloat(document.getElementById('cb-saldo-inicial')?.value) || 0;
+  const diaRecarga = parseInt(document.getElementById('cb-dia-recarga')?.value, 10) || 25;
+  const permitirOutroVale = document.getElementById('cb-permitir-outro-vale')?.checked;
+
+  if (!nome) {
+    if (typeof alert === 'function') alert('Informe o nome da carteira (ex: Flash Alimentação).');
+    return;
+  }
+
+  const res = criarOuEditarCarteiraBeneficio({
+    id,
+    tipo,
+    nome,
+    membroId,
+    recargaMensal,
+    saldoAtual,
+    diaRecarga,
+    permitirOutroVale
+  });
+
+  if (res.ok) {
+    exibirToastNotificacao(`Carteira ${res.carteira.nome} salva com sucesso!`, '🥗');
+    setTabBeneficios('lista');
+  }
+}
+
+function excluirCarteiraBeneficioModal() {
+  const id = document.getElementById('cb-edit-id')?.value;
+  if (!id) return;
+  if (typeof confirm === 'function' && !confirm('Excluir esta carteira de benefícios?')) {
+    return;
+  }
+  excluirCarteiraBeneficio(id);
+  exibirToastNotificacao('Carteira excluída com sucesso.', '🗑️');
+  setTabBeneficios('lista');
+}
+
+function renderExtratoBeneficiosModal() {
+  if (typeof document === 'undefined') return;
+  const selectCarteira = document.getElementById('flt-extrato-carteira');
+  const container = document.getElementById('extrato-beneficios-conteudo');
+  if (!container) return;
+
+  const carteiras = S.carteirasBeneficio || [];
+  if (selectCarteira) {
+    const atualVal = selectCarteira.value;
+    selectCarteira.innerHTML = `<option value="todas">Todas as Carteiras</option>` + carteiras.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.nome)} (${c.tipo})</option>`).join('');
+    if (atualVal) selectCarteira.value = atualVal;
+  }
+
+  const fltId = selectCarteira ? selectCarteira.value : 'todas';
+  const movs = (S.movimentacoesBeneficio || []).filter(m => {
+    if (fltId !== 'todas' && m.carteiraId !== fltId) return false;
+    return true;
+  }).slice().reverse();
+
+  if (movs.length === 0) {
+    container.innerHTML = `<p style="text-align:center;color:var(--muted);font-size:13px;padding:24px 0;">Nenhuma movimentação registrada.</p>`;
+    return;
+  }
+
+  container.innerHTML = movs.map(m => {
+    const isCredito = m.tipo === 'recarga' || m.tipo === 'estorno';
+    const corVal = isCredito ? 'c-green' : 'c-red';
+    const sinal = isCredito ? '+' : '-';
+    const icone = m.tipo === 'recarga' ? '📥 Recarga' : (m.tipo === 'estorno' ? '↩️ Estorno' : '🛒 Débito');
+    const dataFmt = m.dataISO ? m.dataISO.slice(0, 10).split('-').reverse().join('/') : '';
+
+    return `
+      <div class="extrato-row">
+        <div>
+          <p style="font-size:13px;font-weight:600;margin:0 0 2px;">${icone}: ${escapeHtml(m.descricao || 'Movimentação')}</p>
+          <p style="font-size:11px;color:var(--muted);margin:0;">${dataFmt} • Saldo após: ${fmt(m.saldoApos)}</p>
+        </div>
+        <div style="font-weight:700;font-size:14px;" class="${corVal}">
+          ${sinal} ${fmt(m.valor)}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Atualiza dinamicamente o preview de divisão no modal de novo gasto manual (#m-gasto).
+ */
+function atualizarPreviewBeneficioGasto() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('g-preview-beneficio');
+  if (!container) return;
+
+  const val = parseFloat(document.getElementById('g-val')?.value) || 0;
+  const desc = document.getElementById('g-desc')?.value || '';
+  const titular = document.getElementById('g-titular')?.value || '';
+  const catSel = document.querySelector('#cat-tags .tag.sel')?.dataset.cat || 'recorrente';
+  const origemSel = document.getElementById('g-origem-pagamento')?.value || 'auto';
+
+  if (val <= 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  const divisao = calcularDivisaoPagamentoBeneficio({
+    valorTotal: val,
+    descricao: desc,
+    titular,
+    categoria: catSel,
+    forcarOrigem: origemSel
+  });
+
+  if (divisao.valorPagoBeneficio > 0 || divisao.split) {
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span>💳 Divisão estimada:</span>
+        <strong style="color:var(--green);">${escapeHtml(divisao.descricaoSplit)}</strong>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">O valor coberto por benefício (${fmt(divisao.valorPagoBeneficio)}) não reduzirá o salário da família.</p>
+    `;
+  } else if (origemSel !== 'auto' && origemSel !== 'salario') {
+    container.style.display = 'block';
+    container.innerHTML = `<span style="color:var(--yellow);">⚠️ Saldo do ${escapeHtml(origemSel)} zerado ou insuficiente. Valor debitado 100% no Salário.</span>`;
+  } else {
+    container.style.display = 'none';
+    container.innerHTML = '';
+  }
+}
+
+/**
+ * Atualiza dinamicamente o preview de divisão no modal de conversão de compras (#m-converter-gasto-lista).
+ */
+function atualizarPreviewBeneficioConverter() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('cvg-preview-beneficio');
+  if (!container) return;
+
+  const val = parseFloat(document.getElementById('cvg-valor')?.value) || 0;
+  const desc = document.getElementById('cvg-desc')?.value || 'Mercado';
+  const titular = document.getElementById('cvg-titular')?.value || '';
+  const cat = document.getElementById('cvg-categoria')?.value || 'recorrente';
+  const origemSel = document.getElementById('cvg-origem-pagamento')?.value || 'auto';
+
+  if (val <= 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  const divisao = calcularDivisaoPagamentoBeneficio({
+    valorTotal: val,
+    descricao: desc,
+    titular,
+    categoria: cat,
+    forcarOrigem: origemSel
+  });
+
+  if (divisao.valorPagoBeneficio > 0 || divisao.split) {
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span>💳 Divisão do Mercado:</span>
+        <strong style="color:var(--green);">${escapeHtml(divisao.descricaoSplit)}</strong>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">O valor do VA (${fmt(divisao.valorPagoBeneficio)}) não consome o caixa do salário.</p>
+    `;
+  } else {
+    container.style.display = 'block';
+    container.innerHTML = `<span style="color:var(--muted);">Débito integral em Conta Salário (R$ ${fmt(val)}).</span>`;
+  }
+}
+
+/**
+ * Renderiza os cards de saldo de VA e VR no topo da tela de Gastos (#sec-gastos).
+ */
+function renderBeneficiosTopo() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('beneficios-topo-container');
+  if (!container) return;
+
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    container.style.display = 'none';
+    return;
+  }
+
+  const carteiras = S.carteirasBeneficio || [];
+  if (carteiras.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  let totalVA = 0;
+  let totalVR = 0;
+  let qtdVA = 0;
+  let qtdVR = 0;
+
+  carteiras.forEach(c => {
+    if (c.tipo === 'VA') {
+      totalVA += Number(c.saldoAtual) || 0;
+      qtdVA++;
+    } else {
+      totalVR += Number(c.saldoAtual) || 0;
+      qtdVR++;
+    }
+  });
+
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div class="card" style="margin:0;padding:12px;border-left:4px solid var(--green);cursor:pointer;" onclick="abrirModalCarteirasBeneficio()" title="Gerenciar Vales de Benefício">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span class="badge badge-va" style="font-size:10px;">🥗 VA Mercado</span>
+          <span style="font-size:11px;color:var(--muted);">${qtdVA} ${qtdVA === 1 ? 'cartão' : 'cartões'}</span>
+        </div>
+        <p style="font-size:18px;font-weight:800;color:var(--green);margin:0;">${fmt(totalVA)}</p>
+        <p style="font-size:10px;color:var(--muted);margin:2px 0 0;">Saldo livre acumulado</p>
+      </div>
+
+      <div class="card" style="margin:0;padding:12px;border-left:4px solid var(--yellow);cursor:pointer;" onclick="abrirModalCarteirasBeneficio()" title="Gerenciar Vales de Benefício">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span class="badge badge-vr" style="font-size:10px;">🍽️ VR Refeição</span>
+          <span style="font-size:11px;color:var(--muted);">${qtdVR} ${qtdVR === 1 ? 'cartão' : 'cartões'}</span>
+        </div>
+        <p style="font-size:18px;font-weight:800;color:var(--yellow);margin:0;">${fmt(totalVR)}</p>
+        <p style="font-size:10px;color:var(--muted);margin:2px 0 0;">Saldo livre acumulado</p>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Altera o filtro ativo de origem dos gastos ('todos', 'salario', 'VA', 'VR', 'cartao').
+ */
+function setFiltroOrigemGasto(origem) {
+  if (!S.configOrcamento) S.configOrcamento = {};
+  S.configOrcamento.filtroOrigemAtivo = origem || 'todos';
+  if (typeof renderGastos === 'function' && typeof document !== 'undefined') {
+    renderGastos();
+  }
+}
+
+/**
+ * Salva o dia de início do ciclo de orçamento configurado pelo usuário.
+ */
+function salvarConfigCicloOrcamentoModal() {
+  if (typeof document === 'undefined') return;
+  const diaInput = document.getElementById('cfg-dia-inicio-ciclo');
+  const dia = diaInput ? parseInt(diaInput.value, 10) : 1;
+  const diaFinal = Math.min(31, Math.max(1, dia || 1));
+
+  if (!S.configOrcamento) S.configOrcamento = {};
+  S.configOrcamento.diaInicioCiclo = diaFinal;
+
+  if (typeof save === 'function') save();
+  if (typeof exibirToastNotificacao === 'function') {
+    exibirToastNotificacao(`Ciclo do orçamento configurado: dia ${diaFinal} de cada mês.`, '⚙️');
+  }
+}
+
 // SERVICE WORKER
 if(typeof navigator !== 'undefined' && 'serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(err => {
@@ -9217,6 +10305,31 @@ if (typeof window !== 'undefined') {
   window.lerArquivoICal = lerArquivoICal;
   window.confirmarImportarICalModal = confirmarImportarICalModal;
   window.renderCalendario = renderCalendario;
+  // Super-App Familiar v2.0 - Carteiras VA/VR & Orçamento (Etapa 4)
+  window.obterDiasNoMes = obterDiasNoMes;
+  window.obterDataRecargaNoMes = obterDataRecargaNoMes;
+  window.calcularMetricasCarteiraBeneficio = calcularMetricasCarteiraBeneficio;
+  window.processarRecargasBeneficiosAutomaticas = processarRecargasBeneficiosAutomaticas;
+  window.creditarRecargaManual = creditarRecargaManual;
+  window.calcularDivisaoPagamentoBeneficio = calcularDivisaoPagamentoBeneficio;
+  window.registrarGastoComBeneficio = registrarGastoComBeneficio;
+  window.estornarBeneficioDeGasto = estornarBeneficioDeGasto;
+  window.criarOuEditarCarteiraBeneficio = criarOuEditarCarteiraBeneficio;
+  window.excluirCarteiraBeneficio = excluirCarteiraBeneficio;
+  window.delGasto = delGasto;
+  window.abrirModalCarteirasBeneficio = abrirModalCarteirasBeneficio;
+  window.setTabBeneficios = setTabBeneficios;
+  window.renderCarteirasBeneficioModal = renderCarteirasBeneficioModal;
+  window.abrirFormNovaCarteiraBeneficio = abrirFormNovaCarteiraBeneficio;
+  window.editarCarteiraBeneficioModal = editarCarteiraBeneficioModal;
+  window.salvarCarteiraBeneficioModal = salvarCarteiraBeneficioModal;
+  window.excluirCarteiraBeneficioModal = excluirCarteiraBeneficioModal;
+  window.renderExtratoBeneficiosModal = renderExtratoBeneficiosModal;
+  window.atualizarPreviewBeneficioGasto = atualizarPreviewBeneficioGasto;
+  window.atualizarPreviewBeneficioConverter = atualizarPreviewBeneficioConverter;
+  window.renderBeneficiosTopo = renderBeneficiosTopo;
+  window.setFiltroOrigemGasto = setFiltroOrigemGasto;
+  window.salvarConfigCicloOrcamentoModal = salvarConfigCicloOrcamentoModal;
 }
 
 // EXPORTAÇÃO PARA TESTES / NODE.JS
@@ -9418,6 +10531,31 @@ if (typeof module !== 'undefined' && module.exports) {
     lerArquivoICal,
     confirmarImportarICalModal,
     renderCalendario,
+    // Super-App Familiar v2.0 (Etapa 4 - Carteiras VA/VR e Orçamento)
+    obterDiasNoMes,
+    obterDataRecargaNoMes,
+    calcularMetricasCarteiraBeneficio,
+    processarRecargasBeneficiosAutomaticas,
+    creditarRecargaManual,
+    calcularDivisaoPagamentoBeneficio,
+    registrarGastoComBeneficio,
+    estornarBeneficioDeGasto,
+    criarOuEditarCarteiraBeneficio,
+    excluirCarteiraBeneficio,
+    delGasto,
+    abrirModalCarteirasBeneficio,
+    setTabBeneficios,
+    renderCarteirasBeneficioModal,
+    abrirFormNovaCarteiraBeneficio,
+    editarCarteiraBeneficioModal,
+    salvarCarteiraBeneficioModal,
+    excluirCarteiraBeneficioModal,
+    renderExtratoBeneficiosModal,
+    atualizarPreviewBeneficioGasto,
+    atualizarPreviewBeneficioConverter,
+    renderBeneficiosTopo,
+    setFiltroOrigemGasto,
+    salvarConfigCicloOrcamentoModal,
     getState: () => S,
     S
   };
