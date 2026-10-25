@@ -273,6 +273,33 @@
   .prio-alta { background: var(--red-dim); color: var(--red); }
   .prio-media { background: var(--yellow-dim); color: var(--yellow); }
   .prio-baixa { background: var(--green-dim); color: var(--green); }
+
+  /* CALENDÁRIO FAMILIAR (Etapa 3) */
+  .cal-grid-dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-header-dia { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); padding: 4px 0; text-transform: uppercase; }
+  .cal-celula-dia {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 4px; min-height: 54px; cursor: pointer; display: flex; flex-direction: column;
+    position: relative; transition: border-color 0.15s, background 0.15s;
+  }
+  .cal-celula-dia:active { background: var(--bg3); }
+  .cal-celula-dia.outro-mes { opacity: 0.35; }
+  .cal-celula-dia.hoje { border: 2px solid var(--primary); background: var(--blue-dim); }
+  .cal-celula-dia.selecionado { border: 2px solid var(--text); }
+  .cal-dia-num { font-size: 12px; font-weight: 700; line-height: 1; margin-bottom: 2px; }
+  .cal-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+  .cal-event-pill {
+    font-size: 9px; font-weight: 600; padding: 1px 4px; border-radius: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
+    line-height: 1.25; display: block;
+  }
+  .cal-item-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 12px; margin-bottom: 8px; display: flex; gap: 10px; align-items: flex-start;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .cal-item-card:active { background: var(--bg3); }
+  .cal-hora-col { font-size: 11px; font-weight: 700; color: var(--muted); width: 44px; flex-shrink: 0; padding-top: 2px; }
 </style>
 </head>
 <body>
@@ -533,6 +560,54 @@
           </button>
         </div>
       </div>
+    </div>
+
+    <!-- CALENDÁRIO COMPARTILHADO DA FAMÍLIA (Etapa 3) -->
+    <div id="sec-calendario" class="section" style="display:none;">
+      <!-- CABEÇALHO DO CALENDÁRIO COM NAVEGAÇÃO E AÇÕES -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button type="button" class="btn" id="btn-cal-prev" style="width:auto;margin:0;padding:6px 10px;font-size:14px;" onclick="mudarPeriodoCalendario(-1)" title="Período anterior">◀</button>
+          <button type="button" class="btn" id="btn-cal-hoje" style="width:auto;margin:0;padding:6px 12px;font-size:12px;font-weight:700;" onclick="mudarPeriodoCalendario(0)" title="Ir para hoje">Hoje</button>
+          <button type="button" class="btn" id="btn-cal-next" style="width:auto;margin:0;padding:6px 10px;font-size:14px;" onclick="mudarPeriodoCalendario(1)" title="Próximo período">▶</button>
+          <h3 id="cal-titulo-periodo" style="font-size:15px;font-weight:800;margin:0 0 0 4px;color:var(--text);">Outubro 2026</h3>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button type="button" class="btn btn-primary" id="btn-novo-evento" style="width:auto;margin:0;padding:7px 11px;font-size:12px;font-weight:700;" onclick="abrirModalEventoCalendario()">+ Evento</button>
+          <button type="button" class="btn" id="btn-abrir-aniversarios" style="width:auto;margin:0;padding:7px 10px;font-size:12px;" onclick="abrirModalAniversarios()" title="Aniversários da Família">🎂</button>
+          <button type="button" class="btn" id="btn-importar-ical" style="width:auto;margin:0;padding:7px 10px;font-size:12px;" onclick="abrirModalImportarICal()" title="Importar iCal (.ics)">📥</button>
+        </div>
+      </div>
+
+      <!-- SELETOR DE VISÕES (Mês, Semana, Dia, Agenda) -->
+      <div style="display:flex;gap:4px;margin-bottom:12px;background:var(--bg3);padding:3px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <button type="button" class="filtro-pill sel" id="btn-cal-visao-mes" style="flex:1;text-align:center;padding:6px 2px;font-size:12px;" onclick="setVisaoCalendario('mes')">Mês</button>
+        <button type="button" class="filtro-pill" id="btn-cal-visao-semana" style="flex:1;text-align:center;padding:6px 2px;font-size:12px;" onclick="setVisaoCalendario('semana')">Semana</button>
+        <button type="button" class="filtro-pill" id="btn-cal-visao-dia" style="flex:1;text-align:center;padding:6px 2px;font-size:12px;" onclick="setVisaoCalendario('dia')">Dia</button>
+        <button type="button" class="filtro-pill" id="btn-cal-visao-agenda" style="flex:1;text-align:center;padding:6px 2px;font-size:12px;" onclick="setVisaoCalendario('agenda')">Agenda</button>
+      </div>
+
+      <!-- FILTRO DE MEMBROS E CAMADAS -->
+      <div class="card" style="margin-bottom:12px;padding:10px;">
+        <!-- Chips de Membro -->
+        <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;align-items:center;" id="cal-filtros-membros-container">
+          <!-- Injetado dinamicamente via renderCalendario -->
+        </div>
+
+        <!-- Toggles de Camadas -->
+        <div style="display:flex;gap:6px;overflow-x:auto;padding-top:6px;border-top:1px solid var(--border2);flex-wrap:wrap;align-items:center;" id="cal-toggles-camadas">
+          <button type="button" class="filtro-pill sel" id="toggle-camada-eventos" onclick="toggleCamadaCalendario('eventos')">📅 Eventos</button>
+          <button type="button" class="filtro-pill sel" id="toggle-camada-financas" onclick="toggleCamadaCalendario('financas')">💸 Contas & Faturas</button>
+          <button type="button" class="filtro-pill sel" id="toggle-camada-tarefas" onclick="toggleCamadaCalendario('tarefas')">✅ Tarefas</button>
+          <button type="button" class="filtro-pill sel" id="toggle-camada-aniversarios" onclick="toggleCamadaCalendario('aniversarios')">🎂 Aniversários</button>
+        </div>
+      </div>
+
+      <!-- CONTÊINERES DAS 4 VISÕES -->
+      <div id="cal-visao-mes"></div>
+      <div id="cal-visao-semana" style="display:none;"></div>
+      <div id="cal-visao-dia" style="display:none;"></div>
+      <div id="cal-visao-agenda" style="display:none;"></div>
     </div>
 
     <!-- EXPLORAR (Etapa 1 - Seção 4.19) -->
@@ -966,6 +1041,10 @@
         <div style="font-size:26px;margin-bottom:4px;">🛒</div>
         <div style="font-size:13px;font-weight:700;">Listas / To-Do</div>
       </button>
+      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalEventoCalendario();">
+        <div style="font-size:26px;margin-bottom:4px;">📅</div>
+        <div style="font-size:13px;font-weight:700;">Novo Evento</div>
+      </button>
       <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalMembro();">
         <div style="font-size:26px;margin-bottom:4px;">👤</div>
         <div style="font-size:13px;font-weight:700;">Novo Membro</div>
@@ -1066,6 +1145,203 @@
     </label>
 
     <button type="button" class="btn btn-g" onclick="confirmarConverterGastoModal()">Confirmar Lançamento Financeiro</button>
+  </div>
+</div>
+
+<!-- MODAL EVENTO DO CALENDÁRIO (Etapa 3) -->
+<div class="modal-bg" id="m-evento-calendario">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-evento-calendario')">×</span>
+    <p class="modal-title" id="ev-modal-title">📅 Novo Evento Familiar</p>
+    <input type="hidden" id="ev-id" value=""/>
+
+    <div class="input-row">
+      <label>Título do Evento *</label>
+      <input type="text" id="ev-titulo" placeholder="Ex: Reunião Escolar, Consulta Pediátrica, Jantar..."/>
+    </div>
+
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:4px 0 12px;">
+      <input type="checkbox" id="ev-dia-inteiro" onchange="toggleDiaInteiroEventoModal()" style="width:18px;height:18px;accent-color:var(--primary);"/>
+      <span>Evento de dia inteiro</span>
+    </label>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Data Início *</label>
+        <input type="date" id="ev-data-inicio"/>
+      </div>
+      <div id="ev-col-hora-inicio">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Hora Início</label>
+        <input type="time" id="ev-hora-inicio" value="09:00"/>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Data Término</label>
+        <input type="date" id="ev-data-fim"/>
+      </div>
+      <div id="ev-col-hora-fim">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Hora Término</label>
+        <input type="time" id="ev-hora-fim" value="10:00"/>
+      </div>
+    </div>
+
+    <div class="input-row">
+      <label>Local / Endereço (opcional)</label>
+      <input type="text" id="ev-local" placeholder="Ex: Escola, Consultório, Em Casa..."/>
+    </div>
+
+    <div class="input-row">
+      <label>Descrição / Observações (opcional)</label>
+      <textarea id="ev-descricao" rows="2" style="padding:10px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg3);color:var(--text);font-size:13px;width:100%;font-family:inherit;" placeholder="Detalhes, recomendações ou lista do que levar..."></textarea>
+    </div>
+
+    <div class="input-row">
+      <label>Participantes da Família</label>
+      <div id="ev-participantes-container" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;"></div>
+    </div>
+
+    <div class="input-row">
+      <label>Cor do Evento</label>
+      <div id="ev-cores-grid" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;"></div>
+      <input type="hidden" id="ev-cor" value="#5581E3"/>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Repetição / Frequência</label>
+        <select id="ev-repeticao" style="padding:10px;font-size:13px;">
+          <option value="nenhuma">Não se repete</option>
+          <option value="diaria">Diária</option>
+          <option value="semanal">Semanal</option>
+          <option value="mensal">Mensal</option>
+          <option value="anual">Anual</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Lembrete / Notificação</label>
+        <select id="ev-lembrete" style="padding:10px;font-size:13px;">
+          <option value="0">Sem aviso prévio</option>
+          <option value="10">10 minutos antes</option>
+          <option value="60" selected>1 hora antes</option>
+          <option value="1440">1 dia antes</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- BLOCO DE GASTO PREVISTO (Oculto para Crianças) -->
+    <div id="ev-bloco-gasto" class="input-row" style="background:var(--bg3);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border2);">
+      <label style="font-size:12px;color:var(--muted);">Gasto Estimado Previsto (R$ - Opcional)</label>
+      <input type="number" id="ev-gasto-previsto" step="0.01" inputmode="decimal" placeholder="0,00" style="padding:8px 10px;font-size:14px;"/>
+      <span style="font-size:11px;color:var(--muted);margin-top:2px;">Alerta o Agente Norte de custos com consultas, festas, viagens ou passeios.</span>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button type="button" class="btn btn-primary" style="flex:2;margin:0;" onclick="salvarEventoCalendarioModal()">Salvar Evento</button>
+      <button type="button" class="btn btn-r" id="btn-excluir-evento" style="flex:1;margin:0;display:none;" onclick="excluirEventoCalendarioModal()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ANIVERSÁRIOS E DATAS IMPORTANTES (Etapa 3 - Seção 4.15) -->
+<div class="modal-bg" id="m-aniversarios">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-aniversarios')">×</span>
+    <p class="modal-title">🎂 Aniversários da Família</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+      Datas queridas com cálculo automático da idade e contagem regressiva!
+    </p>
+
+    <!-- LISTA DE ANIVERSÁRIOS CADASTRADOS -->
+    <div id="aniv-lista-container" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
+
+    <!-- FORMULÁRIO DE NOVO ANIVERSARIANTE -->
+    <div class="card" style="background:var(--bg3);border:1px dashed var(--border2);padding:12px;">
+      <p style="font-size:13px;font-weight:700;margin-bottom:8px;">+ Adicionar Aniversariante</p>
+      
+      <div class="input-row" style="margin-bottom:8px;">
+        <label style="font-size:11px;">Nome Completo / Apelido *</label>
+        <input type="text" id="aniv-nome" placeholder="Ex: Vovó Maria, Primo Lucas, Dudu..."/>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Data de Nascimento *</label>
+          <input type="date" id="aniv-data"/>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Parentesco</label>
+          <input type="text" id="aniv-parentesco" placeholder="Ex: Filho, Tia, Amigo..."/>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Vincular ao Membro</label>
+          <select id="aniv-membro-id" style="padding:8px;font-size:12px;">
+            <option value="">Não vincular (Externo)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Avisar dias antes</label>
+          <select id="aniv-lembrete-dias" style="padding:8px;font-size:12px;">
+            <option value="1">1 dia antes</option>
+            <option value="3">3 dias antes</option>
+            <option value="7" selected>7 dias antes (1 sem)</option>
+            <option value="15">15 dias antes</option>
+          </select>
+        </div>
+      </div>
+
+      <button type="button" class="btn btn-primary" style="margin:0;padding:10px;font-size:13px;" onclick="salvarAniversarianteModal()">Salvar Aniversário</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMPORTADOR ICAL (.ICS) (Etapa 3) -->
+<div class="modal-bg" id="m-importar-ical">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-importar-ical')">×</span>
+    <p class="modal-title">📥 Importar Calendário iCal (.ics)</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.4;">
+      Sincronize sua agenda do Google Calendar, Apple iCloud, Outlook ou escola com deduplicação inteligente.
+    </p>
+
+    <div class="input-row" style="margin-bottom:10px;">
+      <label>Arquivo .ics (Upload do celular ou computador)</label>
+      <input type="file" id="ical-file" accept=".ics,text/calendar" onchange="lerArquivoICal(this)"/>
+    </div>
+
+    <div class="input-row" style="margin-bottom:10px;">
+      <label>Ou cole o conteúdo textual do arquivo .ics:</label>
+      <textarea id="ical-conteudo" rows="4" style="padding:10px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg3);color:var(--text);font-size:12px;font-family:monospace;width:100%;" placeholder="BEGIN:VCALENDAR&#10;BEGIN:VEVENT..."></textarea>
+    </div>
+
+    <div class="input-row" style="margin-bottom:14px;">
+      <label>Ou URL pública de assinatura iCal:</label>
+      <input type="url" id="ical-url" placeholder="https://calendar.google.com/.../basic.ics"/>
+    </div>
+
+    <div id="ical-status-msg" style="font-size:12px;color:var(--primary);margin-bottom:10px;font-weight:600;"></div>
+
+    <button type="button" class="btn btn-primary" onclick="confirmarImportarICalModal()">Processar e Importar Eventos</button>
+  </div>
+</div>
+
+<!-- MODAL DETALHE DO DIA DO CALENDÁRIO (Etapa 3) -->
+<div class="modal-bg" id="m-detalhe-dia-calendario">
+  <div class="modal">
+    <span class="modal-close" onclick="closeM('m-detalhe-dia-calendario')">×</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div>
+        <p class="modal-title" id="ddia-titulo" style="margin:0;">📅 Agenda do Dia</p>
+        <p id="ddia-subinfo" style="font-size:12px;color:var(--muted);margin:2px 0 0;">Compromissos, tarefas e finanças</p>
+      </div>
+      <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:6px 12px;font-size:11px;" onclick="adicionarEventoNoDiaModal()">+ Evento</button>
+    </div>
+
+    <div id="ddia-itens-container" style="display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;"></div>
   </div>
 </div>
 

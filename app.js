@@ -32,10 +32,10 @@ const MODELOS_GEMINI_FALLBACK = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini
 const MODULOS_INICIO_CATALOGO = [
   { id: 'orcamento', nome: 'Orçamento', desc: 'Saldo em Caixa Real e visão financeira', icone: '🐷', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'resumo' },
   { id: 'listas', nome: 'Listas', desc: 'Compras e tarefas colaborativas', icone: '🛒', cor: '#F59E0B', bgIcon: 'rgba(245,158,11,0.14)', categoria: 'essencial', telaAlvo: 'listas' },
-  { id: 'calendario', nome: 'Calendário', desc: 'Rotina familiar e contas a vencer', icone: '📅', cor: '#8B5CF6', bgIcon: 'rgba(139,92,246,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
+  { id: 'calendario', nome: 'Calendário', desc: 'Rotina familiar e contas a vencer', icone: '📅', cor: '#8B5CF6', bgIcon: 'rgba(139,92,246,0.14)', categoria: 'essencial', telaAlvo: 'calendario' },
   { id: 'familia', nome: 'Minha Família', desc: 'Membros, papéis e convites', icone: '👨‍👩‍👧‍👦', cor: '#5581E3', bgIcon: 'rgba(85,129,227,0.14)', categoria: 'avancado', telaAlvo: 'familia' },
   { id: 'atividade', nome: 'Atividade', desc: 'Linha do tempo e notificações', icone: '⚡', cor: '#3B82F6', bgIcon: 'rgba(59,130,246,0.14)', categoria: 'essencial', telaAlvo: 'atividade' },
-  { id: 'aniversarios', nome: 'Aniversários', desc: 'Datas especiais de quem amamos', icone: '🎂', cor: '#EC4899', bgIcon: 'rgba(236,72,153,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
+  { id: 'aniversarios', nome: 'Aniversários', desc: 'Datas especiais de quem amamos', icone: '🎂', cor: '#EC4899', bgIcon: 'rgba(236,72,153,0.14)', categoria: 'avancado', telaAlvo: 'calendario' },
   { id: 'documentos', nome: 'Documentos', desc: 'Cofre seguro de arquivos da casa', icone: '📂', cor: '#6366F1', bgIcon: 'rgba(99,102,241,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
   { id: 'refeicoes', nome: 'Refeições', desc: 'Cardápio semanal e receitas', icone: '🍲', cor: '#14B8A6', bgIcon: 'rgba(20,184,166,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
   { id: 'receitas_cul', nome: 'Receitas', desc: 'Pratos favoritos da família', icone: '📖', cor: '#F97316', bgIcon: 'rgba(249,115,22,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
@@ -71,6 +71,8 @@ let S = {
   syncQueue: [],
   listas: [],
   historicoCompras: [],
+  eventosCalendario: [],
+  aniversarios: [],
   receitas:[],
   gastos:[],
   dividas:[],
@@ -641,6 +643,90 @@ function migrarParaUpgradeFamiliarV2() {
       { nome: 'Sabão em Pó', categoria: 'limpeza', precoUltimo: 22.90, vezesUsado: 3 },
       { nome: 'Frutas (Maçã/Banana)', categoria: 'hortifruti', precoUltimo: 14.00, vezesUsado: 6 },
       { nome: 'Pão Francês', categoria: 'padaria', precoUltimo: 8.50, vezesUsado: 7 }
+    ];
+  }
+
+  // 9. Calendário Compartilhado e Aniversários Familiares (Etapa 3)
+  const agoraIsoEtapa3 = new Date().toISOString();
+  const cIdEtapa3 = S.circuloAtivoId || 'circ_1';
+  const mIdEtapa3 = S.membroAtivoId || 'm_1';
+
+  if (!Array.isArray(S.eventosCalendario) || S.eventosCalendario.length === 0) {
+    const hojeYmd = agoraIsoEtapa3.slice(0, 10);
+    S.eventosCalendario = [
+      {
+        id: 'ev_padrao_1',
+        circuloId: cIdEtapa3,
+        titulo: 'Reunião Escolar',
+        descricao: 'Apresentação pedagógica do bimestre',
+        dataInicio: hojeYmd,
+        horaInicio: '19:00',
+        dataFim: hojeYmd,
+        horaFim: '20:30',
+        diaInteiro: false,
+        local: 'Escola Municipal',
+        participantesIds: ['m_1', 'm_2'],
+        cor: '#5581E3',
+        repeticao: 'nenhuma',
+        lembreteMinutos: 60,
+        gastoPrevisto: 0,
+        criadoPor: mIdEtapa3,
+        criadoEm: agoraIsoEtapa3
+      },
+      {
+        id: 'ev_padrao_2',
+        circuloId: cIdEtapa3,
+        titulo: 'Consulta Médica de Rotina',
+        descricao: 'Pediatra das crianças',
+        dataInicio: new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10),
+        horaInicio: '14:30',
+        dataFim: new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10),
+        horaFim: '15:30',
+        diaInteiro: false,
+        local: 'Clínica Infantil',
+        participantesIds: ['m_2'],
+        cor: '#EC4899',
+        repeticao: 'nenhuma',
+        lembreteMinutos: 1440,
+        gastoPrevisto: 150,
+        criadoPor: 'm_2',
+        criadoEm: agoraIsoEtapa3
+      }
+    ];
+  }
+
+  if (!Array.isArray(S.aniversarios) || S.aniversarios.length === 0) {
+    S.aniversarios = [
+      {
+        id: 'aniv_1',
+        circuloId: cIdEtapa3,
+        nomePessoa: 'Alex',
+        dataNascimento: '1990-05-15',
+        parentesco: 'Pai / Titular',
+        membroId: 'm_1',
+        avisoDiasAntes: 7,
+        criadoEm: agoraIsoEtapa3
+      },
+      {
+        id: 'aniv_2',
+        circuloId: cIdEtapa3,
+        nomePessoa: 'Gabi',
+        dataNascimento: '1992-11-20',
+        parentesco: 'Mãe / Titular',
+        membroId: 'm_2',
+        avisoDiasAntes: 7,
+        criadoEm: agoraIsoEtapa3
+      },
+      {
+        id: 'aniv_3',
+        circuloId: cIdEtapa3,
+        nomePessoa: 'Dudu',
+        dataNascimento: '2018-10-29',
+        parentesco: 'Filho',
+        membroId: 'm_3',
+        avisoDiasAntes: 7,
+        criadoEm: agoraIsoEtapa3
+      }
     ];
   }
 }
@@ -2331,6 +2417,1516 @@ function renderListas() {
   }
 }
 
+// ============================================================================
+// SUPER-APP FAMILIAR V2.0 - CALENDÁRIO COMPARTILHADO & ANIVERSÁRIOS (Etapa 3)
+// ============================================================================
+
+// Variáveis de controle e navegação do Calendário
+const CORES_CALENDARIO = PALETA_FAMILIAR;
+let visaoCalendarioAtual = 'mes'; // 'mes' | 'semana' | 'dia' | 'agenda'
+let dataReferenciaCalendario = new Date();
+let filtroMembroCalendario = 'todos';
+let camadasCalendarioAtivas = {
+  eventos: true,
+  financas: true,
+  tarefas: true,
+  aniversarios: true
+};
+let diaSelecionadoCalendario = new Date().toISOString().slice(0, 10);
+let eventoEditandoId = null;
+
+/**
+ * Verifica se o membro ativo atual possui permissão para visualizar finanças familiares.
+ * O perfil 'crianca' tem bloqueio estrito contra visualização de faturas, contas e gastos previstos.
+ */
+function membroAtualPodeVerFinancas() {
+  const membro = obterMembroAtivo();
+  if (!membro) return true;
+  return membro.papel !== 'crianca';
+}
+
+/**
+ * Função mestre de consolidação de compromissos para um determinado período.
+ * Agrega:
+ * 1. Eventos Familiares (com expansão de repetição diária, semanal, mensal e anual)
+ * 2. Contas a Pagar e Pagas (S.gastos) - Se membroAtualPodeVerFinancas() for true
+ * 3. Fechamento e Vencimento de Cartões de Crédito (S.cartoes) - Se membroAtualPodeVerFinancas() for true
+ * 4. Acordos de Dívidas (S.dividas) - Se membroAtualPodeVerFinancas() for true
+ * 5. Tarefas To-Do com Prazo (S.listas)
+ * 6. Aniversários da Família com cálculo da idade a completar (S.aniversarios)
+ */
+function obterEventosConsolidadosPeriodo(dataInicioISO, dataFimISO, filtros = {}) {
+  const dtIni = String(dataInicioISO || '').slice(0, 10);
+  const dtFim = String(dataFimISO || '').slice(0, 10);
+  if (!dtIni || !dtFim) return [];
+
+  const filtroMembro = filtros.membroId || filtroMembroCalendario || 'todos';
+  const camadas = Object.assign({}, camadasCalendarioAtivas, filtros.camadas || {});
+  const podeVerFinancas = membroAtualPodeVerFinancas();
+
+  const consolidados = [];
+
+  // 1. EVENTOS DO CALENDÁRIO (S.eventosCalendario)
+  if (camadas.eventos && Array.isArray(S.eventosCalendario)) {
+    S.eventosCalendario.forEach(ev => {
+      // Filtro de participante por membro
+      if (filtroMembro !== 'todos') {
+        const participantes = Array.isArray(ev.participantesIds) ? ev.participantesIds : [];
+        if (!participantes.includes(filtroMembro) && ev.criadoPor !== filtroMembro) {
+          return;
+        }
+      }
+
+      const rep = ev.repeticao || 'nenhuma';
+      const evDataIni = String(ev.dataInicio || '').slice(0, 10);
+      if (!evDataIni) return;
+
+      const gastoVal = podeVerFinancas && Number(ev.gastoPrevisto) > 0 ? Number(ev.gastoPrevisto) : 0;
+
+      // Evento Pontual (sem repetição)
+      if (rep === 'nenhuma') {
+        if (evDataIni >= dtIni && evDataIni <= dtFim) {
+          consolidados.push({
+            id: ev.id,
+            origemId: ev.id,
+            tipo: 'evento',
+            titulo: ev.titulo,
+            data: evDataIni,
+            hora: ev.diaInteiro ? '' : (ev.horaInicio || ''),
+            horaFim: ev.diaInteiro ? '' : (ev.horaFim || ''),
+            diaInteiro: Boolean(ev.diaInteiro),
+            local: ev.local || '',
+            descricao: ev.descricao || '',
+            cor: ev.cor || '#5581E3',
+            icone: '📅',
+            subtexto: ev.local ? `📍 ${ev.local}` : (ev.descricao || ''),
+            participantesIds: ev.participantesIds || [],
+            gastoPrevisto: gastoVal,
+            raw: ev
+          });
+        }
+        return;
+      }
+
+      // Expansão de Eventos com Repetição (diaria, semanal, mensal, anual)
+      const [anoBase, mesBase, diaBase] = evDataIni.split('-').map(Number);
+      const [anoFimPeriodo, mesFimPeriodo, diaFimPeriodo] = dtFim.split('-').map(Number);
+      const dataObjFim = new Date(anoFimPeriodo, mesFimPeriodo - 1, diaFimPeriodo);
+
+      let dataCursor = new Date(anoBase, mesBase - 1, diaBase);
+
+      // Limite de segurança de iterações para evitar loops infinitos
+      let iteracoes = 0;
+      const maxIter = 400;
+
+      while (dataCursor <= dataObjFim && iteracoes < maxIter) {
+        iteracoes++;
+        const anoCur = dataCursor.getFullYear();
+        const mesCur = String(dataCursor.getMonth() + 1).padStart(2, '0');
+        const diaCur = String(dataCursor.getDate()).padStart(2, '0');
+        const dataCurISO = `${anoCur}-${mesCur}-${diaCur}`;
+
+        if (dataCurISO >= dtIni && dataCurISO <= dtFim && dataCurISO >= evDataIni) {
+          consolidados.push({
+            id: `${ev.id}_rep_${dataCurISO}`,
+            origemId: ev.id,
+            tipo: 'evento',
+            titulo: ev.titulo,
+            data: dataCurISO,
+            hora: ev.diaInteiro ? '' : (ev.horaInicio || ''),
+            horaFim: ev.diaInteiro ? '' : (ev.horaFim || ''),
+            diaInteiro: Boolean(ev.diaInteiro),
+            local: ev.local || '',
+            descricao: ev.descricao || '',
+            cor: ev.cor || '#5581E3',
+            icone: '📅',
+            subtexto: ev.local ? `📍 ${ev.local}` : (ev.descricao || ''),
+            participantesIds: ev.participantesIds || [],
+            gastoPrevisto: gastoVal,
+            repeticao: rep,
+            raw: ev
+          });
+        }
+
+        // Avanço conforme a frequência
+        if (rep === 'diaria') {
+          dataCursor.setDate(dataCursor.getDate() + 1);
+        } else if (rep === 'semanal') {
+          dataCursor.setDate(dataCursor.getDate() + 7);
+        } else if (rep === 'mensal') {
+          dataCursor.setMonth(dataCursor.getMonth() + 1);
+        } else if (rep === 'anual') {
+          dataCursor.setFullYear(dataCursor.getFullYear() + 1);
+        } else {
+          break;
+        }
+      }
+    });
+  }
+
+  // 2. CONTAS, FATURAS E ACORDOS (Blindagem: NUNCA exibido para perfil 'crianca')
+  if (podeVerFinancas && camadas.financas) {
+    // 2.1 Despesas de S.gastos
+    if (Array.isArray(S.gastos)) {
+      S.gastos.forEach(g => {
+        const gData = String(g.data || '').slice(0, 10);
+        if (gData >= dtIni && gData <= dtFim) {
+          const valorVal = Number(g.val) || 0;
+          consolidados.push({
+            id: `gasto_${g.id}`,
+            origemId: g.id,
+            tipo: 'conta',
+            titulo: `${g.pago ? '✓' : '💸'} ${g.desc} (${fmt(valorVal)})`,
+            data: gData,
+            hora: '',
+            diaInteiro: true,
+            cor: g.pago ? '#10B981' : '#EF4444',
+            icone: g.pago ? '✓' : '💸',
+            subtexto: `${g.titular || 'Família'} • ${g.pago ? 'Pago' : 'A pagar'}`,
+            valor: valorVal,
+            pago: Boolean(g.pago),
+            raw: g
+          });
+        }
+      });
+    }
+
+    // 2.2 Vencimento e Fechamento de Cartões de Crédito (S.cartoes)
+    if (Array.isArray(S.cartoes)) {
+      // Extrai os meses únicos cobertos pelo intervalo
+      const [anoI, mesI] = dtIni.split('-').map(Number);
+      const [anoF, mesF] = dtFim.split('-').map(Number);
+      const mesesNoPeriodo = [];
+      let cAno = anoI;
+      let cMes = mesI;
+      while (cAno < anoF || (cAno === anoF && cMes <= mesF)) {
+        mesesNoPeriodo.push(`${cAno}-${String(cMes).padStart(2, '0')}`);
+        cMes++;
+        if (cMes > 12) {
+          cMes = 1;
+          cAno++;
+        }
+      }
+
+      S.cartoes.forEach(cartao => {
+        if (!cartao || cartao.ativo === false) return;
+
+        mesesNoPeriodo.forEach(ym => {
+          const [aStr, mStr] = ym.split('-');
+          const aNum = Number(aStr);
+          const mNum = Number(mStr);
+          const diasNoMes = new Date(aNum, mNum, 0).getDate();
+
+          // Dia de Fechamento
+          const diaFech = Math.min(Number(cartao.diaFechamento) || 1, diasNoMes);
+          const dataFechISO = `${ym}-${String(diaFech).padStart(2, '0')}`;
+          if (dataFechISO >= dtIni && dataFechISO <= dtFim) {
+            consolidados.push({
+              id: `fech_cartao_${cartao.id}_${ym}`,
+              origemId: cartao.id,
+              tipo: 'cartao_fechamento',
+              subtipo: 'cartao_fechamento',
+              titulo: `🛒 Fechamento Cartão ${cartao.nome}`,
+              data: dataFechISO,
+              hora: '',
+              diaInteiro: true,
+              cor: cartao.cor || '#8B5CF6',
+              icone: '🛒',
+              subtexto: `Melhor dia de compra • Cartão ${cartao.nome}`,
+              raw: cartao
+            });
+          }
+
+          // Dia de Vencimento da Fatura
+          const diaVenc = Math.min(Number(cartao.diaVencimento) || 10, diasNoMes);
+          const dataVencISO = `${ym}-${String(diaVenc).padStart(2, '0')}`;
+          if (dataVencISO >= dtIni && dataVencISO <= dtFim) {
+            let valorFatura = 0;
+            let faturaPaga = false;
+            try {
+              if (typeof calcularFaturaMes === 'function') {
+                const fat = calcularFaturaMes(cartao.id, ym);
+                if (fat) {
+                  valorFatura = fat.valorTotal || 0;
+                  faturaPaga = Boolean(fat.pago);
+                }
+              }
+            } catch (err) {
+              console.warn(`[Calendário] Erro ao calcular fatura para cartão ${cartao.nome}:`, err);
+            }
+
+            consolidados.push({
+              id: `venc_cartao_${cartao.id}_${ym}`,
+              origemId: cartao.id,
+              tipo: 'cartao_vencimento',
+              subtipo: 'cartao_vencimento',
+              titulo: `💳 Vencimento Fatura ${cartao.nome}${valorFatura > 0 ? ' - ' + fmt(valorFatura) : ''}`,
+              data: dataVencISO,
+              hora: '',
+              diaInteiro: true,
+              cor: faturaPaga ? '#10B981' : '#EF4444',
+              icone: '💳',
+              subtexto: faturaPaga ? 'Fatura Paga' : `Fatura ${ym} • Vence dia ${diaVenc}`,
+              valor: valorFatura,
+              pago: faturaPaga,
+              raw: cartao
+            });
+          }
+        });
+      });
+    }
+
+    // 2.3 Parcelas de Acordos de Dívidas (S.dividas)
+    if (Array.isArray(S.dividas)) {
+      S.dividas.forEach(div => {
+        if (!div || div.quitada || !div.acordo) return;
+        const acordo = div.acordo;
+        if (Array.isArray(acordo.parcelas)) {
+          acordo.parcelas.forEach((p, pIdx) => {
+            const pData = String(p.venc || p.data || '').slice(0, 10);
+            if (pData >= dtIni && pData <= dtFim && !p.paga) {
+              const pVal = Number(p.val) || 0;
+              consolidados.push({
+                id: `div_acordo_${div.id}_${pIdx}`,
+                origemId: div.id,
+                tipo: 'acordo',
+                titulo: `🤝 Parcela Acordo: ${div.credor} (${fmt(pVal)})`,
+                data: pData,
+                hora: '',
+                diaInteiro: true,
+                cor: '#F59E0B',
+                icone: '🤝',
+                subtexto: `Parcela ${pIdx + 1} de ${acordo.numParcelas || acordo.parcelas.length}`,
+                valor: pVal,
+                raw: div
+              });
+            }
+          });
+        }
+      });
+    }
+  }
+
+  // 3. TAREFAS TO-DO COM PRAZO (S.listas)
+  if (camadas.tarefas && Array.isArray(S.listas)) {
+    S.listas.forEach(l => {
+      if (l.tipo !== 'tarefas' || !Array.isArray(l.itens)) return;
+      l.itens.forEach(t => {
+        const prazo = String(t.prazo || '').slice(0, 10);
+        if (!prazo || prazo < dtIni || prazo > dtFim) return;
+
+        if (filtroMembro !== 'todos' && t.responsavelId !== filtroMembro) {
+          return;
+        }
+
+        consolidados.push({
+          id: `tarefa_${l.id}_${t.id}`,
+          origemId: t.id,
+          listaId: l.id,
+          tipo: 'tarefa',
+          titulo: t.titulo,
+          tituloOriginal: t.titulo,
+          data: prazo,
+          hora: '',
+          diaInteiro: true,
+          cor: t.responsavelCor || l.cor || '#5581E3',
+          icone: t.concluida ? '✓' : '✅',
+          subtexto: `👤 ${t.responsavelNome || 'Família'} • ${t.concluida ? 'Concluída' : 'Pendente'}`,
+          responsavelNome: t.responsavelNome || 'Família',
+          responsavelId: t.responsavelId,
+          concluida: Boolean(t.concluida),
+          raw: t
+        });
+      });
+    });
+  }
+
+  // 4. ANIVERSÁRIOS DA FAMÍLIA (S.aniversarios)
+  if (camadas.aniversarios && Array.isArray(S.aniversarios)) {
+    // Determina os anos cobertos pelo período
+    const anoInicio = parseInt(dtIni.slice(0, 4), 10);
+    const anoFim = parseInt(dtFim.slice(0, 4), 10);
+
+    S.aniversarios.forEach(aniv => {
+      if (!aniv || !aniv.dataNascimento) return;
+      const nascStr = String(aniv.dataNascimento).slice(0, 10);
+      const partes = nascStr.split('-');
+      if (partes.length < 3) return;
+
+      const mesDia = `${partes[1]}-${partes[2]}`;
+      const anoNasc = parseInt(partes[0], 10);
+
+      for (let y = anoInicio; y <= anoFim; y++) {
+        const dataAnivEsteAno = `${y}-${mesDia}`;
+        if (dataAnivEsteAno >= dtIni && dataAnivEsteAno <= dtFim) {
+          const idadeACompletar = !isNaN(anoNasc) ? Math.max(0, y - anoNasc) : 0;
+          const textoIdade = idadeACompletar > 0 ? ` (faz ${idadeACompletar} anos)` : '';
+
+          consolidados.push({
+            id: `aniv_${aniv.id}_${y}`,
+            origemId: aniv.id,
+            tipo: 'aniversario',
+            titulo: `🎂 ${aniv.nomePessoa}${textoIdade}`,
+            data: dataAnivEsteAno,
+            hora: '',
+            diaInteiro: true,
+            cor: '#EC4899',
+            icone: '🎂',
+            subtexto: aniv.parentesco ? `Parentesco: ${aniv.parentesco}` : 'Aniversário Especial',
+            idade: idadeACompletar,
+            nomePessoa: aniv.nomePessoa,
+            raw: aniv
+          });
+        }
+      }
+    });
+  }
+
+  // Ordenação cronológica por data e hora
+  consolidados.sort((a, b) => {
+    if (a.data !== b.data) return a.data.localeCompare(b.data);
+    if (a.diaInteiro && !b.diaInteiro) return -1;
+    if (!a.diaInteiro && b.diaInteiro) return 1;
+    return (a.hora || '').localeCompare(b.hora || '');
+  });
+
+  return consolidados;
+}
+
+/**
+ * Cria um novo evento no calendário compartilhado.
+ */
+function criarEventoCalendario(dados) {
+  if (!dados || !dados.titulo) return null;
+  const tituloLimpo = String(dados.titulo).trim();
+  if (!tituloLimpo) return null;
+
+  if (!S) return null;
+  if (!Array.isArray(S.eventosCalendario)) S.eventosCalendario = [];
+
+  const membroAtivo = obterMembroAtivo();
+  const agoraIso = new Date().toISOString();
+  const dataIni = dados.dataInicio || agoraIso.slice(0, 10);
+
+  const novoEvento = {
+    id: dados.id || ('ev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6)),
+    circuloId: dados.circuloId || S.circuloAtivoId || 'circ_1',
+    titulo: tituloLimpo,
+    descricao: dados.descricao ? String(dados.descricao).trim() : '',
+    dataInicio: dataIni,
+    horaInicio: dados.horaInicio || '09:00',
+    dataFim: dados.dataFim || dataIni,
+    horaFim: dados.horaFim || '10:00',
+    diaInteiro: Boolean(dados.diaInteiro),
+    local: dados.local ? String(dados.local).trim() : '',
+    participantesIds: Array.isArray(dados.participantesIds) && dados.participantesIds.length > 0
+      ? dados.participantesIds
+      : [membroAtivo.id],
+    cor: dados.cor || membroAtivo.cor || '#5581E3',
+    repeticao: ['nenhuma', 'diaria', 'semanal', 'mensal', 'anual'].includes(dados.repeticao)
+      ? dados.repeticao
+      : 'nenhuma',
+    lembreteMinutos: Number(dados.lembreteMinutos) >= 0 ? Number(dados.lembreteMinutos) : 60,
+    gastoPrevisto: Number(dados.gastoPrevisto) > 0 ? Math.round(Number(dados.gastoPrevisto) * 100) / 100 : 0,
+    uid: dados.uid || ('uid_' + Date.now().toString(36)),
+    criadoPor: dados.criadoPor || membroAtivo.id,
+    criadoEm: dados.criadoEm || agoraIso
+  };
+
+  S.eventosCalendario.push(novoEvento);
+  adicionarNaFilaSync('eventos_calendario', 'insert', novoEvento);
+
+  registrarNotificacaoFamilia({
+    tipo: 'eventos',
+    titulo: 'Novo Evento no Calendário',
+    texto: `"${tituloLimpo}" agendado para ${dataIni} por ${membroAtivo.nome}`,
+    linkTela: 'calendario'
+  });
+
+  save();
+  render();
+  return novoEvento;
+}
+
+/**
+ * Edita um evento existente no calendário.
+ */
+function editarEventoCalendario(id, dados) {
+  if (!S || !Array.isArray(S.eventosCalendario) || !id || !dados) return null;
+  const idx = S.eventosCalendario.findIndex(e => e.id === id);
+  if (idx < 0) return null;
+
+  const eventoAntigo = S.eventosCalendario[idx];
+  const tituloLimpo = dados.titulo !== undefined ? String(dados.titulo).trim() : eventoAntigo.titulo;
+  if (!tituloLimpo) return null;
+
+  const eventoAtualizado = {
+    ...eventoAntigo,
+    ...dados,
+    id: eventoAntigo.id,
+    titulo: tituloLimpo,
+    atualizadoEm: new Date().toISOString()
+  };
+
+  S.eventosCalendario[idx] = eventoAtualizado;
+  adicionarNaFilaSync('eventos_calendario', 'update', eventoAtualizado);
+
+  save();
+  render();
+  return eventoAtualizado;
+}
+
+/**
+ * Exclui um evento do calendário.
+ */
+function excluirEventoCalendario(id) {
+  if (!S || !Array.isArray(S.eventosCalendario) || !id) return false;
+  const idx = S.eventosCalendario.findIndex(e => e.id === id);
+  if (idx < 0) return false;
+
+  const removido = S.eventosCalendario.splice(idx, 1)[0];
+  adicionarNaFilaSync('eventos_calendario', 'delete', { id });
+
+  registrarNotificacaoFamilia({
+    tipo: 'eventos',
+    titulo: 'Evento Cancelado',
+    texto: `"${removido.titulo}" foi removido do calendário`,
+    linkTela: 'calendario'
+  });
+
+  save();
+  render();
+  return true;
+}
+
+/**
+ * Adiciona um aniversariante à base da família.
+ */
+function adicionarAniversariante(dados) {
+  if (!dados || !dados.nomePessoa || !dados.dataNascimento) return null;
+  const nomeLimpo = String(dados.nomePessoa).trim();
+  const dataNasc = String(dados.dataNascimento).slice(0, 10);
+  if (!nomeLimpo || !dataNasc) return null;
+
+  if (!S) return null;
+  if (!Array.isArray(S.aniversarios)) S.aniversarios = [];
+
+  const novo = {
+    id: dados.id || ('aniv_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6)),
+    circuloId: dados.circuloId || S.circuloAtivoId || 'circ_1',
+    nomePessoa: nomeLimpo,
+    dataNascimento: dataNasc,
+    parentesco: dados.parentesco ? String(dados.parentesco).trim() : '',
+    membroId: dados.membroId || '',
+    avisoDiasAntes: Number(dados.avisoDiasAntes) > 0 ? Number(dados.avisoDiasAntes) : 7,
+    criadoEm: new Date().toISOString()
+  };
+
+  S.aniversarios.push(novo);
+  adicionarNaFilaSync('aniversarios', 'insert', novo);
+
+  registrarNotificacaoFamilia({
+    tipo: 'eventos',
+    titulo: 'Aniversário Cadastrado',
+    texto: `Data especial de ${nomeLimpo} adicionada ao calendário!`,
+    linkTela: 'calendario'
+  });
+
+  save();
+  render();
+  return novo;
+}
+
+/**
+ * Exclui um aniversariante da base da família.
+ */
+function excluirAniversariante(id) {
+  if (!S || !Array.isArray(S.aniversarios) || !id) return false;
+  const idx = S.aniversarios.findIndex(a => a.id === id);
+  if (idx < 0) return false;
+
+  S.aniversarios.splice(idx, 1);
+  adicionarNaFilaSync('aniversarios', 'delete', { id });
+
+  save();
+  render();
+  return true;
+}
+
+/**
+ * Calcula os dias restantes para o próximo aniversário e a idade a completar.
+ */
+function calcularProximoAniversario(dataNascStr) {
+  if (!dataNascStr) return { diasRestantes: 0, idade: 0, proximaData: '' };
+  const partes = String(dataNascStr).slice(0, 10).split('-');
+  if (partes.length < 3) return { diasRestantes: 0, idade: 0, proximaData: '' };
+
+  const anoNasc = parseInt(partes[0], 10);
+  const mesNasc = parseInt(partes[1], 10);
+  const diaNasc = parseInt(partes[2], 10);
+
+  const hoje = new Date();
+  const hojeAno = hoje.getFullYear();
+  const hojeMes = hoje.getMonth() + 1;
+  const hojeDia = hoje.getDate();
+
+  let anoProximo = hojeAno;
+  if (mesNasc < hojeMes || (mesNasc === hojeMes && diaNasc < hojeDia)) {
+    anoProximo = hojeAno + 1;
+  }
+
+  const dataProximo = new Date(anoProximo, mesNasc - 1, diaNasc);
+  const dataHojeZero = new Date(hojeAno, hojeMes - 1, hojeDia);
+  const diffMs = dataProximo.getTime() - dataHojeZero.getTime();
+  const diasRestantes = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  const idade = !isNaN(anoNasc) ? anoProximo - anoNasc : 0;
+  const proximaData = `${anoProximo}-${String(mesNasc).padStart(2, '0')}-${String(diaNasc).padStart(2, '0')}`;
+
+  return { diasRestantes, idade, proximaData };
+}
+
+/**
+ * Parser de formato iCalendar (.ics) com deduplicação por UID.
+ * Permite sincronizar agendas do Google Calendar, Outlook, Apple iCloud e escolas.
+ */
+function importarEventosICal(conteudoIcs) {
+  if (!conteudoIcs || typeof conteudoIcs !== 'string') {
+    return { ok: false, importados: 0, total: 0, erro: 'Conteúdo iCal vazio' };
+  }
+
+  if (!S) return { ok: false, importados: 0, total: 0, erro: 'Estado não inicializado' };
+  if (!Array.isArray(S.eventosCalendario)) S.eventosCalendario = [];
+
+  // Junta linhas desdobradas do iCal (começadas com espaço ou tab)
+  const linhasCruas = conteudoIcs.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const linhas = [];
+  linhasCruas.forEach(l => {
+    if ((l.startsWith(' ') || l.startsWith('\t')) && linhas.length > 0) {
+      linhas[linhas.length - 1] += l.trim();
+    } else {
+      linhas.push(l);
+    }
+  });
+
+  const blocosEventos = [];
+  let blocoAtual = null;
+
+  linhas.forEach(linha => {
+    const lTrim = linha.trim();
+    if (lTrim === 'BEGIN:VEVENT') {
+      blocoAtual = {};
+    } else if (lTrim === 'END:VEVENT') {
+      if (blocoAtual) blocosEventos.push(blocoAtual);
+      blocoAtual = null;
+    } else if (blocoAtual) {
+      const idxColon = linha.indexOf(':');
+      if (idxColon > 0) {
+        const chaveCompleta = linha.substring(0, idxColon).trim();
+        const valor = linha.substring(idxColon + 1).trim();
+        const chaveBase = chaveCompleta.split(';')[0].toUpperCase();
+        blocoAtual[chaveBase] = valor;
+      }
+    }
+  });
+
+  if (blocosEventos.length === 0) {
+    return { ok: false, importados: 0, total: 0, erro: 'Nenhum bloco VEVENT encontrado no arquivo' };
+  }
+
+  function converterDataICal(str) {
+    if (!str) return { data: new Date().toISOString().slice(0, 10), hora: '09:00', diaInteiro: true };
+    const limpo = str.trim();
+    if (limpo.length >= 8) {
+      const y = limpo.substring(0, 4);
+      const m = limpo.substring(4, 6);
+      const d = limpo.substring(6, 8);
+      const data = `${y}-${m}-${d}`;
+      let hora = '';
+      let diaInteiro = true;
+      if (limpo.includes('T') && limpo.length >= 13) {
+        const tIdx = limpo.indexOf('T');
+        const h = limpo.substring(tIdx + 1, tIdx + 3);
+        const min = limpo.substring(tIdx + 3, tIdx + 5);
+        hora = `${h}:${min}`;
+        diaInteiro = false;
+      }
+      return { data, hora, diaInteiro };
+    }
+    return { data: new Date().toISOString().slice(0, 10), hora: '09:00', diaInteiro: true };
+  }
+
+  let importados = 0;
+  let atualizados = 0;
+  const membroAtivo = obterMembroAtivo();
+  const cId = S.circuloAtivoId || 'circ_1';
+
+  blocosEventos.forEach(b => {
+    const titulo = b.SUMMARY ? b.SUMMARY.replace(/\\,/g, ',').replace(/\\n/g, ' ') : 'Evento Importado';
+    const uid = b.UID || ('uid_' + Math.random().toString(36).substring(2, 9));
+    const dtStart = converterDataICal(b.DTSTART);
+    const dtEnd = converterDataICal(b.DTEND || b.DTSTART);
+
+    let repeticao = 'nenhuma';
+    if (b.RRULE) {
+      const rruleUpper = b.RRULE.toUpperCase();
+      if (rruleUpper.includes('FREQ=DAILY')) repeticao = 'diaria';
+      else if (rruleUpper.includes('FREQ=WEEKLY')) repeticao = 'semanal';
+      else if (rruleUpper.includes('FREQ=MONTHLY')) repeticao = 'mensal';
+      else if (rruleUpper.includes('FREQ=YEARLY')) repeticao = 'anual';
+    }
+
+    // Deduplicação inteligente por UID
+    const idxExistente = S.eventosCalendario.findIndex(e => e.uid === uid);
+    if (idxExistente >= 0) {
+      S.eventosCalendario[idxExistente] = {
+        ...S.eventosCalendario[idxExistente],
+        titulo,
+        dataInicio: dtStart.data,
+        horaInicio: dtStart.hora || '09:00',
+        dataFim: dtEnd.data || dtStart.data,
+        horaFim: dtEnd.hora || '10:00',
+        diaInteiro: dtStart.diaInteiro,
+        local: b.LOCATION ? b.LOCATION.replace(/\\,/g, ',') : '',
+        descricao: b.DESCRIPTION ? b.DESCRIPTION.replace(/\\n/g, '\n').replace(/\\,/g, ',') : '',
+        repeticao,
+        atualizadoEm: new Date().toISOString()
+      };
+      atualizados++;
+    } else {
+      const novoEv = {
+        id: 'ev_ical_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
+        circuloId: cId,
+        titulo,
+        descricao: b.DESCRIPTION ? b.DESCRIPTION.replace(/\\n/g, '\n').replace(/\\,/g, ',') : '',
+        dataInicio: dtStart.data,
+        horaInicio: dtStart.hora || '09:00',
+        dataFim: dtEnd.data || dtStart.data,
+        horaFim: dtEnd.hora || '10:00',
+        diaInteiro: dtStart.diaInteiro,
+        local: b.LOCATION ? b.LOCATION.replace(/\\,/g, ',') : '',
+        participantesIds: [membroAtivo.id],
+        cor: membroAtivo.cor || '#5581E3',
+        repeticao,
+        lembreteMinutos: 60,
+        gastoPrevisto: 0,
+        uid,
+        criadoPor: membroAtivo.id,
+        criadoEm: new Date().toISOString()
+      };
+      S.eventosCalendario.push(novoEv);
+      adicionarNaFilaSync('eventos_calendario', 'insert', novoEv);
+      importados++;
+    }
+  });
+
+  registrarNotificacaoFamilia({
+    tipo: 'eventos',
+    titulo: 'Calendário iCal Sincronizado',
+    texto: `${importados} novos eventos adicionados e ${atualizados} atualizados.`,
+    linkTela: 'calendario'
+  });
+
+  save();
+  render();
+  return { ok: true, importados, atualizados, total: blocosEventos.length };
+}
+
+// --- CONTROLADORES DE INTERFACE E VISÕES DO CALENDÁRIO ---
+
+function setVisaoCalendario(visao) {
+  if (!['mes', 'semana', 'dia', 'agenda'].includes(visao)) visao = 'mes';
+  visaoCalendarioAtual = visao;
+
+  if (typeof document !== 'undefined') {
+    ['mes', 'semana', 'dia', 'agenda'].forEach(v => {
+      const btn = document.getElementById(`btn-cal-visao-${v}`);
+      const sec = document.getElementById(`cal-visao-${v}`);
+      if (btn) {
+        if (v === visao) btn.classList.add('sel');
+        else btn.classList.remove('sel');
+      }
+      if (sec) {
+        sec.style.display = (v === visao) ? 'block' : 'none';
+      }
+    });
+  }
+
+  renderCalendario();
+}
+
+function mudarPeriodoCalendario(delta) {
+  if (delta === 0) {
+    dataReferenciaCalendario = new Date();
+  } else {
+    if (visaoCalendarioAtual === 'mes' || visaoCalendarioAtual === 'agenda') {
+      dataReferenciaCalendario.setMonth(dataReferenciaCalendario.getMonth() + delta);
+    } else if (visaoCalendarioAtual === 'semana') {
+      dataReferenciaCalendario.setDate(dataReferenciaCalendario.getDate() + (delta * 7));
+    } else if (visaoCalendarioAtual === 'dia') {
+      dataReferenciaCalendario.setDate(dataReferenciaCalendario.getDate() + delta);
+    }
+  }
+  renderCalendario();
+}
+
+function filtrarCalendarioMembro(membroId) {
+  filtroMembroCalendario = membroId;
+  renderCalendario();
+}
+
+function toggleCamadaCalendario(camada) {
+  if (camadasCalendarioAtivas[camada] !== undefined) {
+    camadasCalendarioAtivas[camada] = !camadasCalendarioAtivas[camada];
+  }
+  renderCalendario();
+}
+
+function abrirDiaCalendario(diaISO) {
+  diaSelecionadoCalendario = diaISO;
+  if (typeof document === 'undefined') return;
+
+  const modal = document.getElementById('m-detalhe-dia-calendario');
+  const titEl = document.getElementById('ddia-titulo');
+  const subEl = document.getElementById('ddia-subinfo');
+  const container = document.getElementById('ddia-itens-container');
+  if (!modal || !container) return;
+
+  const [y, m, d] = diaISO.split('-').map(Number);
+  const dataObj = new Date(y, m - 1, d);
+  const diasSemanaNomes = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+  const mesesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+  if (titEl) titEl.textContent = `📅 ${diasSemanaNomes[dataObj.getDay()]}, ${d} de ${mesesNomes[m - 1]}`;
+  if (subEl) subEl.textContent = `${diaISO} • Compromissos e rotina da família`;
+
+  const itensDoDia = obterEventosConsolidadosPeriodo(diaISO, diaISO);
+
+  if (itensDoDia.length === 0) {
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:24px 12px;color:var(--muted);background:var(--bg3);">
+        <p style="font-size:24px;margin-bottom:4px;">✨</p>
+        <p style="font-size:13px;font-weight:700;margin:0 0 4px;color:var(--text);">Nenhum compromisso neste dia</p>
+        <p style="font-size:11px;margin:0;">Toque em "+ Evento" para agendar um compromisso ou atividade.</p>
+      </div>
+    `;
+  } else {
+    container.innerHTML = itensDoDia.map(it => {
+      const horaStr = it.hora ? `⏰ ${it.hora}` : 'Dia Inteiro';
+      const gastoStr = it.gastoPrevisto > 0 ? `<span style="font-size:11px;color:var(--green);font-weight:700;">Gasto est: ${fmt(it.gastoPrevisto)}</span>` : '';
+      const isEventoProprio = it.tipo === 'evento';
+
+      return `
+        <div class="cal-item-card" style="border-left: 4px solid ${it.cor};" ${isEventoProprio ? `onclick="closeM('m-detalhe-dia-calendario');abrirModalEventoCalendario('${it.origemId}')"` : ''}>
+          <div style="font-size:20px;line-height:1;">${it.icone}</div>
+          <div style="flex:1;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <p style="font-weight:700;font-size:13px;margin:0 0 2px;">${escapeHtml(it.titulo)}</p>
+              <span style="font-size:11px;color:var(--muted);">${horaStr}</span>
+            </div>
+            ${it.subtexto ? `<p style="font-size:11px;color:var(--muted);margin:0 0 4px;">${escapeHtml(it.subtexto)}</p>` : ''}
+            ${gastoStr}
+          </div>
+          ${isEventoProprio ? '<span style="font-size:11px;color:var(--primary);font-weight:700;">Editar →</span>' : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  openM('m-detalhe-dia-calendario');
+}
+
+function adicionarEventoNoDiaModal() {
+  closeM('m-detalhe-dia-calendario');
+  abrirModalEventoCalendario(null, diaSelecionadoCalendario);
+}
+
+// --- MODAIS DO CALENDÁRIO ---
+
+function abrirModalEventoCalendario(eventoId = null, dataPadrao = null) {
+  if (typeof document === 'undefined') return;
+
+  eventoEditandoId = eventoId;
+  const titModal = document.getElementById('ev-modal-title');
+  const btnExcluir = document.getElementById('btn-excluir-evento');
+  const idHidden = document.getElementById('ev-id');
+  const titInput = document.getElementById('ev-titulo');
+  const diaIntChk = document.getElementById('ev-dia-inteiro');
+  const dtIniInput = document.getElementById('ev-data-inicio');
+  const hrIniInput = document.getElementById('ev-hora-inicio');
+  const dtFimInput = document.getElementById('ev-data-fim');
+  const hrFimInput = document.getElementById('ev-hora-fim');
+  const localInput = document.getElementById('ev-local');
+  const descInput = document.getElementById('ev-descricao');
+  const repSelect = document.getElementById('ev-repeticao');
+  const lembreteSelect = document.getElementById('ev-lembrete');
+  const gastoInput = document.getElementById('ev-gasto-previsto');
+  const blocoGasto = document.getElementById('ev-bloco-gasto');
+
+  // Controle de visibilidade de finanças no modal
+  if (blocoGasto) {
+    blocoGasto.style.display = membroAtualPodeVerFinancas() ? 'block' : 'none';
+  }
+
+  // Preenchimento de Participantes
+  const partContainer = document.getElementById('ev-participantes-container');
+  let participantesSel = [];
+
+  // Paleta de Cores
+  const coresContainer = document.getElementById('ev-cores-grid');
+  let corSel = '#5581E3';
+
+  if (eventoId) {
+    const evento = (S.eventosCalendario || []).find(e => e.id === eventoId);
+    if (!evento) return;
+
+    if (titModal) titModal.textContent = '✏️ Editar Evento Familiar';
+    if (btnExcluir) btnExcluir.style.display = 'block';
+    if (idHidden) idHidden.value = evento.id;
+    if (titInput) titInput.value = evento.titulo;
+    if (diaIntChk) diaIntChk.checked = Boolean(evento.diaInteiro);
+    if (dtIniInput) dtIniInput.value = evento.dataInicio;
+    if (hrIniInput) hrIniInput.value = evento.horaInicio || '09:00';
+    if (dtFimInput) dtFimInput.value = evento.dataFim || evento.dataInicio;
+    if (hrFimInput) hrFimInput.value = evento.horaFim || '10:00';
+    if (localInput) localInput.value = evento.local || '';
+    if (descInput) descInput.value = evento.descricao || '';
+    if (repSelect) repSelect.value = evento.repeticao || 'nenhuma';
+    if (lembreteSelect) lembreteSelect.value = String(evento.lembreteMinutos || 60);
+    if (gastoInput) gastoInput.value = evento.gastoPrevisto > 0 ? evento.gastoPrevisto.toFixed(2) : '';
+
+    participantesSel = Array.isArray(evento.participantesIds) ? [...evento.participantesIds] : [];
+    corSel = evento.cor || '#5581E3';
+  } else {
+    if (titModal) titModal.textContent = '📅 Novo Evento Familiar';
+    if (btnExcluir) btnExcluir.style.display = 'none';
+    if (idHidden) idHidden.value = '';
+    if (titInput) titInput.value = '';
+    if (diaIntChk) diaIntChk.checked = false;
+
+    const dataPadraoFinal = dataPadrao || new Date().toISOString().slice(0, 10);
+    if (dtIniInput) dtIniInput.value = dataPadraoFinal;
+    if (hrIniInput) hrIniInput.value = '09:00';
+    if (dtFimInput) dtFimInput.value = dataPadraoFinal;
+    if (hrFimInput) hrFimInput.value = '10:00';
+    if (localInput) localInput.value = '';
+    if (descInput) descInput.value = '';
+    if (repSelect) repSelect.value = 'nenhuma';
+    if (lembreteSelect) lembreteSelect.value = '60';
+    if (gastoInput) gastoInput.value = '';
+
+    participantesSel = [S.membroAtivoId || 'm_1'];
+    const membro = obterMembroAtivo();
+    corSel = membro.cor || '#5581E3';
+  }
+
+  // Renderiza botões de participantes
+  if (partContainer) {
+    partContainer.innerHTML = (S.membrosPerfil || []).map(m => {
+      const isSel = participantesSel.includes(m.id);
+      return `
+        <button type="button" class="filtro-pill ${isSel ? 'sel' : ''}" data-mid="${m.id}" style="${isSel ? `background:${m.cor};color:#fff;border-color:${m.cor};` : ''}" onclick="toggleParticipanteEventoModal('${m.id}')">
+          ${escapeHtml(m.nome)}
+        </button>
+      `;
+    }).join('');
+  }
+
+  // Renderiza grade de cores
+  const corHidden = document.getElementById('ev-cor');
+  if (corHidden) corHidden.value = corSel;
+  if (coresContainer) {
+    coresContainer.innerHTML = PALETA_FAMILIAR.map(c => `
+      <div data-cor="${c}" onclick="selecionarCorEventoModal('${c}')" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c === corSel ? '#fff' : 'transparent'};"></div>
+    `).join('');
+  }
+
+  toggleDiaInteiroEventoModal();
+  openM('m-evento-calendario');
+}
+
+function toggleDiaInteiroEventoModal() {
+  const diaIntChk = document.getElementById('ev-dia-inteiro');
+  const colHrIni = document.getElementById('ev-col-hora-inicio');
+  const colHrFim = document.getElementById('ev-col-hora-fim');
+  if (!diaIntChk) return;
+
+  const isDiaInteiro = diaIntChk.checked;
+  if (colHrIni) colHrIni.style.display = isDiaInteiro ? 'none' : 'block';
+  if (colHrFim) colHrFim.style.display = isDiaInteiro ? 'none' : 'block';
+}
+
+function toggleParticipanteEventoModal(membroId) {
+  if (typeof document === 'undefined') return;
+  const btn = document.querySelector(`#ev-participantes-container button[data-mid="${membroId}"]`);
+  if (!btn) return;
+
+  const membro = (S.membrosPerfil || []).find(m => m.id === membroId);
+  const cor = membro ? membro.cor : 'var(--primary)';
+
+  if (btn.classList.contains('sel')) {
+    btn.classList.remove('sel');
+    btn.style.background = 'transparent';
+    btn.style.color = 'var(--muted)';
+    btn.style.borderColor = 'var(--border2)';
+  } else {
+    btn.classList.add('sel');
+    btn.style.background = cor;
+    btn.style.color = '#fff';
+    btn.style.borderColor = cor;
+  }
+}
+
+function selecionarCorEventoModal(cor) {
+  const corHidden = document.getElementById('ev-cor');
+  if (corHidden) corHidden.value = cor;
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('#ev-cores-grid div').forEach(d => {
+      d.style.borderColor = d.dataset.cor === cor ? '#fff' : 'transparent';
+    });
+  }
+}
+
+function salvarEventoCalendarioModal() {
+  const titInput = document.getElementById('ev-titulo');
+  const diaIntChk = document.getElementById('ev-dia-inteiro');
+  const dtIniInput = document.getElementById('ev-data-inicio');
+  const hrIniInput = document.getElementById('ev-hora-inicio');
+  const dtFimInput = document.getElementById('ev-data-fim');
+  const hrFimInput = document.getElementById('ev-hora-fim');
+  const localInput = document.getElementById('ev-local');
+  const descInput = document.getElementById('ev-descricao');
+  const corHidden = document.getElementById('ev-cor');
+  const repSelect = document.getElementById('ev-repeticao');
+  const lembreteSelect = document.getElementById('ev-lembrete');
+  const gastoInput = document.getElementById('ev-gasto-previsto');
+
+  const titulo = titInput ? titInput.value.trim() : '';
+  if (!titulo) {
+    if (typeof alert === 'function') alert('Informe o título do evento.');
+    return;
+  }
+
+  const dataInicio = dtIniInput ? dtIniInput.value : new Date().toISOString().slice(0, 10);
+  const dataFim = dtFimInput ? dtFimInput.value : dataInicio;
+  const diaInteiro = diaIntChk ? diaIntChk.checked : false;
+  const horaInicio = diaInteiro ? '' : (hrIniInput ? hrIniInput.value : '09:00');
+  const horaFim = diaInteiro ? '' : (hrFimInput ? hrFimInput.value : '10:00');
+  const local = localInput ? localInput.value.trim() : '';
+  const descricao = descInput ? descInput.value.trim() : '';
+  const cor = corHidden ? corHidden.value : '#5581E3';
+  const repeticao = repSelect ? repSelect.value : 'nenhuma';
+  const lembreteMinutos = lembreteSelect ? parseInt(lembreteSelect.value, 10) : 60;
+  const gastoPrevisto = gastoInput && membroAtualPodeVerFinancas() ? parseFloat(gastoInput.value) || 0 : 0;
+
+  // Participantes selecionados
+  const participantesIds = [];
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('#ev-participantes-container button.sel').forEach(btn => {
+      if (btn.dataset.mid) participantesIds.push(btn.dataset.mid);
+    });
+  }
+  if (participantesIds.length === 0) {
+    participantesIds.push(S.membroAtivoId || 'm_1');
+  }
+
+  const dadosEvento = {
+    titulo,
+    dataInicio,
+    horaInicio,
+    dataFim,
+    horaFim,
+    diaInteiro,
+    local,
+    descricao,
+    participantesIds,
+    cor,
+    repeticao,
+    lembreteMinutos,
+    gastoPrevisto
+  };
+
+  if (eventoEditandoId) {
+    editarEventoCalendario(eventoEditandoId, dadosEvento);
+  } else {
+    criarEventoCalendario(dadosEvento);
+  }
+
+  closeM('m-evento-calendario');
+  eventoEditandoId = null;
+  exibirToastNotificacao(`Evento "${titulo}" salvo na agenda!`, '📅');
+}
+
+function excluirEventoCalendarioModal() {
+  if (!eventoEditandoId) return;
+  if (typeof confirm === 'function' && !confirm('Tem certeza de que deseja excluir este evento?')) {
+    return;
+  }
+  excluirEventoCalendario(eventoEditandoId);
+  closeM('m-evento-calendario');
+  eventoEditandoId = null;
+  exibirToastNotificacao('Evento removido do calendário', '🗑️');
+}
+
+// --- ANIVERSÁRIOS ---
+
+function abrirModalAniversarios() {
+  if (typeof document === 'undefined') return;
+
+  const container = document.getElementById('aniv-lista-container');
+  const membroSelect = document.getElementById('aniv-membro-id');
+
+  if (membroSelect) {
+    membroSelect.innerHTML = [
+      '<option value="">Não vincular (Externo)</option>',
+      ...(S.membrosPerfil || []).map(m => `<option value="${m.id}">${escapeHtml(m.nome)}</option>`)
+    ].join('');
+  }
+
+  if (container) {
+    const lista = S.aniversarios || [];
+    if (lista.length === 0) {
+      container.innerHTML = `
+        <div class="card" style="text-align:center;padding:16px;color:var(--muted);background:var(--bg2);">
+          <p style="font-size:24px;margin-bottom:4px;">🎂</p>
+          <p style="font-size:12px;margin:0;">Nenhum aniversário cadastrado ainda.</p>
+        </div>
+      `;
+    } else {
+      // Ordena por proximidade dos próximos aniversários
+      const ordenados = [...lista].map(a => {
+        const prox = calcularProximoAniversario(a.dataNascimento);
+        return { ...a, ...prox };
+      }).sort((x, y) => x.diasRestantes - y.diasRestantes);
+
+      container.innerHTML = ordenados.map(a => {
+        const [y, m, d] = a.dataNascimento.split('-');
+        const diasTxt = a.diasRestantes === 0
+          ? '🎉 É HOJE!'
+          : a.diasRestantes === 1
+          ? 'Amanhã!'
+          : `Em ${a.diasRestantes} dias`;
+        const corDias = a.diasRestantes <= 7 ? 'var(--red)' : 'var(--primary)';
+
+        return `
+          <div class="card" style="padding:10px 12px;margin:0;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #EC4899;">
+            <div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:16px;">🎂</span>
+                <span style="font-weight:700;font-size:14px;">${escapeHtml(a.nomePessoa)}</span>
+                ${a.parentesco ? `<span style="font-size:11px;color:var(--muted);">(${escapeHtml(a.parentesco)})</span>` : ''}
+              </div>
+              <p style="font-size:11px;color:var(--muted);margin:2px 0 0;">
+                Nasc: ${d}/${m}/${y} • Vai fazer <strong>${a.idade} anos</strong>
+              </p>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:11px;font-weight:700;color:${corDias};">${diasTxt}</span>
+              <span style="cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;" onclick="excluirAniversarianteModal('${a.id}')" title="Excluir">×</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  openM('m-aniversarios');
+}
+
+function salvarAniversarianteModal() {
+  const nomeInput = document.getElementById('aniv-nome');
+  const dataInput = document.getElementById('aniv-data');
+  const parentescoInput = document.getElementById('aniv-parentesco');
+  const membroSelect = document.getElementById('aniv-membro-id');
+  const lembreteSelect = document.getElementById('aniv-lembrete-dias');
+
+  const nomePessoa = nomeInput ? nomeInput.value.trim() : '';
+  const dataNascimento = dataInput ? dataInput.value : '';
+  const parentesco = parentescoInput ? parentescoInput.value.trim() : '';
+  const membroId = membroSelect ? membroSelect.value : '';
+  const avisoDiasAntes = lembreteSelect ? parseInt(lembreteSelect.value, 10) : 7;
+
+  if (!nomePessoa || !dataNascimento) {
+    if (typeof alert === 'function') alert('Preencha o nome e a data de nascimento.');
+    return;
+  }
+
+  adicionarAniversariante({
+    nomePessoa,
+    dataNascimento,
+    parentesco,
+    membroId,
+    avisoDiasAntes
+  });
+
+  if (nomeInput) nomeInput.value = '';
+  if (dataInput) dataInput.value = '';
+  if (parentescoInput) parentescoInput.value = '';
+
+  abrirModalAniversarios(); // Atualiza listagem
+}
+
+function excluirAniversarianteModal(id) {
+  if (typeof confirm === 'function' && !confirm('Deseja excluir este aniversariante?')) {
+    return;
+  }
+  excluirAniversariante(id);
+  abrirModalAniversarios();
+}
+
+// --- IMPORTADOR ICAL (.ICS) ---
+
+function abrirModalImportarICal() {
+  if (typeof document === 'undefined') return;
+  const msg = document.getElementById('ical-status-msg');
+  if (msg) msg.textContent = '';
+  const txt = document.getElementById('ical-conteudo');
+  if (txt) txt.value = '';
+  const f = document.getElementById('ical-file');
+  if (f) f.value = '';
+  bufferImportacaoICal = '';
+  openM('m-importar-ical');
+}
+
+function lerArquivoICal(input) {
+  if (!input || !input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    bufferImportacaoICal = e.target.result || '';
+    const txt = document.getElementById('ical-conteudo');
+    if (txt) txt.value = bufferImportacaoICal;
+    const msg = document.getElementById('ical-status-msg');
+    if (msg) msg.textContent = `Arquivo carregado: ${file.name} (${file.size} bytes)`;
+  };
+  reader.onerror = function(err) {
+    console.error('Erro ao ler arquivo iCal:', err);
+    const msg = document.getElementById('ical-status-msg');
+    if (msg) msg.textContent = 'Erro ao ler o arquivo selecionado.';
+  };
+  reader.readAsText(file);
+}
+
+function confirmarImportarICalModal() {
+  const txt = document.getElementById('ical-conteudo');
+  const conteudo = (txt && txt.value.trim()) ? txt.value.trim() : bufferImportacaoICal;
+  const msg = document.getElementById('ical-status-msg');
+
+  if (!conteudo) {
+    if (typeof alert === 'function') alert('Selecione um arquivo .ics ou cole o conteúdo do calendário.');
+    return;
+  }
+
+  const res = importarEventosICal(conteudo);
+  if (res.ok) {
+    closeM('m-importar-ical');
+    exibirToastNotificacao(`Importados ${res.importados} novos eventos com sucesso!`, '📥');
+  } else {
+    if (msg) msg.textContent = `Erro: ${res.erro || 'Falha ao processar arquivo'}`;
+  }
+}
+
+/**
+ * Renderizador mestre da interface do Calendário Compartilhado (Etapa 3).
+ */
+function renderCalendario() {
+  if (typeof document === 'undefined') return;
+
+  const refDate = dataReferenciaCalendario || new Date();
+  const anoRef = refDate.getFullYear();
+  const mesRef = refDate.getMonth(); // 0-11
+  const mesesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const mesesNomesAbrev = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const diasSemanaNomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  // Atualiza título do período no cabeçalho
+  const titPeriodo = document.getElementById('cal-titulo-periodo');
+  if (titPeriodo) {
+    if (visaoCalendarioAtual === 'mes') {
+      titPeriodo.textContent = `${mesesNomes[mesRef]} ${anoRef}`;
+    } else if (visaoCalendarioAtual === 'semana') {
+      const dtSemanaIni = new Date(refDate);
+      dtSemanaIni.setDate(refDate.getDate() - refDate.getDay());
+      const dtSemanaFim = new Date(dtSemanaIni);
+      dtSemanaFim.setDate(dtSemanaIni.getDate() + 6);
+      titPeriodo.textContent = `${dtSemanaIni.getDate()} ${mesesNomesAbrev[dtSemanaIni.getMonth()]} - ${dtSemanaFim.getDate()} ${mesesNomesAbrev[dtSemanaFim.getMonth()]} ${anoRef}`;
+    } else if (visaoCalendarioAtual === 'dia') {
+      titPeriodo.textContent = `${refDate.getDate()} de ${mesesNomes[mesRef]} de ${anoRef}`;
+    } else {
+      titPeriodo.textContent = `Agenda: ${mesesNomes[mesRef]} ${anoRef}`;
+    }
+  }
+
+  // Renderiza Chips de Filtro por Membro
+  const fMembrosContainer = document.getElementById('cal-filtros-membros-container');
+  if (fMembrosContainer) {
+    const membros = S.membrosPerfil || [];
+    fMembrosContainer.innerHTML = [
+      `<button type="button" class="filtro-pill ${filtroMembroCalendario === 'todos' ? 'sel' : ''}" onclick="filtrarCalendarioMembro('todos')">Todos</button>`,
+      ...membros.map(m => `
+        <button type="button" class="filtro-pill ${filtroMembroCalendario === m.id ? 'sel' : ''}" style="${filtroMembroCalendario === m.id ? `background:${m.cor};color:#fff;border-color:${m.cor};` : ''}" onclick="filtrarCalendarioMembro('${m.id}')">
+          👤 ${escapeHtml(m.nome)}
+        </button>
+      `)
+    ].join('');
+  }
+
+  // Toggles de Camadas (oculta 'financas' se for criança)
+  const podeVerFin = membroAtualPodeVerFinancas();
+  const btnFinancas = document.getElementById('toggle-camada-financas');
+  if (btnFinancas) {
+    btnFinancas.style.display = podeVerFin ? 'inline-block' : 'none';
+  }
+
+  ['eventos', 'financas', 'tarefas', 'aniversarios'].forEach(camada => {
+    const btn = document.getElementById(`toggle-camada-${camada}`);
+    if (btn) {
+      if (camadasCalendarioAtivas[camada]) btn.classList.add('sel');
+      else btn.classList.remove('sel');
+    }
+  });
+
+  // Data atual em formato YYYY-MM-DD
+  const hojeISO = new Date().toISOString().slice(0, 10);
+
+  // --- 1. VISÃO MÊS ---
+  const secMes = document.getElementById('cal-visao-mes');
+  if (secMes && visaoCalendarioAtual === 'mes') {
+    const primeiroDiaSemana = new Date(anoRef, mesRef, 1).getDay(); // 0 a 6
+    const totalDiasMes = new Date(anoRef, mesRef + 1, 0).getDate();
+    const totalDiasMesAnt = new Date(anoRef, mesRef, 0).getDate();
+
+    // Início e fim do mês visualizado para carregar eventos
+    const dtIniMes = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-01`;
+    const dtFimMes = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-${String(totalDiasMes).padStart(2, '0')}`;
+    const eventosDoMes = obterEventosConsolidadosPeriodo(dtIniMes, dtFimMes);
+
+    // Mapeia eventos por dia 'YYYY-MM-DD'
+    const mapaEventosDia = {};
+    eventosDoMes.forEach(ev => {
+      if (!mapaEventosDia[ev.data]) mapaEventosDia[ev.data] = [];
+      mapaEventosDia[ev.data].push(ev);
+    });
+
+    let htmlGrade = `
+      <div class="cal-grid-dias" style="margin-bottom:6px;">
+        ${diasSemanaNomes.map(d => `<div class="cal-header-dia">${d}</div>`).join('')}
+      </div>
+      <div class="cal-grid-dias">
+    `;
+
+    // Dias do mês anterior para completar o grid
+    for (let i = primeiroDiaSemana - 1; i >= 0; i--) {
+      const numDia = totalDiasMesAnt - i;
+      htmlGrade += `
+        <div class="cal-celula-dia outro-mes">
+          <span class="cal-dia-num" style="color:var(--muted);">${numDia}</span>
+        </div>
+      `;
+    }
+
+    // Dias do mês atual
+    for (let d = 1; d <= totalDiasMes; d++) {
+      const diaISO = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isHoje = diaISO === hojeISO;
+      const isSel = diaISO === diaSelecionadoCalendario;
+      const itensDoDia = mapaEventosDia[diaISO] || [];
+
+      // Bolinhas/dots dos primeiros 4 eventos
+      const dotsHtml = itensDoDia.slice(0, 4).map(it => `
+        <span class="cal-dot" style="background:${it.cor};"></span>
+      `).join('');
+
+      // Até 2 pílulas de texto resumido
+      const pillsHtml = itensDoDia.slice(0, 2).map(it => `
+        <span class="cal-event-pill" style="background:${it.cor}22;color:${it.cor};border:1px solid ${it.cor}44;" title="${escapeHtml(it.titulo)}">
+          ${it.icone} ${escapeHtml(it.titulo)}
+        </span>
+      `).join('');
+
+      const maisQtd = itensDoDia.length > 2 ? `<span style="font-size:9px;color:var(--muted);font-weight:700;">+${itensDoDia.length - 2}</span>` : '';
+
+      htmlGrade += `
+        <div class="cal-celula-dia ${isHoje ? 'hoje' : ''} ${isSel ? 'selecionado' : ''}" onclick="abrirDiaCalendario('${diaISO}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="cal-dia-num" style="${isHoje ? 'color:var(--primary);' : ''}">${d}</span>
+            <div style="display:flex;gap:2px;">${dotsHtml}</div>
+          </div>
+          ${pillsHtml}
+          ${maisQtd}
+        </div>
+      `;
+    }
+
+    // Dias do próximo mês para fechar a última linha
+    const totalCelulas = primeiroDiaSemana + totalDiasMes;
+    const celulasRestantes = (7 - (totalCelulas % 7)) % 7;
+    for (let d = 1; d <= celulasRestantes; d++) {
+      htmlGrade += `
+        <div class="cal-celula-dia outro-mes">
+          <span class="cal-dia-num" style="color:var(--muted);">${d}</span>
+        </div>
+      `;
+    }
+
+    htmlGrade += '</div>';
+    secMes.innerHTML = htmlGrade;
+  }
+
+  // --- 2. VISÃO SEMANA ---
+  const secSemana = document.getElementById('cal-visao-semana');
+  if (secSemana && visaoCalendarioAtual === 'semana') {
+    const dtSemanaIni = new Date(refDate);
+    dtSemanaIni.setDate(refDate.getDate() - refDate.getDay()); // Domingo
+    const dtSemanaFim = new Date(dtSemanaIni);
+    dtSemanaFim.setDate(dtSemanaIni.getDate() + 6); // Sábado
+
+    const dtSemIniISO = dtSemanaIni.toISOString().slice(0, 10);
+    const dtSemFimISO = dtSemanaFim.toISOString().slice(0, 10);
+    const eventosSemana = obterEventosConsolidadosPeriodo(dtSemIniISO, dtSemFimISO);
+
+    const mapaSemana = {};
+    eventosSemana.forEach(e => {
+      if (!mapaSemana[e.data]) mapaSemana[e.data] = [];
+      mapaSemana[e.data].push(e);
+    });
+
+    let htmlSemana = '<div style="display:flex;flex-direction:column;gap:10px;">';
+
+    for (let i = 0; i < 7; i++) {
+      const curDiaObj = new Date(dtSemanaIni);
+      curDiaObj.setDate(dtSemanaIni.getDate() + i);
+      const curDiaISO = curDiaObj.toISOString().slice(0, 10);
+      const isHoje = curDiaISO === hojeISO;
+      const diaNum = curDiaObj.getDate();
+      const diaNome = diasSemanaNomes[curDiaObj.getDay()];
+      const itensDesteDia = mapaSemana[curDiaISO] || [];
+
+      htmlSemana += `
+        <div class="card" style="padding:10px;margin:0;border-left:4px solid ${isHoje ? 'var(--primary)' : 'var(--border2)'};">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-weight:800;font-size:14px;${isHoje ? 'color:var(--primary);' : ''}">${diaNome}, ${diaNum}</span>
+              ${isHoje ? '<span class="badge" style="background:var(--blue-dim);color:var(--primary);">Hoje</span>' : ''}
+            </div>
+            <button type="button" class="btn" style="width:auto;margin:0;padding:4px 8px;font-size:11px;" onclick="abrirModalEventoCalendario(null, '${curDiaISO}')">+ Evento</button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            ${itensDesteDia.length === 0 ? '<p style="font-size:11px;color:var(--muted);margin:0;">Nenhum compromisso.</p>' : itensDesteDia.map(it => `
+              <div style="background:var(--bg3);border-radius:6px;padding:6px 8px;display:flex;justify-content:space-between;align-items:center;border-left:3px solid ${it.cor};cursor:pointer;" onclick="abrirDiaCalendario('${curDiaISO}')">
+                <span style="font-size:12px;font-weight:600;">${it.icone} ${escapeHtml(it.titulo)}</span>
+                <span style="font-size:10px;color:var(--muted);">${it.hora || 'Dia inteiro'}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    htmlSemana += '</div>';
+    secSemana.innerHTML = htmlSemana;
+  }
+
+  // --- 3. VISÃO DIA ---
+  const secDia = document.getElementById('cal-visao-dia');
+  if (secDia && visaoCalendarioAtual === 'dia') {
+    const diaISO = refDate.toISOString().slice(0, 10);
+    const eventosDia = obterEventosConsolidadosPeriodo(diaISO, diaISO);
+
+    let htmlDia = `
+      <div class="card" style="margin-bottom:12px;padding:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <h4 style="font-size:16px;font-weight:800;margin:0 0 2px;">${refDate.getDate()} de ${mesesNomes[mesRef]}</h4>
+            <p style="font-size:12px;color:var(--muted);margin:0;">${eventosDia.length} compromissos agendados</p>
+          </div>
+          <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:6px 12px;font-size:11px;" onclick="abrirModalEventoCalendario(null, '${diaISO}')">+ Evento</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+    `;
+
+    if (eventosDia.length === 0) {
+      htmlDia += `
+        <div class="card" style="text-align:center;padding:32px 16px;color:var(--muted);">
+          <p style="font-size:28px;margin-bottom:4px;">✨</p>
+          <p style="font-size:14px;font-weight:700;margin:0 0 4px;color:var(--text);">Dia livre!</p>
+          <p style="font-size:12px;margin:0;">Aproveite o tempo em família ou adicione um compromisso.</p>
+        </div>
+      `;
+    } else {
+      htmlDia += eventosDia.map(it => `
+        <div class="cal-item-card" style="border-left: 4px solid ${it.cor};" onclick="abrirDiaCalendario('${diaISO}')">
+          <div class="cal-hora-col">${it.hora || 'Dia'}</div>
+          <div style="flex:1;">
+            <p style="font-weight:700;font-size:14px;margin:0 0 2px;">${it.icone} ${escapeHtml(it.titulo)}</p>
+            ${it.subtexto ? `<p style="font-size:12px;color:var(--muted);margin:0;">${escapeHtml(it.subtexto)}</p>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    htmlDia += '</div>';
+    secDia.innerHTML = htmlDia;
+  }
+
+  // --- 4. VISÃO AGENDA ---
+  const secAgenda = document.getElementById('cal-visao-agenda');
+  if (secAgenda && visaoCalendarioAtual === 'agenda') {
+    const totalDiasMes = new Date(anoRef, mesRef + 1, 0).getDate();
+    const dtIniMes = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-01`;
+    const dtFimMes = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-${String(totalDiasMes).padStart(2, '0')}`;
+    const eventosAgenda = obterEventosConsolidadosPeriodo(dtIniMes, dtFimMes);
+
+    if (eventosAgenda.length === 0) {
+      secAgenda.innerHTML = `
+        <div class="card" style="text-align:center;padding:32px 16px;color:var(--muted);">
+          <p style="font-size:28px;margin-bottom:4px;">📅</p>
+          <p style="font-size:14px;font-weight:700;margin:0 0 4px;color:var(--text);">Agenda vazia neste mês</p>
+          <p style="font-size:12px;margin:0;">Adicione eventos familiares, contas ou aniversários.</p>
+        </div>
+      `;
+    } else {
+      // Agrupa eventos por data
+      const grupos = {};
+      eventosAgenda.forEach(it => {
+        if (!grupos[it.data]) grupos[it.data] = [];
+        grupos[it.data].push(it);
+      });
+
+      secAgenda.innerHTML = Object.keys(grupos).map(dataKey => {
+        const [y, m, d] = dataKey.split('-').map(Number);
+        const dataObj = new Date(y, m - 1, d);
+        const diaNome = diasSemanaNomes[dataObj.getDay()];
+        const isHoje = dataKey === hojeISO;
+        const itensDaData = grupos[dataKey];
+
+        return `
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-size:13px;font-weight:800;color:var(--text);">${diaNome}, ${d} de ${mesesNomes[m - 1]}</span>
+              ${isHoje ? '<span class="badge" style="background:var(--blue-dim);color:var(--primary);">Hoje</span>' : ''}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${itensDaData.map(it => `
+                <div class="cal-item-card" style="border-left:4px solid ${it.cor};margin-bottom:0;" onclick="abrirDiaCalendario('${dataKey}')">
+                  <div class="cal-hora-col">${it.hora || 'Dia'}</div>
+                  <div style="flex:1;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                      <p style="font-weight:700;font-size:13px;margin:0 0 2px;">${it.icone} ${escapeHtml(it.titulo)}</p>
+                    </div>
+                    ${it.subtexto ? `<p style="font-size:11px;color:var(--muted);margin:0;">${escapeHtml(it.subtexto)}</p>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+}
+
 function loadState(){
   try {
     if (typeof localStorage !== 'undefined') {
@@ -2637,6 +4233,7 @@ function updateKeyStatus(){
 // NAV
 const TITLES = {
   inicio: 'Mural da Família',
+  calendario: 'Calendário Compartilhado',
   listas: 'Listas & Tarefas Compartilhadas',
   explorar: 'Explorar Recursos',
   familia: 'Minha Família',
@@ -2649,7 +4246,7 @@ const TITLES = {
   agente: 'Agente Financeiro',
   config: 'Configurações'
 };
-const SECS = ['inicio', 'listas', 'explorar', 'familia', 'atividade', 'resumo', 'receitas', 'gastos', 'dividas', 'metas', 'agente', 'config'];
+const SECS = ['inicio', 'calendario', 'listas', 'explorar', 'familia', 'atividade', 'resumo', 'receitas', 'gastos', 'dividas', 'metas', 'agente', 'config'];
 const ROTAS_FINANCEIRAS = ['resumo', 'receitas', 'gastos', 'dividas', 'metas'];
 
 function go(id) {
@@ -6487,6 +8084,40 @@ function renderMuralInicio() {
       `;
     }
 
+    // Card Especial do Módulo de Calendário Familiar (Etapa 3)
+    if (modDef.id === 'calendario') {
+      const hoje = new Date();
+      const dtIni = hoje.toISOString().slice(0, 10);
+      const dtFimObj = new Date(hoje);
+      dtFimObj.setDate(hoje.getDate() + 7);
+      const dtFim = dtFimObj.toISOString().slice(0, 10);
+
+      const eventos7Dias = obterEventosConsolidadosPeriodo(dtIni, dtFim);
+      const totalEventos = eventos7Dias.length;
+      const proximos2 = eventos7Dias.slice(0, 2);
+
+      return `
+        <div class="modulo-card card" style="cursor:pointer;" onclick="go('calendario')">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
+              ${modDef.icone}
+            </div>
+            <span style="font-size:11px; font-weight:700; color:var(--primary);">${totalEventos} próx. 7d</span>
+          </div>
+          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
+          <p class="modulo-card-desc" style="margin-bottom:6px;">${totalEventos > 0 ? `${totalEventos} compromissos na semana` : 'Semana livre em família!'}</p>
+          <div style="font-size:11px; color:var(--muted); display:flex; flex-direction:column; gap:3px;">
+            ${proximos2.length === 0 ? '<span>Nenhum evento agendado</span>' : proximos2.map(e => `
+              <div style="display:flex; align-items:center; gap:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                <span class="cal-dot" style="background:${e.cor};"></span>
+                <span style="font-weight:600; color:var(--text);">${escapeHtml(e.titulo)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     // Cards Padrão do Grid Familiar
     return `
       <div class="modulo-card card" style="cursor:pointer;" onclick="go('${modDef.telaAlvo || 'explorar'}')">
@@ -6697,6 +8328,7 @@ function render(){
   renderMinhaFamilia();
   renderAtividadeFeed();
   renderListas();
+  renderCalendario();
 
   // Renderizações Contábeis Legadas (Zero Regressão)
   atualizarDatalistTitulares();
@@ -7555,6 +9187,36 @@ if (typeof window !== 'undefined') {
   window.excluirListaAtualDetalhe = excluirListaAtualDetalhe;
   window.selecionarTipoNovaLista = selecionarTipoNovaLista;
   window.renderListas = renderListas;
+  // Super-App Familiar v2.0 - Calendário & Aniversários (Etapa 3)
+  window.CORES_CALENDARIO = CORES_CALENDARIO;
+  window.membroAtualPodeVerFinancas = membroAtualPodeVerFinancas;
+  window.obterEventosConsolidadosPeriodo = obterEventosConsolidadosPeriodo;
+  window.criarEventoCalendario = criarEventoCalendario;
+  window.editarEventoCalendario = editarEventoCalendario;
+  window.excluirEventoCalendario = excluirEventoCalendario;
+  window.adicionarAniversariante = adicionarAniversariante;
+  window.excluirAniversariante = excluirAniversariante;
+  window.calcularProximoAniversario = calcularProximoAniversario;
+  window.importarEventosICal = importarEventosICal;
+  window.setVisaoCalendario = setVisaoCalendario;
+  window.mudarPeriodoCalendario = mudarPeriodoCalendario;
+  window.filtrarCalendarioMembro = filtrarCalendarioMembro;
+  window.toggleCamadaCalendario = toggleCamadaCalendario;
+  window.abrirDiaCalendario = abrirDiaCalendario;
+  window.adicionarEventoNoDiaModal = adicionarEventoNoDiaModal;
+  window.abrirModalEventoCalendario = abrirModalEventoCalendario;
+  window.toggleDiaInteiroEventoModal = toggleDiaInteiroEventoModal;
+  window.toggleParticipanteEventoModal = toggleParticipanteEventoModal;
+  window.selecionarCorEventoModal = selecionarCorEventoModal;
+  window.salvarEventoCalendarioModal = salvarEventoCalendarioModal;
+  window.excluirEventoCalendarioModal = excluirEventoCalendarioModal;
+  window.abrirModalAniversarios = abrirModalAniversarios;
+  window.salvarAniversarianteModal = salvarAniversarianteModal;
+  window.excluirAniversarianteModal = excluirAniversarianteModal;
+  window.abrirModalImportarICal = abrirModalImportarICal;
+  window.lerArquivoICal = lerArquivoICal;
+  window.confirmarImportarICalModal = confirmarImportarICalModal;
+  window.renderCalendario = renderCalendario;
 }
 
 // EXPORTAÇÃO PARA TESTES / NODE.JS
@@ -7726,6 +9388,36 @@ if (typeof module !== 'undefined' && module.exports) {
     excluirListaAtualDetalhe,
     selecionarTipoNovaLista,
     renderListas,
+    // Super-App Familiar v2.0 (Etapa 3 - Calendário & Aniversários)
+    CORES_CALENDARIO,
+    membroAtualPodeVerFinancas,
+    obterEventosConsolidadosPeriodo,
+    criarEventoCalendario,
+    editarEventoCalendario,
+    excluirEventoCalendario,
+    adicionarAniversariante,
+    excluirAniversariante,
+    calcularProximoAniversario,
+    importarEventosICal,
+    setVisaoCalendario,
+    mudarPeriodoCalendario,
+    filtrarCalendarioMembro,
+    toggleCamadaCalendario,
+    abrirDiaCalendario,
+    adicionarEventoNoDiaModal,
+    abrirModalEventoCalendario,
+    toggleDiaInteiroEventoModal,
+    toggleParticipanteEventoModal,
+    selecionarCorEventoModal,
+    salvarEventoCalendarioModal,
+    excluirEventoCalendarioModal,
+    abrirModalAniversarios,
+    salvarAniversarianteModal,
+    excluirAniversarianteModal,
+    abrirModalImportarICal,
+    lerArquivoICal,
+    confirmarImportarICalModal,
+    renderCalendario,
     getState: () => S,
     S
   };
