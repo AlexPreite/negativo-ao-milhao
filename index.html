@@ -316,6 +316,11 @@
     padding: 8px 10px; border-radius: 8px; background: var(--bg2);
     border: 1px solid var(--border); margin-bottom: 6px; font-size: 12px;
   }
+
+  /* SCANNER INTELIGENTE DE CUPOM & NOTA (Etapa 5) */
+  .badge-cupom { background: rgba(59, 130, 246, 0.18); color: var(--blue); border: 1px solid rgba(59, 130, 246, 0.35); }
+  .alerta-baixa-confianca { background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: var(--yellow); border-radius: var(--radius-sm); padding: 10px 12px; }
+  .alerta-duplicado { background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; border-radius: var(--radius-sm); padding: 10px 12px; }
 </style>
 </head>
 <body>
@@ -427,7 +432,10 @@
             <p class="sec-title" style="margin:0;">📝 Listas da Família</p>
             <p style="font-size:12px;color:var(--muted);margin:2px 0 0;">Compras e tarefas compartilhadas</p>
           </div>
-          <button type="button" class="btn btn-primary" id="btn-nova-lista" style="width:auto;margin:0;padding:8px 14px;font-size:12px;" onclick="abrirModalNovaLista()">+ Nova Lista</button>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn" id="btn-ler-cupom-lista" style="width:auto;margin:0;padding:8px 12px;font-size:12px;" onclick="abrirScannerCupom()">📷 Ler Cupom</button>
+            <button type="button" class="btn btn-primary" id="btn-nova-lista" style="width:auto;margin:0;padding:8px 14px;font-size:12px;" onclick="abrirModalNovaLista()">+ Nova Lista</button>
+          </div>
         </div>
 
         <!-- ABAS DE FILTRO POR TIPO -->
@@ -776,7 +784,10 @@
       <p class="sec-title">Gastos registrados</p>
       <div id="breakdown-gastos"></div>
       <div id="lista-gastos"></div>
-      <button class="btn" onclick="abrirModalGasto()">+ Adicionar gasto</button>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn" style="flex:1;" onclick="abrirModalGasto()">+ Adicionar gasto</button>
+        <button class="btn btn-primary" id="btn-ler-cupom-gastos" style="flex:1;" onclick="abrirScannerCupom()">📷 Ler Cupom / QR</button>
+      </div>
     </div>
 
     <!-- DÍVIDAS -->
@@ -1093,6 +1104,10 @@
       <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalCarteirasBeneficio();">
         <div style="font-size:26px;margin-bottom:4px;">🥗</div>
         <div style="font-size:13px;font-weight:700;">Vales VA / VR</div>
+      </button>
+      <button type="button" class="card" id="btn-ler-cupom-fab" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirScannerCupom();">
+        <div style="font-size:26px;margin-bottom:4px;">📷</div>
+        <div style="font-size:13px;font-weight:700;">Ler Cupom / Nota</div>
       </button>
       <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;grid-column:1 / -1;" onclick="closeM('m-fab-menu');go('explorar');">
         <div style="font-size:22px;margin-bottom:2px;">🧭</div>
@@ -2000,6 +2015,181 @@
       <button type="button" class="btn btn-r" id="cb-btn-excluir" style="display:none;margin-top:6px;" onclick="excluirCarteiraBeneficioModal()">Excluir Carteira</button>
       <button type="button" class="btn" style="margin-top:6px;" onclick="setTabBeneficios('lista')">Cancelar</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL SCANNER DE CUPOM E NOTA FISCAL (Etapa 5) -->
+<div class="modal-bg" id="m-scanner-cupom">
+  <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto;">
+    <span class="modal-close" onclick="fecharScannerCupom()">×</span>
+    <p class="modal-title" style="display:flex;align-items:center;gap:8px;">
+      <span>📷</span>
+      <span>Leitor Inteligente de Cupom / Nota</span>
+    </p>
+
+    <!-- ETAPA 1: ENTRADA / CAPTURA (Arquivo, QR Code ou Texto Offline) -->
+    <div id="scan-cupom-captura">
+      <div style="display:flex;gap:4px;margin-bottom:12px;background:var(--bg3);padding:3px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <button type="button" class="filtro-pill sel" id="tb-scan-foto" style="flex:1;text-align:center;padding:6px 2px;font-size:12px;" onclick="setTabScanner('foto')">📸 Foto / PDF</button>
+        <button type="button" class="filtro-pill" id="tb-scan-qr" style="flex:1;text-align:center;padding:6px 2px;font-size:12px;" onclick="setTabScanner('qr')">📲 QR Code / Chave</button>
+        <button type="button" class="filtro-pill" id="tb-scan-texto" style="flex:1;text-align:center;padding:6px 2px;font-size:12px;" onclick="setTabScanner('texto')">📝 Offline / Texto</button>
+      </div>
+
+      <!-- ABA 1: FOTO / ARQUIVO / PDF -->
+      <div id="scan-tab-arquivo">
+        <div class="card" style="text-align:center;padding:24px 16px;border:2px dashed var(--border2);background:var(--bg3);border-radius:var(--radius-sm);cursor:pointer;" onclick="document.getElementById('scan-cupom-file').click()">
+          <div style="font-size:36px;margin-bottom:8px;">🧾</div>
+          <p style="font-weight:700;font-size:14px;margin-bottom:4px;">Tirar Foto ou Enviar Nota</p>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Suporta fotos de cupom fiscal, SAT, NFC-e e comprovantes em imagem ou PDF.</p>
+          <input type="file" id="scan-cupom-file" accept="image/*,application/pdf" capture="environment" style="display:none;" onchange="aoSelecionarArquivoCupom(event)">
+          <button type="button" class="btn btn-primary" style="width:auto;margin:0 auto;padding:8px 18px;font-size:13px;" onclick="event.stopPropagation();document.getElementById('scan-cupom-file').click()">Selecionar Arquivo / Câmera</button>
+        </div>
+        <div id="scan-cupom-status" style="font-size:12px;color:var(--muted);margin-top:8px;text-align:center;min-height:18px;"></div>
+      </div>
+
+      <!-- ABA 2: QR CODE / CHAVE NFC-E -->
+      <div id="scan-tab-qr" style="display:none;">
+        <div class="input-row">
+          <label>Payload do QR Code ou Chave de Acesso (44 dígitos)</label>
+          <input type="text" id="scan-cupom-qr-input" placeholder="Cole a URL do QR Code da NFC-e ou chave de 44 dígitos..."/>
+          <span style="font-size:11px;color:var(--muted);">Ex: URL da SEFAZ com parâmetro p=... ou os 44 números da nota fiscal.</span>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-processar-qr-cupom" style="margin-top:8px;" onclick="processarQRCupomModal()">Ler QR Code / Chave</button>
+      </div>
+
+      <!-- ABA 3: TEXTO / MODO OFFLINE -->
+      <div id="scan-tab-texto" style="display:none;">
+        <div class="input-row">
+          <label>Texto do Cupom Fiscal / Comprovante (Modo Offline)</label>
+          <textarea id="scan-cupom-texto-input" rows="5" placeholder="Cole o texto do cupom fiscal, SAT ou comprovante impresso..."></textarea>
+          <span style="font-size:11px;color:var(--muted);">Extração determinística local de CNPJ, Data, Itens, Valor Total e Forma de Pagamento.</span>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-processar-texto-cupom" style="margin-top:8px;" onclick="processarTextoCupomModal()">Processar Texto</button>
+      </div>
+    </div>
+
+    <!-- ETAPA 2: REVISÃO OBRIGATÓRIA (Regra de Ouro: NUNCA lançar direto sem revisão) -->
+    <div id="scan-cupom-revisao" style="display:none;margin-top:14px;">
+      <!-- ALERTA DE CUPOM DUPLICADO -->
+      <div id="scan-aviso-duplicado" style="display:none;background:rgba(239,68,68,0.15);border:1px solid #ef4444;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;color:#f87171;font-size:13px;">
+        <strong>⚠️ Atenção: Este cupom fiscal já foi lançado anteriormente!</strong>
+        <p style="font-size:11px;margin:4px 0 0;color:var(--muted);">A chave de acesso ou combinação de estabelecimento, data e valor já consta no histórico da família.</p>
+      </div>
+
+      <!-- ALERTA DE BAIXA CONFIANÇA (< 0.80) -->
+      <div id="scan-aviso-baixa-confianca" style="display:none;background:rgba(245,158,11,0.15);border:1px solid #f59e0b;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;color:var(--yellow);font-size:12px;">
+        <strong>⚠️ Baixa confiança — confira os valores destacados em amarelo antes de salvar.</strong>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;background:var(--bg3);">
+        <p style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px;">📋 Dados Principais da Nota</p>
+
+        <div class="input-row">
+          <label>Estabelecimento / Loja</label>
+          <input type="text" id="scan-rev-estabelecimento" placeholder="Nome do estabelecimento"/>
+        </div>
+
+        <div class="input-row">
+          <label>CNPJ do Emitente</label>
+          <input type="text" id="scan-rev-cnpj" placeholder="00.000.000/0000-00"/>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" class="input-row">
+          <div>
+            <label>Data da Compra</label>
+            <input type="date" id="scan-rev-data"/>
+          </div>
+          <div>
+            <label>Hora</label>
+            <input type="time" id="scan-rev-hora"/>
+          </div>
+        </div>
+
+        <div class="input-row">
+          <label>Valor Total Pago (R$)</label>
+          <input type="number" id="scan-rev-valor-total" step="0.01" inputmode="decimal" style="font-size:18px;font-weight:800;color:var(--green);" oninput="atualizarPreviewDivisaoCupom()"/>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" class="input-row">
+          <div>
+            <label>Categoria Sugerida</label>
+            <select id="scan-rev-categoria" onchange="atualizarPreviewDivisaoCupom()">
+              <option value="mercado">🛒 Mercado / Mercearia</option>
+              <option value="restaurante">🍽️ Restaurante / Alimentação</option>
+              <option value="farmacia">💊 Farmácia / Saúde</option>
+              <option value="transporte">🚗 Transporte / Combustível</option>
+              <option value="lazer">🎉 Lazer / Entretenimento</option>
+              <option value="recorrente">🔄 Recorrente / Contas</option>
+              <option value="outros">📦 Outros</option>
+            </select>
+          </div>
+          <div>
+            <label>Quem Pagou (Titular)</label>
+            <select id="scan-rev-titular" onchange="atualizarPreviewDivisaoCupom()"></select>
+          </div>
+        </div>
+
+        <div class="input-row">
+          <label>Origem / Forma de Pagamento</label>
+          <select id="scan-rev-origem-pagamento" onchange="aoMudarOrigemPagamentoCupom()">
+            <option value="auto">⚡ Automático (VA/VR se alimentação, senão Salário)</option>
+            <option value="VA">🥗 Vale-Alimentação (VA)</option>
+            <option value="VR">🍽️ Vale-Refeição (VR)</option>
+            <option value="salario">💵 Conta Corrente / Salário</option>
+            <option value="cartao">💳 Cartão de Crédito</option>
+          </select>
+        </div>
+
+        <!-- SELETOR DE CARTÃO (SE ORIGEM == CARTÃO) -->
+        <div class="input-row" id="scan-rev-box-cartao" style="display:none;">
+          <label>Selecione o Cartão de Crédito</label>
+          <select id="scan-rev-cartao-id"></select>
+        </div>
+
+        <!-- PREVIEW DE DIVISÃO / BENEFÍCIOS -->
+        <div id="scan-rev-preview-beneficio" style="margin-top:6px;padding:8px 10px;border-radius:6px;background:var(--bg2);font-size:12px;border:1px solid var(--border);display:none;"></div>
+      </div>
+
+      <!-- ITENS DA NOTA EXTRAÍDOS -->
+      <div class="card" style="margin-bottom:12px;background:var(--bg3);">
+        <p style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">🛒 Itens Identificados na Nota</p>
+        <div id="scan-rev-itens-container" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+      <!-- CRUZAMENTO COM A LISTA DE COMPRAS -->
+      <div class="card" id="scan-rev-box-lista-compras" style="margin-bottom:12px;background:var(--bg3);display:none;">
+        <p style="font-size:12px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:8px;">📝 Cruzamento com a Lista de Compras</p>
+        <div id="scan-rev-lista-compras-container" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+      <!-- CHECKBOX FORÇAR DUPLICADO -->
+      <div id="scan-rev-box-forcar-duplicado" style="display:none;margin-bottom:12px;padding:8px;background:var(--bg3);border-radius:6px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="scan-rev-forcar-duplicado" style="width:16px;height:16px;accent-color:var(--red);"/>
+          <span>Confirmar lançamento mesmo sendo cupom duplicado</span>
+        </label>
+      </div>
+
+      <!-- BOTÕES DE AÇÃO -->
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button type="button" class="btn btn-g" id="btn-confirmar-lancamento-cupom" style="padding:12px;font-weight:700;font-size:14px;" onclick="confirmarLancamentoCupomModal()">
+          ✅ Confirmar e Lançar Despesa
+        </button>
+        <button type="button" class="btn" id="btn-cancelar-revisao-cupom" onclick="cancelarRevisaoCupomModal()">
+          Cancelar / Nova Leitura
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETALHE DO CUPOM FISCAL (Etapa 5) -->
+<div class="modal-bg" id="m-detalhe-cupom">
+  <div class="modal" style="max-width:500px;max-height:85vh;overflow-y:auto;">
+    <span class="modal-close" onclick="fecharDetalheCupomModal()">×</span>
+    <p class="modal-title">🧾 Detalhes do Cupom Fiscal</p>
+    <div id="detalhe-cupom-conteudo"></div>
+    <button type="button" class="btn" id="btn-fechar-detalhe-cupom" style="margin-top:14px;" onclick="fecharDetalheCupomModal()">Fechar</button>
   </div>
 </div>
 

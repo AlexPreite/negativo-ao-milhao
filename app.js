@@ -42,7 +42,8 @@ const MODULOS_INICIO_CATALOGO = [
   { id: 'mensagens', nome: 'Mural / Mensagens', desc: 'Recados fixados no mural', icone: '💬', cor: '#06B6D4', bgIcon: 'rgba(6,182,212,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
   { id: 'horario', nome: 'Horário Escolar', desc: 'Aulas e atividades dos filhos', icone: '🎒', cor: '#A855F7', bgIcon: 'rgba(168,85,247,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
   { id: 'contatos', nome: 'Contatos Úteis', desc: 'Telefones de emergência e médicos', icone: '📞', cor: '#64748B', bgIcon: 'rgba(100,116,139,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
-  { id: 'beneficios', nome: 'Vales VA / VR', desc: 'Carteiras de alimentação e refeição', icone: '🥗', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'gastos' }
+  { id: 'beneficios', nome: 'Vales VA / VR', desc: 'Carteiras de alimentação e refeição', icone: '🥗', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'gastos' },
+  { id: 'scanner_cupom', nome: 'Scanner de Cupom', desc: 'Leitura inteligente de notas fiscais com IA', icone: '📷', cor: '#3B82F6', bgIcon: 'rgba(59,130,246,0.14)', categoria: 'avancado', telaAlvo: 'gastos' }
 ];
 
 let S = {
@@ -92,6 +93,9 @@ let S = {
     diaInicioCiclo: 1,
     filtroOrigemAtivo: 'todos'
   },
+  // Super-App Familiar v2.0 (Etapa 5 - Scanner OCR de Cupons e Notas)
+  cuponsFiscais: [],
+  rascunhoCupomAtual: null,
   chat:[],
   apiKey:'',
   onboardingDone:false
@@ -756,6 +760,14 @@ function migrarParaUpgradeFamiliarV2() {
   }
   if (!S.configOrcamento.filtroOrigemAtivo) {
     S.configOrcamento.filtroOrigemAtivo = 'todos';
+  }
+
+  // 11. Cupons Fiscais e Leitura Inteligente (Etapa 5)
+  if (!Array.isArray(S.cuponsFiscais)) {
+    S.cuponsFiscais = [];
+  }
+  if (!('rascunhoCupomAtual' in S)) {
+    S.rascunhoCupomAtual = null;
   }
 }
 
@@ -10173,6 +10185,1219 @@ function salvarConfigCicloOrcamentoModal() {
   }
 }
 
+// ============================================================================
+// ETAPA 5: SCANNER INTELIGENTE DE CUPOM FISCAL, NOTA FISCAL E COMPROVANTE (OCR)
+// ============================================================================
+
+/**
+ * Realiza o parsing determinístico de linhas de itens a partir do texto de cupom fiscal/SAT.
+ */
+function parsearItensCupomTexto(linhas, valorTotalNota) {
+  const itens = [];
+  const palavrasIgnoradas = [
+    'total', 'subtotal', 'desconto', 'acrescimo', 'pagamento', 'forma', 'troco',
+    'dinheiro', 'vale', 'cartao', 'chave', 'cnpj', 'cpf', 'data', 'hora',
+    'cupom', 'fiscal', 'danfe', 'nfc-e', 'sat', 'serie', 'numero', 'extrato',
+    'itens', 'item', 'codigo', 'descricao', 'qtd', 'un', 'vl_unit', 'vl_total',
+    'tributos', 'impostos', 'icms', 'issqn', 'procon', 'sefaz', 'volte', 'sempre',
+    'obrigado', 'atendente', 'caixa', 'operador', 'consumidor'
+  ];
+
+  for (const linha of (linhas || [])) {
+    const lTrim = String(linha || '').trim();
+    if (!lTrim || lTrim.length < 5) continue;
+    const lLower = lTrim.toLowerCase();
+
+    // Linhas de cabeçalho ou totais
+    const primeiraPalavra = lLower.split(/[\s:]+/)[0];
+    if (palavrasIgnoradas.includes(primeiraPalavra)) continue;
+    if (lLower.startsWith('valor total') || lLower.startsWith('total r$') || lLower.startsWith('total a pagar') || lLower.startsWith('forma de pag')) continue;
+
+    // Procura por números no final da linha (valor total do item)
+    const matchFim = lTrim.match(/([\d\.\,]+)\s*$/);
+    if (!matchFim) continue;
+
+    const strValTotal = matchFim[1].replace(',', '.');
+    const valTotalItem = parseFloat(strValTotal);
+    if (isNaN(valTotalItem) || valTotalItem <= 0 || valTotalItem > 100000) continue;
+
+    const restoLinha = lTrim.slice(0, matchFim.index).trim();
+    if (!restoLinha) continue;
+
+    let qtd = 1;
+    let un = 'un';
+    let unitVal = valTotalItem;
+    let desc = restoLinha;
+
+    // Analisa se restoLinha termina com valor unitário (ex: "ARROZ BRANCO 5KG 1 UN 29,90" ou "4 x 5,49")
+    const matchUnit = restoLinha.match(/(?:(\d+(?:[\.\,]\d+)?)\s*(un|kg|g|l|ml|pct|cx|dz|lt)?\s*(?:x|\*|\@)?\s*)?([\d\.\,]+)\s*$/i);
+    if (matchUnit && matchUnit[3]) {
+      const parsedUnit = parseFloat(matchUnit[3].replace(',', '.'));
+      if (!isNaN(parsedUnit) && parsedUnit > 0) {
+        unitVal = parsedUnit;
+        if (matchUnit[1]) {
+          qtd = parseFloat(matchUnit[1].replace(',', '.')) || 1;
+        } else if (valTotalItem > 0 && unitVal > 0) {
+          qtd = Math.round((valTotalItem / unitVal) * 100) / 100 || 1;
+        }
+        if (matchUnit[2]) un = matchUnit[2].toLowerCase();
+        desc = restoLinha.slice(0, matchUnit.index).trim();
+      }
+    }
+
+    // Remove códigos numéricos no início da descrição (ex: "001 ", "7891234567890 ")
+    desc = desc.replace(/^\d{1,14}\s+/, '').trim();
+    if (!desc || desc.length < 2) continue;
+
+    itens.push({
+      descricao: desc,
+      quantidade: qtd,
+      unidade: un,
+      valorUnitario: Math.round(unitVal * 100) / 100,
+      valorTotal: Math.round(valTotalItem * 100) / 100
+    });
+  }
+
+  // Se nenhum item foi extraído mas há valor total na nota, gera item consolidado
+  if (itens.length === 0 && valorTotalNota > 0) {
+    itens.push({
+      descricao: 'Compra Geral / Cupom Fiscal',
+      quantidade: 1,
+      unidade: 'un',
+      valorUnitario: valorTotalNota,
+      valorTotal: valorTotalNota
+    });
+  }
+
+  return itens;
+}
+
+/**
+ * Extrai deterministicamente dados de um cupom a partir de texto puro, URL da SEFAZ ou payload de QR Code.
+ */
+function extrairDadosCupomTextoOuQR(textoOuQR) {
+  const raw = String(textoOuQR || '').trim();
+  if (!raw) {
+    return {
+      id: 'cupom_' + Date.now(),
+      estabelecimento: 'Cupom Não Identificado',
+      cnpj: null,
+      data: new Date().toISOString().slice(0, 10),
+      hora: '12:00',
+      chaveAcesso: null,
+      valorTotal: 0,
+      valorTotalCentavos: 0,
+      descontos: 0,
+      acrescimos: 0,
+      formaPagamentoDetectada: 'auto',
+      categoriaSugerida: 'outros',
+      itens: [],
+      confiancaCampos: {
+        estabelecimento: 0.1,
+        data: 0.1,
+        valorTotal: 0.0,
+        formaPagamento: 0.1
+      }
+    };
+  }
+
+  // 1. Extração de Chave de Acesso (44 dígitos contínuos ou em URL com p=...)
+  let chaveAcesso = null;
+  const matchChave = raw.match(/\b(\d{44})\b/);
+  if (matchChave) {
+    chaveAcesso = matchChave[1];
+  } else {
+    const matchUrlP = raw.match(/[?&]p=([0-9]{44})/i);
+    if (matchUrlP) chaveAcesso = matchUrlP[1];
+  }
+
+  // 2. Extração de CNPJ
+  let cnpj = null;
+  const matchCnpj = raw.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/);
+  if (matchCnpj) {
+    cnpj = matchCnpj[0];
+  } else if (chaveAcesso && chaveAcesso.length === 44) {
+    // Na chave de 44 dígitos: posições 6 a 19 são os 14 dígitos do CNPJ
+    const cNum = chaveAcesso.slice(6, 20);
+    cnpj = `${cNum.slice(0, 2)}.${cNum.slice(2, 5)}.${cNum.slice(5, 8)}/${cNum.slice(8, 12)}-${cNum.slice(12, 14)}`;
+  } else {
+    const matchCnpjNum = raw.match(/(?:CNPJ|CGC)[:\s]*(\d{14})\b/i);
+    if (matchCnpjNum) {
+      const cNum = matchCnpjNum[1];
+      cnpj = `${cNum.slice(0, 2)}.${cNum.slice(2, 5)}.${cNum.slice(5, 8)}/${cNum.slice(8, 12)}-${cNum.slice(12, 14)}`;
+    }
+  }
+
+  // 3. Extração de Data e Hora
+  let data = null;
+  let matchDataEncontrada = false;
+  const matchDataBr = raw.match(/\b(\d{2})[\/\-](\d{2})[\/\-](\d{4})\b/);
+  if (matchDataBr) {
+    const [, d, m, a] = matchDataBr;
+    data = `${a}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    matchDataEncontrada = true;
+  } else if (chaveAcesso && chaveAcesso.length === 44) {
+    // Posições 2 a 5 da chave indicam ano (2 dígitos) e mês (2 dígitos)
+    const ano = '20' + chaveAcesso.slice(2, 4);
+    const mes = chaveAcesso.slice(4, 6);
+    data = `${ano}-${mes}-01`;
+  } else {
+    data = new Date().toISOString().slice(0, 10);
+  }
+
+  let hora = '12:00';
+  const matchHora = raw.match(/\b([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b/);
+  if (matchHora) {
+    hora = `${matchHora[1]}:${matchHora[2]}`;
+  }
+
+  // 4. Extração de Valor Total
+  let valorTotal = 0;
+  let matchTotalEncontrado = false;
+  const matchTotal = raw.match(/(?:VALOR\s+TOTAL|TOTAL\s+A\s+PAGAR|VALOR\s+PAGO|VALOR\s+RECEBIDO|TOTAL\s*R?\$|VALOR\s+LIQUIDO|TOTAL)[:\s]*R?\$?\s*([\d\.\,]+)/i);
+  if (matchTotal) {
+    const limpo = matchTotal[1].replace(',', '.');
+    const parsed = parseFloat(limpo);
+    if (!isNaN(parsed) && parsed > 0) {
+      valorTotal = parsed;
+      matchTotalEncontrado = true;
+    }
+  }
+
+  // 5. Linhas do texto para itens e estabelecimento
+  const linhas = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const itens = parsearItensCupomTexto(linhas, valorTotal);
+
+  // Se não achou na linha de total mas há itens, soma os itens
+  if (valorTotal === 0 && itens.length > 0) {
+    const somaItens = itens.reduce((acc, it) => acc + (it.valorTotal || 0), 0);
+    if (somaItens > 0) {
+      valorTotal = Math.round(somaItens * 100) / 100;
+      matchTotalEncontrado = true;
+    }
+  }
+
+  // 6. Extração de Descontos e Acréscimos
+  let descontos = 0;
+  const matchDesc = raw.match(/(?:DESCONTO|DESCONTOS)[:\s]*R?\$?\s*([\d\.\,]+)/i);
+  if (matchDesc) descontos = parseFloat(matchDesc[1].replace(',', '.')) || 0;
+
+  let acrescimos = 0;
+  const matchAcre = raw.match(/(?:ACRESCIMO|ACRESCIMOS|TAXA\s+SERVICO)[:\s]*R?\$?\s*([\d\.\,]+)/i);
+  if (matchAcre) acrescimos = parseFloat(matchAcre[1].replace(',', '.')) || 0;
+
+  // 7. Detecção de Forma de Pagamento
+  let formaPagamento = 'auto';
+  const rawLower = raw.toLowerCase();
+  if (rawLower.includes('vale alimentacao') || rawLower.includes('vale-alimentacao') || rawLower.includes('alelo alimentacao') || rawLower.includes('sodexo alimentacao') || rawLower.includes('ticket alimentacao') || rawLower.includes('cartao alimentacao') || rawLower.includes('va alimentacao') || /\bva\b/i.test(raw)) {
+    formaPagamento = 'VA';
+  } else if (rawLower.includes('vale refeicao') || rawLower.includes('vale-refeicao') || rawLower.includes('alelo refeicao') || rawLower.includes('sodexo refeicao') || rawLower.includes('ticket restaurante') || rawLower.includes('cartao refeicao') || rawLower.includes('vr refeicao') || /\bvr\b/i.test(raw)) {
+    formaPagamento = 'VR';
+  } else if (rawLower.includes('credito') || rawLower.includes('cartao de credito')) {
+    formaPagamento = 'credito';
+  } else if (rawLower.includes('debito') || rawLower.includes('cartao de debito')) {
+    formaPagamento = 'debito';
+  } else if (rawLower.includes('pix')) {
+    formaPagamento = 'pix';
+  } else if (rawLower.includes('dinheiro') || rawLower.includes('especie')) {
+    formaPagamento = 'dinheiro';
+  }
+
+  // 8. Estabelecimento
+  let estabelecimento = '';
+  for (const l of linhas) {
+    const lLow = l.toLowerCase();
+    if (lLow.includes('danfe') || lLow.includes('nfc-e') || lLow.includes('documento auxiliar') || lLow.includes('cupom fiscal') || lLow.includes('sefaz') || lLow.includes('extrato') || lLow.includes('http') || lLow.startsWith('cnpj') || lLow.startsWith('data')) {
+      continue;
+    }
+    if (/[a-zA-Z]{3,}/.test(l)) {
+      estabelecimento = l;
+      break;
+    }
+  }
+  if (!estabelecimento) {
+    estabelecimento = cnpj ? `Estabelecimento ${cnpj}` : 'Estabelecimento Comercial';
+  }
+
+  // 9. Categoria Sugerida
+  let categoria = 'outros';
+  const termosMercado = ['mercado', 'supermercado', 'hipermercado', 'atacado', 'atacadão', 'atacadao', 'mercearia', 'hortifruti', 'acougue', 'açougue', 'sacolao', 'sacolão', 'carrefour', 'pao de acucar', 'pão de açúcar', 'assai', 'assaí', 'extra', 'feira'];
+  const termosRestaurante = ['restaurante', 'lanchonete', 'pizzaria', 'hamburgueria', 'padaria', 'bar', 'cafe', 'café', 'cafeteria', 'bistro', 'bistrô', 'churrascaria', 'grill', 'delivery', 'ifood', 'almoço', 'jantar'];
+  const termosFarmacia = ['farmacia', 'farmácia', 'drogaria', 'medicamento', 'droga', 'panvel', 'raia', 'drogasil', 'pague menos'];
+  const termosTransporte = ['posto', 'combustivel', 'combustível', 'gasolina', 'etanol', 'diesel', 'auto posto', 'uber', '99'];
+  const termosLazer = ['cinema', 'teatro', 'parque', 'show', 'ingresso'];
+
+  if (termosMercado.some(t => rawLower.includes(t))) {
+    categoria = 'mercado';
+  } else if (termosRestaurante.some(t => rawLower.includes(t))) {
+    categoria = 'restaurante';
+  } else if (termosFarmacia.some(t => rawLower.includes(t))) {
+    categoria = 'farmacia';
+  } else if (termosTransporte.some(t => rawLower.includes(t))) {
+    categoria = 'transporte';
+  } else if (termosLazer.some(t => rawLower.includes(t))) {
+    categoria = 'lazer';
+  } else if (formaPagamento === 'VA') {
+    categoria = 'mercado';
+  } else if (formaPagamento === 'VR') {
+    categoria = 'restaurante';
+  }
+
+  // 10. Cálculo de Confiança dos Campos
+  const confiancaCampos = {
+    estabelecimento: (estabelecimento && !estabelecimento.startsWith('Estabelecimento Comercial') && !estabelecimento.startsWith('Cupom Não Identificado')) ? 0.95 : 0.50,
+    data: matchDataEncontrada ? 0.95 : (chaveAcesso ? 0.85 : 0.60),
+    valorTotal: (valorTotal > 0 && matchTotalEncontrado) ? 0.98 : (valorTotal > 0 ? 0.70 : 0.0),
+    formaPagamento: formaPagamento !== 'auto' ? 0.90 : 0.50
+  };
+
+  return {
+    id: 'cupom_' + Date.now(),
+    estabelecimento,
+    cnpj,
+    data,
+    hora,
+    chaveAcesso,
+    valorTotal,
+    valorTotalCentavos: Math.round(valorTotal * 100),
+    descontos,
+    acrescimos,
+    formaPagamentoDetectada: formaPagamento,
+    categoriaSugerida: categoria,
+    itens,
+    confiancaCampos
+  };
+}
+
+/**
+ * Gera um identificador único determinístico para o cupom fiscal (chave de 44 dígitos ou tupla estabelecimento/cnpj + data + total).
+ */
+function gerarHashCupomFiscal(dados) {
+  if (!dados) return '';
+  const chave = dados.chaveAcesso ? String(dados.chaveAcesso).replace(/\D/g, '') : '';
+  if (chave && chave.length === 44) {
+    return 'chave_' + chave;
+  }
+  const estab = (dados.cnpj || dados.estabelecimento || 'sem_estab')
+    .toString()
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  const dataYmd = (dados.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const centavos = Math.round((Number(dados.valorTotal) || 0) * 100);
+  return `${estab}|${dataYmd}|${centavos}`;
+}
+
+/**
+ * Verifica se o cupom já foi registrado no histórico da família (em S.cuponsFiscais ou S.gastos).
+ */
+function verificarCupomDuplicado(hashCupom) {
+  if (!hashCupom) return false;
+  const emCupons = (S.cuponsFiscais || []).some(c => c.hashCupom === hashCupom);
+  if (emCupons) return true;
+  const emGastos = (S.gastos || []).some(g => g.hashCupom === hashCupom);
+  if (emGastos) return true;
+  const emCompras = (S.comprasCartao || []).some(c => c.hashCupom === hashCupom);
+  if (emCompras) return true;
+  return false;
+}
+
+/**
+ * Cruza os itens extraídos do cupom fiscal com os itens pendentes nas listas de compras ativas.
+ */
+function cruzarItensCupomComListaCompras(itensCupom, listas) {
+  const listasAlvo = (listas || S.listas || []).filter(l => l.tipo === 'compras');
+  if (!Array.isArray(itensCupom) || itensCupom.length === 0 || listasAlvo.length === 0) {
+    return [];
+  }
+
+  function normalizar(txt) {
+    return String(txt || '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .trim();
+  }
+
+  const matches = [];
+  const itemListaIdsAdicionados = new Set();
+
+  listasAlvo.forEach(lista => {
+    (lista.itens || []).forEach(itemLista => {
+      if (itemLista.comprado) return;
+      if (itemListaIdsAdicionados.has(itemLista.id)) return;
+
+      const normLista = normalizar(itemLista.nome);
+      if (!normLista) return;
+
+      const tokensLista = normLista.split(/\s+/).filter(t => t.length >= 3 && !['pct', 'caixa', 'lata', 'litro', 'quilo', 'unid'].includes(t));
+
+      for (const itemCupom of itensCupom) {
+        const normCupom = normalizar(itemCupom.descricao);
+        const contemNomeExato = normCupom.includes(normLista);
+        const contemTokens = tokensLista.length > 0 && tokensLista.every(t => normCupom.includes(t));
+
+        if (contemNomeExato || contemTokens) {
+          itemListaIdsAdicionados.add(itemLista.id);
+          matches.push({
+            itemListaId: itemLista.id,
+            listaId: lista.id,
+            nomeLista: lista.titulo,
+            itemNome: itemLista.nome,
+            cupomItemDescricao: itemCupom.descricao,
+            precoUnitarioCupom: itemCupom.valorUnitario || itemCupom.valorTotal,
+            quantidadeCupom: itemCupom.quantidade || 1
+          });
+          break;
+        }
+      }
+    });
+  });
+
+  return matches;
+}
+
+/**
+ * Envia o documento para o Gemini Vision utilizando a cadeia de fallback de 5 modelos resilientes.
+ */
+async function chamarGeminiVisionCupom(base64, mimeType = 'image/jpeg') {
+  if (!apiKey && (!S || !S.apiKey)) {
+    throw new Error('Configure a Gemini API Key em Configurações para usar a inteligência artificial.');
+  }
+
+  const prompt = `Você é um leitor especialista em notas fiscais eletrônicas brasileiras (NFC-e, NF-e, SAT, CF-e e comprovantes de pagamento).
+Analise a imagem/documento fornecido e extraia todos os dados com máxima precisão.
+Responda ESTRITAMENTE em formato JSON puro, sem blocos de código markdown (\`\`\`json), sem textos extras antes ou depois.
+
+Formato do JSON esperado:
+{
+  "estabelecimento": "Nome da loja/mercado/restaurante",
+  "cnpj": "00.000.000/0000-00",
+  "data": "YYYY-MM-DD",
+  "hora": "HH:MM",
+  "chaveAcesso": "44 dígitos se visível ou vazio",
+  "valorTotal": 0.00,
+  "descontos": 0.00,
+  "acrescimos": 0.00,
+  "formaPagamento": "VA|VR|credito|debito|pix|dinheiro",
+  "categoria": "mercado|restaurante|farmacia|transporte|lazer|recorrente|outros",
+  "itens": [
+    {
+      "descricao": "Nome do produto ou serviço",
+      "quantidade": 1.0,
+      "unidade": "un|kg|pct|cx|l|g",
+      "valorUnitario": 0.00,
+      "valorTotal": 0.00
+    }
+  ],
+  "confianca": {
+    "estabelecimento": 0.95,
+    "data": 0.95,
+    "valorTotal": 0.98,
+    "formaPagamento": 0.90
+  }
+}`;
+
+  const resultado = await chamarGeminiComFallback({
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { inline_data: { mime_type: mimeType, data: base64 } }
+      ]
+    }],
+    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1200 }
+  });
+
+  const texto = resultado.text;
+  if (!texto) throw new Error('Sem resposta dos modelos Gemini na extração do cupom fiscal.');
+
+  const limpo = texto.replace(/```json/gi, '').replace(/```/g, '').trim();
+  const parsed = JSON.parse(limpo);
+
+  const valorTotal = typeof parsed.valorTotal === 'number' ? parsed.valorTotal : parseFloat(parsed.valorTotal) || 0;
+  return {
+    id: 'cupom_' + Date.now(),
+    estabelecimento: parsed.estabelecimento || 'Estabelecimento Comercial',
+    cnpj: parsed.cnpj || null,
+    data: parsed.data || new Date().toISOString().slice(0, 10),
+    hora: parsed.hora || '12:00',
+    chaveAcesso: parsed.chaveAcesso ? String(parsed.chaveAcesso).replace(/\D/g, '') : null,
+    valorTotal,
+    valorTotalCentavos: Math.round(valorTotal * 100),
+    descontos: parseFloat(parsed.descontos) || 0,
+    acrescimos: parseFloat(parsed.acrescimos) || 0,
+    formaPagamentoDetectada: parsed.formaPagamento || 'auto',
+    categoriaSugerida: parsed.categoria || 'outros',
+    itens: Array.isArray(parsed.itens) ? parsed.itens.map(i => ({
+      descricao: i.descricao || 'Item',
+      quantidade: parseFloat(i.quantidade) || 1,
+      unidade: i.unidade || 'un',
+      valorUnitario: parseFloat(i.valorUnitario) || parseFloat(i.valorTotal) || 0,
+      valorTotal: parseFloat(i.valorTotal) || 0
+    })) : [],
+    confiancaCampos: parsed.confianca || {
+      estabelecimento: 0.95,
+      data: 0.90,
+      valorTotal: 0.98,
+      formaPagamento: 0.85
+    }
+  };
+}
+
+/**
+ * Processa o documento fiscal (imagem, QR ou texto), gerando um rascunho de conferência.
+ * Regra de Ouro: NUNCA lança direto em S.gastos sem confirmação expressa do usuário!
+ */
+function processarDocumentoFiscal(dadosEntrada) {
+  // 1. Blindagem estrita do perfil crianca
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    return {
+      ok: false,
+      motivo: 'perfil_crianca_bloqueado',
+      mensagem: 'Perfil de criança não tem permissão para ler ou lançar cupons fiscais.'
+    };
+  }
+
+  let rascunho = null;
+
+  // 2. Extração via mock direto (usado na suíte de testes) ou parser determinístico
+  if (dadosEntrada && dadosEntrada.mockVisionResultado) {
+    rascunho = Object.assign({}, dadosEntrada.mockVisionResultado);
+    if (!rascunho.id) rascunho.id = 'cupom_' + Date.now();
+    if (!rascunho.valorTotalCentavos) {
+      rascunho.valorTotalCentavos = Math.round(Number(rascunho.valorTotal || 0) * 100);
+    }
+    if (!rascunho.formaPagamentoDetectada && rascunho.formaPagamento) {
+      rascunho.formaPagamentoDetectada = rascunho.formaPagamento;
+    }
+    if (!rascunho.categoriaSugerida && rascunho.categoria) {
+      rascunho.categoriaSugerida = rascunho.categoria;
+    }
+    if (!rascunho.confiancaCampos) {
+      rascunho.confiancaCampos = rascunho.confianca || {
+        estabelecimento: 0.95,
+        data: 0.95,
+        valorTotal: 0.98,
+        formaPagamento: 0.90
+      };
+    }
+  } else {
+    const textoParaExtrair = typeof dadosEntrada === 'string'
+      ? dadosEntrada
+      : (dadosEntrada?.conteudo || dadosEntrada?.texto || dadosEntrada?.payloadQR || '');
+
+    rascunho = extrairDadosCupomTextoOuQR(textoParaExtrair);
+  }
+
+  // 3. Hash e verificação anti-duplicidade
+  const hash = gerarHashCupomFiscal(rascunho);
+  rascunho.hashCupom = hash;
+  rascunho.duplicado = verificarCupomDuplicado(hash);
+
+  // 4. Cruzamento inteligente com a lista de compras
+  rascunho.itensCorrespondentesLista = cruzarItensCupomComListaCompras(rascunho.itens, S.listas);
+
+  // 5. Salva no rascunho para revisão do usuário
+  S.rascunhoCupomAtual = rascunho;
+
+  // 6. Atualiza a tela de revisão se estiver em ambiente DOM
+  if (typeof document !== 'undefined' && typeof renderRevisaoCupomModal === 'function') {
+    renderRevisaoCupomModal();
+  }
+
+  return {
+    ok: true,
+    rascunho
+  };
+}
+
+/**
+ * Confirma o lançamento do cupom fiscal após conferência/edição do usuário.
+ */
+function confirmarLancamentoCupomFiscal(opcoes = {}) {
+  // 1. Blindagem estrita do perfil crianca
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    return {
+      ok: false,
+      motivo: 'perfil_crianca_bloqueado',
+      mensagem: 'Perfil de criança não tem permissão para lançar despesas fiscais.'
+    };
+  }
+
+  // 2. Rascunho da nota
+  const rascunho = opcoes.rascunhoOverride || S.rascunhoCupomAtual;
+  if (!rascunho) {
+    return {
+      ok: false,
+      motivo: 'sem_rascunho',
+      mensagem: 'Nenhum rascunho de cupom fiscal em conferência.'
+    };
+  }
+
+  // 3. Anti-duplicidade
+  const hash = rascunho.hashCupom || gerarHashCupomFiscal(rascunho);
+  const duplicado = verificarCupomDuplicado(hash);
+  if (duplicado && !opcoes.forcarDuplicado) {
+    return {
+      ok: false,
+      motivo: 'cupom_duplicado',
+      mensagem: 'Atenção: Este cupom fiscal já foi lançado anteriormente!'
+    };
+  }
+
+  // 4. Parâmetros de consolidação
+  const estabFinal = (opcoes.estabelecimento !== undefined ? opcoes.estabelecimento : rascunho.estabelecimento) || 'Estabelecimento';
+  const valorFinal = Math.round((opcoes.valorTotal !== undefined ? Number(opcoes.valorTotal) : Number(rascunho.valorTotal || 0)) * 100) / 100;
+  const dataFinal = (opcoes.data || rascunho.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const horaFinal = opcoes.hora || rascunho.hora || '12:00';
+  const catFinal = opcoes.categoria || rascunho.categoriaSugerida || 'outros';
+  const titularFinal = opcoes.titular || (membroAtivo ? membroAtivo.nome : 'Família');
+  const origemFinal = opcoes.origemPagamento || rascunho.formaPagamentoDetectada || 'auto';
+  const cartaoIdFinal = opcoes.cartaoId || null;
+
+  let gastoCriado = null;
+  let compraCartaoCriada = null;
+
+  const cupomId = rascunho.id || ('cupom_' + Date.now());
+
+  // 5. Lançamento Financeiro (Cartão de Crédito ou VA / VR / Salário com Split)
+  if (origemFinal === 'cartao' && cartaoIdFinal) {
+    const cartao = (S.cartoes || []).find(c => c.id === cartaoIdFinal);
+    const mesFatura = cartao
+      ? calcularMesFaturaCompra(dataFinal, cartao.diaFechamento, cartao.diaVencimento)
+      : mesAtual;
+
+    compraCartaoCriada = {
+      id: Date.now(),
+      cartaoId: cartaoIdFinal,
+      desc: estabFinal,
+      valorTotal: valorFinal,
+      parcelas: 1,
+      parcelaAtual: 1,
+      valorParcela: valorFinal,
+      dataCompra: dataFinal,
+      mesFatura,
+      titular: titularFinal,
+      categoria: catFinal,
+      cupomFiscalId: cupomId,
+      hashCupom: hash
+    };
+    if (!Array.isArray(S.comprasCartao)) S.comprasCartao = [];
+    S.comprasCartao.push(compraCartaoCriada);
+
+    if (typeof verificarEReabrirFatura === 'function') {
+      verificarEReabrirFatura(cartaoIdFinal, mesFatura);
+    }
+  } else {
+    // Lança via registrarGastoComBeneficio (respeita VA / VR / Split e Regra de Ouro!)
+    const gastoId = Date.now();
+    gastoCriado = registrarGastoComBeneficio({
+      id: gastoId,
+      desc: estabFinal,
+      val: valorFinal,
+      cat: catFinal,
+      titular: titularFinal,
+      data: dataFinal,
+      pago: true,
+      origemPagamento: origemFinal
+    });
+    gastoCriado.cupomFiscalId = cupomId;
+    gastoCriado.hashCupom = hash;
+    if (!Array.isArray(S.gastos)) S.gastos = [];
+    S.gastos.push(gastoCriado);
+  }
+
+  // 6. Registro oficial em S.cuponsFiscais
+  const novoCupom = {
+    id: cupomId,
+    circuloId: S.circuloAtivoId || 'circ_1',
+    membroId: S.membroAtivoId || null,
+    gastoId: gastoCriado ? gastoCriado.id : null,
+    compraCartaoId: compraCartaoCriada ? compraCartaoCriada.id : null,
+    estabelecimento: estabFinal,
+    cnpj: rascunho.cnpj || null,
+    data: dataFinal,
+    hora: horaFinal,
+    valorTotal: valorFinal,
+    valorTotalCentavos: Math.round(valorFinal * 100),
+    descontos: rascunho.descontos || 0,
+    acrescimos: rascunho.acrescimos || 0,
+    formaPagamento: origemFinal,
+    categoria: catFinal,
+    chaveAcesso: rascunho.chaveAcesso || null,
+    hashCupom: hash,
+    itens: rascunho.itens || [],
+    confiancaCampos: rascunho.confiancaCampos || {},
+    criadoPor: S.membroAtivoId,
+    criadoEm: new Date().toISOString()
+  };
+
+  if (!Array.isArray(S.cuponsFiscais)) S.cuponsFiscais = [];
+  S.cuponsFiscais.push(novoCupom);
+
+  // 7. Atualização de itens correspondentes na Lista de Compras
+  const itensParaComprarIds = opcoes.itensListaParaComprar || (rascunho.itensCorrespondentesLista || []).map(m => m.itemListaId);
+  if (Array.isArray(itensParaComprarIds) && itensParaComprarIds.length > 0) {
+    (S.listas || []).forEach(lista => {
+      if (lista.tipo !== 'compras') return;
+      (lista.itens || []).forEach(it => {
+        if (itensParaComprarIds.includes(it.id)) {
+          it.comprado = true;
+          it.compradoEm = new Date().toISOString();
+          it.compradoPor = titularFinal;
+        }
+      });
+    });
+  }
+
+  // 8. Atualização do Histórico de Compras Inteligente (preço unitário real e frequência)
+  if (!Array.isArray(S.historicoCompras)) S.historicoCompras = [];
+  (rascunho.itens || []).forEach(it => {
+    const nomeLimpo = (it.descricao || '').trim();
+    if (!nomeLimpo) return;
+    const preco = it.valorUnitario || it.valorTotal || 0;
+    const existente = S.historicoCompras.find(h => h.nome.toLowerCase() === nomeLimpo.toLowerCase());
+    if (existente) {
+      existente.vezesUsado = (existente.vezesUsado || 1) + 1;
+      if (preco > 0) existente.precoUltimo = preco;
+    } else {
+      S.historicoCompras.push({
+        nome: nomeLimpo,
+        categoria: catFinal,
+        precoUltimo: preco,
+        vezesUsado: 1
+      });
+    }
+  });
+
+  // 9. Registro no feed de atividades da família
+  if (typeof registrarAtividadeFamilia === 'function') {
+    registrarAtividadeFamilia(
+      'financeiro',
+      `Cupom fiscal lançado: ${estabFinal} (R$ ${fmt ? fmt(valorFinal) : valorFinal})`,
+      { cupomId: novoCupom.id, gastoId: novoCupom.gastoId }
+    );
+  }
+
+  // 10. Limpa rascunho
+  S.rascunhoCupomAtual = null;
+
+  if (typeof save === 'function') save();
+  if (typeof render === 'function' && typeof document !== 'undefined') render();
+
+  return {
+    ok: true,
+    cupom: novoCupom,
+    gasto: gastoCriado || compraCartaoCriada
+  };
+}
+
+/**
+ * Exclui um cupom fiscal do histórico.
+ */
+function excluirCupomFiscal(cupomId) {
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    return { ok: false, motivo: 'perfil_crianca_bloqueado' };
+  }
+  if (!Array.isArray(S.cuponsFiscais)) return { ok: false };
+  S.cuponsFiscais = S.cuponsFiscais.filter(c => c.id !== cupomId);
+  if (typeof save === 'function') save();
+  if (typeof render === 'function' && typeof document !== 'undefined') render();
+  return { ok: true };
+}
+
+/**
+ * Abre o modal do scanner de cupom fiscal com validação de perfil de criança.
+ */
+function abrirScannerCupom() {
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    if (typeof exibirToastNotificacao === 'function') {
+      exibirToastNotificacao('Acesso restrito aos administradores e adultos da família.', '🔒');
+    } else if (typeof alert === 'function') {
+      alert('Acesso restrito aos responsáveis adultos.');
+    }
+    return false;
+  }
+
+  if (typeof document === 'undefined') return true;
+
+  const fileInput = document.getElementById('scan-cupom-file');
+  if (fileInput) fileInput.value = '';
+  const st = document.getElementById('scan-cupom-status');
+  if (st) st.textContent = '';
+  const qrInput = document.getElementById('scan-cupom-qr-input');
+  if (qrInput) qrInput.value = '';
+  const textoInput = document.getElementById('scan-cupom-texto-input');
+  if (textoInput) textoInput.value = '';
+
+  const revEl = document.getElementById('scan-cupom-revisao');
+  if (revEl) revEl.style.display = 'none';
+  const capturaEl = document.getElementById('scan-cupom-captura');
+  if (capturaEl) capturaEl.style.display = 'block';
+
+  if (typeof setTabScanner === 'function') setTabScanner('foto');
+
+  if (typeof openM === 'function') {
+    openM('m-scanner-cupom');
+  }
+  return true;
+}
+
+function fecharScannerCupom() {
+  if (typeof closeM === 'function') {
+    closeM('m-scanner-cupom');
+  }
+}
+
+function setTabScanner(tab) {
+  if (typeof document === 'undefined') return;
+  const tabs = ['foto', 'qr', 'texto'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`tb-scan-${t}`);
+    if (btn) btn.classList.toggle('sel', t === tab);
+  });
+
+  const pnlFoto = document.getElementById('scan-tab-arquivo');
+  const pnlQr = document.getElementById('scan-tab-qr');
+  const pnlTexto = document.getElementById('scan-tab-texto');
+
+  if (pnlFoto) pnlFoto.style.display = tab === 'foto' ? 'block' : 'none';
+  if (pnlQr) pnlQr.style.display = tab === 'qr' ? 'block' : 'none';
+  if (pnlTexto) pnlTexto.style.display = tab === 'texto' ? 'block' : 'none';
+}
+
+async function aoSelecionarArquivoCupom(event) {
+  if (typeof document === 'undefined') return;
+  const file = event?.target?.files?.[0] || document.getElementById('scan-cupom-file')?.files?.[0];
+  const st = document.getElementById('scan-cupom-status');
+  if (!file) return;
+
+  if (st) st.textContent = '🔎 Lendo e analisando documento...';
+
+  try {
+    const base64 = await fileToBase64(file);
+    let dadosRascunho = null;
+
+    if (apiKey || (S && S.apiKey)) {
+      if (st) st.textContent = '🤖 Extraindo dados com Gemini Vision...';
+      dadosRascunho = await chamarGeminiVisionCupom(base64, file.type || 'image/jpeg');
+    }
+
+    const res = processarDocumentoFiscal({
+      tipoEntrada: file.type === 'application/pdf' ? 'pdf' : 'imagem',
+      conteudo: file.name,
+      mockVisionResultado: dadosRascunho
+    });
+
+    if (st) st.textContent = res.ok ? '✅ Leitura concluída! Confira os dados abaixo.' : '⚠️ Preencha manualmente os campos.';
+  } catch (err) {
+    console.error('Erro em aoSelecionarArquivoCupom:', err);
+    if (st) st.textContent = '❌ Erro ao ler comprovante: ' + (err.message || 'Falha no processamento.');
+  }
+}
+
+function processarQRCupomModal() {
+  if (typeof document === 'undefined') return;
+  const input = document.getElementById('scan-cupom-qr-input');
+  const val = (input?.value || '').trim();
+  if (!val) {
+    if (typeof alert === 'function') alert('Cole a URL do QR Code da NFC-e ou chave de 44 dígitos.');
+    return;
+  }
+  const res = processarDocumentoFiscal(val);
+  if (!res.ok) {
+    if (typeof alert === 'function') alert(res.mensagem || 'Erro ao processar QR Code.');
+  }
+}
+
+function processarTextoCupomModal() {
+  if (typeof document === 'undefined') return;
+  const input = document.getElementById('scan-cupom-texto-input');
+  const val = (input?.value || '').trim();
+  if (!val) {
+    if (typeof alert === 'function') alert('Cole o texto do cupom fiscal.');
+    return;
+  }
+  const res = processarDocumentoFiscal(val);
+  if (!res.ok) {
+    if (typeof alert === 'function') alert(res.mensagem || 'Erro ao processar texto.');
+  }
+}
+
+function renderRevisaoCupomModal() {
+  if (typeof document === 'undefined') return;
+  const rascunho = S.rascunhoCupomAtual;
+  if (!rascunho) return;
+
+  const revEl = document.getElementById('scan-cupom-revisao');
+  if (!revEl) return;
+  revEl.style.display = 'block';
+
+  const capturaEl = document.getElementById('scan-cupom-captura');
+  if (capturaEl) capturaEl.style.display = 'none';
+
+  // 1. Dados básicos
+  const estEl = document.getElementById('scan-rev-estabelecimento');
+  if (estEl) estEl.value = rascunho.estabelecimento || '';
+
+  const cnpjEl = document.getElementById('scan-rev-cnpj');
+  if (cnpjEl) cnpjEl.value = rascunho.cnpj || '';
+
+  const dataEl = document.getElementById('scan-rev-data');
+  if (dataEl) dataEl.value = rascunho.data || new Date().toISOString().slice(0, 10);
+
+  const horaEl = document.getElementById('scan-rev-hora');
+  if (horaEl) horaEl.value = rascunho.hora || '12:00';
+
+  const valEl = document.getElementById('scan-rev-valor-total');
+  if (valEl) valEl.value = rascunho.valorTotal || 0;
+
+  const catEl = document.getElementById('scan-rev-categoria');
+  if (catEl && rascunho.categoriaSugerida) catEl.value = rascunho.categoriaSugerida;
+
+  // 2. Titulares adultos
+  const titEl = document.getElementById('scan-rev-titular');
+  if (titEl) {
+    const adultos = (S.membrosPerfil || []).filter(m => m.papel !== 'crianca');
+    titEl.innerHTML = adultos.map(m => `<option value="${escapeHtml(m.nome)}">${escapeHtml(m.nome)}</option>`).join('');
+    const ativo = obterMembroAtivo();
+    if (ativo && ativo.papel !== 'crianca') titEl.value = ativo.nome;
+  }
+
+  // 3. Origem de pagamento sugerida
+  const origEl = document.getElementById('scan-rev-origem-pagamento');
+  if (origEl) {
+    if (['VA', 'VR', 'credito', 'debito', 'pix', 'dinheiro'].includes(rascunho.formaPagamentoDetectada)) {
+      if (rascunho.formaPagamentoDetectada === 'credito') origEl.value = 'cartao';
+      else if (rascunho.formaPagamentoDetectada === 'debito' || rascunho.formaPagamentoDetectada === 'pix' || rascunho.formaPagamentoDetectada === 'dinheiro') origEl.value = 'salario';
+      else origEl.value = rascunho.formaPagamentoDetectada;
+    } else {
+      origEl.value = 'auto';
+    }
+  }
+
+  // 4. Cartões disponíveis
+  const cartaoSel = document.getElementById('scan-rev-cartao-id');
+  if (cartaoSel) {
+    const cartoes = (S.cartoes || []).filter(c => c.ativo !== false);
+    cartaoSel.innerHTML = cartoes.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.nome)} (Final ${escapeHtml(c.ultimosDigitos || '****')})</option>`).join('');
+  }
+  const boxCartao = document.getElementById('scan-rev-box-cartao');
+  if (boxCartao) {
+    boxCartao.style.display = origEl && origEl.value === 'cartao' ? 'block' : 'none';
+  }
+
+  // 5. Alerta de duplicidade
+  const avisoDup = document.getElementById('scan-aviso-duplicado');
+  const boxForcarDup = document.getElementById('scan-rev-box-forcar-duplicado');
+  if (avisoDup) avisoDup.style.display = rascunho.duplicado ? 'block' : 'none';
+  if (boxForcarDup) boxForcarDup.style.display = rascunho.duplicado ? 'block' : 'none';
+  const chkForcar = document.getElementById('scan-rev-forcar-duplicado');
+  if (chkForcar) chkForcar.checked = false;
+
+  // 6. Alerta de baixa confiança (< 0.80)
+  const avisoConf = document.getElementById('scan-aviso-baixa-confianca');
+  const conf = rascunho.confiancaCampos || {};
+  const camposBaixa = Object.entries(conf).filter(([k, v]) => Number(v) < 0.80);
+  if (avisoConf) {
+    if (camposBaixa.length > 0) {
+      avisoConf.style.display = 'block';
+      const nomes = camposBaixa.map(([k]) => {
+        if (k === 'estabelecimento') return 'Estabelecimento';
+        if (k === 'data') return 'Data';
+        if (k === 'valorTotal') return 'Valor Total';
+        if (k === 'formaPagamento') return 'Forma de Pagamento';
+        return k;
+      }).join(', ');
+      avisoConf.innerHTML = `<strong>⚠️ Baixa confiança em (${escapeHtml(nomes)}) — confira os valores destacados em amarelo antes de salvar.</strong>`;
+    } else {
+      avisoConf.style.display = 'none';
+    }
+  }
+
+  if (estEl) estEl.style.borderColor = (conf.estabelecimento < 0.80) ? 'var(--yellow)' : '';
+  if (dataEl) dataEl.style.borderColor = (conf.data < 0.80) ? 'var(--yellow)' : '';
+  if (valEl) valEl.style.borderColor = (conf.valorTotal < 0.80) ? 'var(--yellow)' : '';
+  if (origEl) origEl.style.borderColor = (conf.formaPagamento < 0.80) ? 'var(--yellow)' : '';
+
+  // 7. Lista de itens
+  const itensContainer = document.getElementById('scan-rev-itens-container');
+  if (itensContainer) {
+    const itens = rascunho.itens || [];
+    if (itens.length === 0) {
+      itensContainer.innerHTML = `<p style="font-size:12px;color:var(--muted);margin:0;">Nenhum item discriminado no cupom.</p>`;
+    } else {
+      itensContainer.innerHTML = itens.map((it, idx) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg2);padding:6px 8px;border-radius:6px;font-size:12px;">
+          <div>
+            <strong>${idx + 1}. ${escapeHtml(it.descricao)}</strong>
+            <div style="font-size:10px;color:var(--muted);">${it.quantidade || 1} ${it.unidade || 'un'} × ${fmt(it.valorUnitario || it.valorTotal)}</div>
+          </div>
+          <div style="font-weight:700;">${fmt(it.valorTotal)}</div>
+        </div>
+      `).join('');
+    }
+  }
+
+  // 8. Cruzamento com Lista de Compras
+  const boxLista = document.getElementById('scan-rev-box-lista-compras');
+  const listaContainer = document.getElementById('scan-rev-lista-compras-container');
+  const matches = rascunho.itensCorrespondentesLista || [];
+  if (boxLista && listaContainer) {
+    if (matches.length > 0) {
+      boxLista.style.display = 'block';
+      listaContainer.innerHTML = matches.map(m => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;background:var(--bg2);padding:6px 8px;border-radius:6px;cursor:pointer;">
+          <input type="checkbox" class="chk-match-lista-compras" value="${escapeHtml(m.itemListaId)}" checked style="width:16px;height:16px;accent-color:var(--green);"/>
+          <span>Dar baixa em <strong>${escapeHtml(m.itemNome)}</strong> (${escapeHtml(m.nomeLista)})</span>
+        </label>
+      `).join('');
+    } else {
+      boxLista.style.display = 'none';
+      listaContainer.innerHTML = '';
+    }
+  }
+
+  // 9. Atualiza preview
+  atualizarPreviewDivisaoCupom();
+}
+
+function aoMudarOrigemPagamentoCupom() {
+  const sel = document.getElementById('scan-rev-origem-pagamento')?.value;
+  const boxCartao = document.getElementById('scan-rev-box-cartao');
+  if (boxCartao) {
+    boxCartao.style.display = sel === 'cartao' ? 'block' : 'none';
+  }
+  atualizarPreviewDivisaoCupom();
+}
+
+function atualizarPreviewDivisaoCupom() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('scan-rev-preview-beneficio');
+  if (!container) return;
+
+  const val = parseFloat(document.getElementById('scan-rev-valor-total')?.value) || 0;
+  const desc = document.getElementById('scan-rev-estabelecimento')?.value || '';
+  const titular = document.getElementById('scan-rev-titular')?.value || '';
+  const cat = document.getElementById('scan-rev-categoria')?.value || 'mercado';
+  const origemSel = document.getElementById('scan-rev-origem-pagamento')?.value || 'auto';
+
+  if (val <= 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  if (origemSel === 'cartao') {
+    container.style.display = 'block';
+    container.innerHTML = `<span>💳 Lançamento integral em Fatura de Cartão de Crédito (${fmt(val)}).</span>`;
+    return;
+  }
+
+  const divisao = calcularDivisaoPagamentoBeneficio({
+    valorTotal: val,
+    descricao: desc,
+    titular,
+    categoria: cat,
+    forcarOrigem: origemSel
+  });
+
+  if (divisao.valorPagoBeneficio > 0 || divisao.split) {
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span>💳 Divisão do Cupom:</span>
+        <strong style="color:var(--green);">${escapeHtml(divisao.descricaoSplit)}</strong>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">O valor em benefício (${fmt(divisao.valorPagoBeneficio)}) não consumirá o salário nem caixa da família.</p>
+    `;
+  } else if (origemSel !== 'auto' && origemSel !== 'salario') {
+    container.style.display = 'block';
+    container.innerHTML = `<span style="color:var(--yellow);">⚠️ Saldo do ${escapeHtml(origemSel)} zerado ou insuficiente. Valor debitado 100% no Salário.</span>`;
+  } else {
+    container.style.display = 'block';
+    container.innerHTML = `<span style="color:var(--muted);">Débito integral em Conta Salário (${fmt(val)}).</span>`;
+  }
+}
+
+function confirmarLancamentoCupomModal() {
+  if (typeof document === 'undefined') return;
+  const rascunho = S.rascunhoCupomAtual;
+  if (!rascunho) {
+    if (typeof alert === 'function') alert('Nenhum rascunho ativo.');
+    return;
+  }
+
+  const est = (document.getElementById('scan-rev-estabelecimento')?.value || '').trim();
+  const cnpj = (document.getElementById('scan-rev-cnpj')?.value || '').trim();
+  const data = document.getElementById('scan-rev-data')?.value || '';
+  const hora = document.getElementById('scan-rev-hora')?.value || '12:00';
+  const val = parseFloat(document.getElementById('scan-rev-valor-total')?.value) || 0;
+  const cat = document.getElementById('scan-rev-categoria')?.value || 'mercado';
+  const titular = document.getElementById('scan-rev-titular')?.value || '';
+  const origem = document.getElementById('scan-rev-origem-pagamento')?.value || 'auto';
+  const cartaoId = document.getElementById('scan-rev-cartao-id')?.value || null;
+  const forcarDuplicado = document.getElementById('scan-rev-forcar-duplicado')?.checked || false;
+
+  const chks = document.querySelectorAll('.chk-match-lista-compras:checked');
+  const itensListaParaComprar = Array.from(chks).map(c => c.value);
+
+  if (!est) {
+    if (typeof alert === 'function') alert('Informe o nome do estabelecimento.');
+    return;
+  }
+  if (val <= 0) {
+    if (typeof alert === 'function') alert('Informe o valor total do cupom.');
+    return;
+  }
+
+  rascunho.estabelecimento = est;
+  rascunho.cnpj = cnpj;
+  rascunho.data = data;
+  rascunho.hora = hora;
+  rascunho.valorTotal = val;
+  rascunho.categoriaSugerida = cat;
+  rascunho.titular = titular;
+  rascunho.formaPagamentoDetectada = origem;
+
+  const res = confirmarLancamentoCupomFiscal({
+    rascunhoOverride: rascunho,
+    estabelecimento: est,
+    valorTotal: val,
+    data,
+    hora,
+    categoria: cat,
+    titular,
+    origemPagamento: origem,
+    cartaoId,
+    forcarDuplicado,
+    itensListaParaComprar
+  });
+
+  if (res.ok) {
+    if (typeof exibirToastNotificacao === 'function') {
+      exibirToastNotificacao(`Cupom de ${est} (${fmt(val)}) lançado com sucesso!`, '🧾');
+    }
+    fecharScannerCupom();
+  } else {
+    if (res.motivo === 'cupom_duplicado') {
+      if (typeof alert === 'function') {
+        alert('Este cupom é duplicado! Marque a opção "Confirmar lançamento mesmo sendo cupom duplicado" se deseja registrar novamente.');
+      }
+      const boxForcar = document.getElementById('scan-rev-box-forcar-duplicado');
+      if (boxForcar) boxForcar.style.display = 'block';
+    } else {
+      if (typeof alert === 'function') alert(res.mensagem || 'Erro ao confirmar lançamento do cupom.');
+    }
+  }
+}
+
+function cancelarRevisaoCupomModal() {
+  S.rascunhoCupomAtual = null;
+  if (typeof document === 'undefined') return;
+  const revEl = document.getElementById('scan-cupom-revisao');
+  if (revEl) revEl.style.display = 'none';
+  const capturaEl = document.getElementById('scan-cupom-captura');
+  if (capturaEl) capturaEl.style.display = 'block';
+  const st = document.getElementById('scan-cupom-status');
+  if (st) st.textContent = '';
+  const fileInput = document.getElementById('scan-cupom-file');
+  if (fileInput) fileInput.value = '';
+}
+
+function abrirDetalheCupomFiscal(cupomId) {
+  const membroAtivo = obterMembroAtivo();
+  if (membroAtivo && membroAtivo.papel === 'crianca') {
+    if (typeof alert === 'function') alert('Acesso restrito aos responsáveis adultos.');
+    return { ok: false, motivo: 'perfil_crianca_bloqueado' };
+  }
+
+  const cupom = (S.cuponsFiscais || []).find(c => c.id === cupomId);
+  if (!cupom) {
+    if (typeof alert === 'function') alert('Cupom fiscal não encontrado.');
+    return { ok: false, motivo: 'cupom_nao_encontrado' };
+  }
+
+  if (typeof document !== 'undefined') {
+    const container = document.getElementById('detalhe-cupom-conteudo');
+    if (container) {
+      const dataFmt = cupom.data ? cupom.data.slice(0, 10).split('-').reverse().join('/') : '';
+      const horaFmt = cupom.hora || '';
+      const chaveHtml = cupom.chaveAcesso
+        ? `<div style="background:var(--bg3);padding:8px;border-radius:6px;margin:8px 0;word-break:break-all;font-family:monospace;font-size:11px;">
+             <strong>Chave de Acesso:</strong> ${escapeHtml(cupom.chaveAcesso)}
+           </div>`
+        : '';
+
+      const itensHtml = (cupom.itens || []).map((it, idx) => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+          <div>
+            <strong>${idx + 1}. ${escapeHtml(it.descricao)}</strong>
+            <div style="font-size:11px;color:var(--muted);">${it.quantidade || 1} ${it.unidade || 'un'} × ${fmt(it.valorUnitario || it.valorTotal)}</div>
+          </div>
+          <div style="font-weight:700;">${fmt(it.valorTotal)}</div>
+        </div>
+      `).join('');
+
+      container.innerHTML = `
+        <div style="margin-bottom:12px;">
+          <h4 style="margin:0 0 2px;font-size:16px;">${escapeHtml(cupom.estabelecimento)}</h4>
+          <p style="font-size:12px;color:var(--muted);margin:0;">CNPJ: ${escapeHtml(cupom.cnpj || 'Não informado')} • ${dataFmt} ${horaFmt}</p>
+        </div>
+        ${chaveHtml}
+        <div style="margin:12px 0;">
+          <p style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Itens da Nota (${(cupom.itens || []).length})</p>
+          <div style="max-height:220px;overflow-y:auto;">
+            ${itensHtml || '<p style="color:var(--muted);font-size:12px;">Nenhum item discriminado.</p>'}
+          </div>
+        </div>
+        <div style="background:var(--bg3);padding:10px;border-radius:8px;margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span>Forma de Pagamento:</span>
+            <strong>${escapeHtml(cupom.formaPagamento)}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:800;color:var(--green);">
+            <span>Valor Total:</span>
+            <span>${fmt(cupom.valorTotal)}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    if (typeof openM === 'function') {
+      openM('m-detalhe-cupom');
+    }
+  }
+
+  return { ok: true, cupom };
+}
+
+function fecharDetalheCupomModal() {
+  if (typeof closeM === 'function') {
+    closeM('m-detalhe-cupom');
+  }
+}
+
+function abrirModuloExplorar(moduloId) {
+  if (moduloId === 'scanner_cupom') {
+    abrirScannerCupom();
+    return;
+  }
+  if (moduloId === 'beneficios') {
+    abrirModalCarteirasBeneficio();
+    return;
+  }
+  const modDef = MODULOS_INICIO_CATALOGO.find(m => m.id === moduloId);
+  if (modDef && modDef.telaAlvo && typeof go === 'function') {
+    go(modDef.telaAlvo);
+  }
+}
+
 // SERVICE WORKER
 if(typeof navigator !== 'undefined' && 'serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(err => {
@@ -10330,6 +11555,30 @@ if (typeof window !== 'undefined') {
   window.renderBeneficiosTopo = renderBeneficiosTopo;
   window.setFiltroOrigemGasto = setFiltroOrigemGasto;
   window.salvarConfigCicloOrcamentoModal = salvarConfigCicloOrcamentoModal;
+  // Super-App Familiar v2.0 (Etapa 5 - Scanner OCR de Cupons e Notas)
+  window.parsearItensCupomTexto = parsearItensCupomTexto;
+  window.extrairDadosCupomTextoOuQR = extrairDadosCupomTextoOuQR;
+  window.gerarHashCupomFiscal = gerarHashCupomFiscal;
+  window.verificarCupomDuplicado = verificarCupomDuplicado;
+  window.cruzarItensCupomComListaCompras = cruzarItensCupomComListaCompras;
+  window.chamarGeminiVisionCupom = chamarGeminiVisionCupom;
+  window.processarDocumentoFiscal = processarDocumentoFiscal;
+  window.confirmarLancamentoCupomFiscal = confirmarLancamentoCupomFiscal;
+  window.excluirCupomFiscal = excluirCupomFiscal;
+  window.abrirScannerCupom = abrirScannerCupom;
+  window.fecharScannerCupom = fecharScannerCupom;
+  window.setTabScanner = setTabScanner;
+  window.aoSelecionarArquivoCupom = aoSelecionarArquivoCupom;
+  window.processarQRCupomModal = processarQRCupomModal;
+  window.processarTextoCupomModal = processarTextoCupomModal;
+  window.renderRevisaoCupomModal = renderRevisaoCupomModal;
+  window.aoMudarOrigemPagamentoCupom = aoMudarOrigemPagamentoCupom;
+  window.atualizarPreviewDivisaoCupom = atualizarPreviewDivisaoCupom;
+  window.confirmarLancamentoCupomModal = confirmarLancamentoCupomModal;
+  window.cancelarRevisaoCupomModal = cancelarRevisaoCupomModal;
+  window.abrirDetalheCupomFiscal = abrirDetalheCupomFiscal;
+  window.fecharDetalheCupomModal = fecharDetalheCupomModal;
+  window.abrirModuloExplorar = abrirModuloExplorar;
 }
 
 // EXPORTAÇÃO PARA TESTES / NODE.JS
@@ -10556,6 +11805,30 @@ if (typeof module !== 'undefined' && module.exports) {
     renderBeneficiosTopo,
     setFiltroOrigemGasto,
     salvarConfigCicloOrcamentoModal,
+    // Super-App Familiar v2.0 (Etapa 5 - Scanner OCR de Cupons e Notas)
+    parsearItensCupomTexto,
+    extrairDadosCupomTextoOuQR,
+    gerarHashCupomFiscal,
+    verificarCupomDuplicado,
+    cruzarItensCupomComListaCompras,
+    chamarGeminiVisionCupom,
+    processarDocumentoFiscal,
+    confirmarLancamentoCupomFiscal,
+    excluirCupomFiscal,
+    abrirScannerCupom,
+    fecharScannerCupom,
+    setTabScanner,
+    aoSelecionarArquivoCupom,
+    processarQRCupomModal,
+    processarTextoCupomModal,
+    renderRevisaoCupomModal,
+    aoMudarOrigemPagamentoCupom,
+    atualizarPreviewDivisaoCupom,
+    confirmarLancamentoCupomModal,
+    cancelarRevisaoCupomModal,
+    abrirDetalheCupomFiscal,
+    fecharDetalheCupomModal,
+    abrirModuloExplorar,
     getState: () => S,
     S
   };
