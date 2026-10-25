@@ -108,6 +108,15 @@ let S = {
   // Super-App Familiar v2.0 (Etapa 8 - Agente Norte 2.0, Metas/Sonhos, Tetos & Simulador)
   metasFamilia: [],
   tetosCategorias: [],
+  // Upgrade Calendário Pro v2.1 (Configurações e Feriados)
+  configCalendario: {
+    feriadosBrasil: true,
+    mostrarNumeroSemana: false,
+    primeiroDiaSemana: 0, // 0 = Domingo, 1 = Segunda-feira
+    lembretePadraoMin: 30, // 30 minutos antes
+    lembreteDiarioAgenda: '08:00',
+    limpezaMeses: 6
+  },
   chat:[],
   apiKey:'',
   onboardingDone:false
@@ -1174,6 +1183,17 @@ function migrarParaUpgradeFamiliarV2() {
       { categoria: 'recorrente', limiteMensal: 3500.0 }
     ];
   }
+
+  // 20. Configurações do Calendário Pro (v2.1)
+  const configCalPadrao = {
+    feriadosBrasil: true,
+    mostrarNumeroSemana: false,
+    primeiroDiaSemana: 0, // 0 = Domingo, 1 = Segunda-feira
+    lembretePadraoMin: 30, // 30 minutos antes
+    lembreteDiarioAgenda: '08:00',
+    limpezaMeses: 6
+  };
+  S.configCalendario = Object.assign({}, configCalPadrao, S.configCalendario || {});
 }
 
 // --- TEMA CLARO / ESCURO ---
@@ -2872,6 +2892,172 @@ function renderListas() {
 
 // Variáveis de controle e navegação do Calendário
 const CORES_CALENDARIO = PALETA_FAMILIAR;
+
+// Upgrade Calendário Pro v2.1 - Catálogo de Cores Nomeadas (Print 2)
+const CORES_EVENTO_NOMEADAS = [
+  { id: 'hibisco', nome: 'Hibisco', cor: '#D81B60', hex: '#D81B60' },
+  { id: 'tangerina', nome: 'Tangerina', cor: '#F4511E', hex: '#F4511E' },
+  { id: 'banana', nome: 'Banana', cor: '#F6BF26', hex: '#F6BF26' },
+  { id: 'manjericao', nome: 'Manjericão', cor: '#0B8043', hex: '#0B8043' },
+  { id: 'salvia', nome: 'Sálvia', cor: '#33B679', hex: '#33B679' },
+  { id: 'pavao', nome: 'Pavão', cor: '#039BE5', hex: '#039BE5' },
+  { id: 'mirtilo', nome: 'Mirtilo', cor: '#3F51B5', hex: '#3F51B5' },
+  { id: 'lavanda', nome: 'Lavanda', cor: '#7986CB', hex: '#7986CB' },
+  { id: 'uva', nome: 'Uva', cor: '#8E24AA', hex: '#8E24AA' },
+  { id: 'grafite', nome: 'Grafite', cor: '#616161', hex: '#616161' }
+];
+
+function obterNomeCorEvento(hexCor) {
+  if (!hexCor) return 'Padrão';
+  const c = String(hexCor).trim().toUpperCase();
+  const encontrada = CORES_EVENTO_NOMEADAS.find(item => item.cor.toUpperCase() === c || (item.hex && item.hex.toUpperCase() === c));
+  return encontrada ? encontrada.nome : 'Personalizada';
+}
+
+/**
+ * Calcula a data do Domingo de Páscoa para qualquer ano do calendário gregoriano.
+ * Algoritmo canônico de Meeus/Jones/Butcher.
+ * Usa 12:00:00 (meio-dia) para evitar deslocamento de fuso UTC ao serializar data.
+ */
+function calcularPascoa(ano) {
+  const y = Number(ano) || new Date().getFullYear();
+  const a = y % 19;
+  const b = Math.floor(y / 100);
+  const c = y % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const L = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * L) / 451);
+  const mes = Math.floor((h + L - 7 * m + 114) / 31); // 3 = Março, 4 = Abril
+  const dia = ((h + L - 7 * m + 114) % 31) + 1;
+  return new Date(y, mes - 1, dia, 12, 0, 0);
+}
+
+/**
+ * Catálogo e gerador de Feriados Nacionais e Datas Comemorativas do Brasil.
+ * Retorna todos os feriados fixos e móveis calculados para o ano solicitado.
+ */
+function obterFeriadosBrasilAno(ano) {
+  const anoNum = Number(ano) || new Date().getFullYear();
+  const feriados = [];
+
+  // 1. Feriados Nacionais Fixos do Brasil (formato ISO MM-DD)
+  const fixos = [
+    { mesDia: '01-01', titulo: 'Confraternização Universal' },
+    { mesDia: '04-21', titulo: 'Tiradentes' },
+    { mesDia: '05-01', titulo: 'Dia do Trabalho' },
+    { mesDia: '09-07', titulo: 'Independência do Brasil' },
+    { mesDia: '10-12', titulo: 'Nossa Senhora Aparecida' },
+    { mesDia: '10-28', titulo: 'Dia do Servidor Público' },
+    { mesDia: '11-02', titulo: 'Finados' },
+    { mesDia: '11-15', titulo: 'Proclamação da República' },
+    { mesDia: '11-20', titulo: 'Dia da Consciência Negra' },
+    { mesDia: '12-25', titulo: 'Natal' }
+  ];
+
+  fixos.forEach(f => {
+    const dataISO = `${anoNum}-${f.mesDia}`;
+    feriados.push({
+      id: `feriado_${anoNum}_${f.mesDia.replace('-', '_')}`,
+      tipo: 'feriado',
+      titulo: f.titulo,
+      nome: f.titulo,
+      data: dataISO,
+      hora: '',
+      diaInteiro: true,
+      cor: '#10B981',
+      icone: '🇧🇷',
+      subtexto: 'Feriado Nacional (Brasil)',
+      descricao: `Feriado Nacional do Brasil: ${f.titulo}`
+    });
+  });
+
+  // 2. Feriados Móveis baseados na Páscoa
+  const pascoaObj = calcularPascoa(anoNum);
+
+  function somarDias(base, offset) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + offset);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dia}`;
+  }
+
+  // Carnaval: Terça-feira de Carnaval (-47 dias)
+  const dataCarnaval = somarDias(pascoaObj, -47);
+  feriados.push({
+    id: `feriado_${anoNum}_carnaval`,
+    tipo: 'feriado',
+    titulo: 'Carnaval',
+    nome: 'Carnaval',
+    data: dataCarnaval,
+    hora: '',
+    diaInteiro: true,
+    cor: '#10B981',
+    icone: '🎭',
+    subtexto: 'Feriado / Ponto Facultativo',
+    descricao: 'Carnaval no Brasil'
+  });
+
+  // Sexta-feira Santa: -2 dias da Páscoa
+  const dataSextaSanta = somarDias(pascoaObj, -2);
+  feriados.push({
+    id: `feriado_${anoNum}_sexta_santa`,
+    tipo: 'feriado',
+    titulo: 'Sexta-feira Santa',
+    nome: 'Sexta-feira Santa',
+    data: dataSextaSanta,
+    hora: '',
+    diaInteiro: true,
+    cor: '#10B981',
+    icone: '🕊️',
+    subtexto: 'Feriado Nacional (Brasil)',
+    descricao: 'Sexta-feira Santa (Paixão de Cristo)'
+  });
+
+  // Domingo de Páscoa
+  const dataPascoa = somarDias(pascoaObj, 0);
+  feriados.push({
+    id: `feriado_${anoNum}_pascoa`,
+    tipo: 'feriado',
+    titulo: 'Páscoa',
+    nome: 'Páscoa',
+    data: dataPascoa,
+    hora: '',
+    diaInteiro: true,
+    cor: '#10B981',
+    icone: '🐰',
+    subtexto: 'Data Comemorativa',
+    descricao: 'Domingo de Páscoa'
+  });
+
+  // Corpus Christi: +60 dias da Páscoa
+  const dataCorpus = somarDias(pascoaObj, 60);
+  feriados.push({
+    id: `feriado_${anoNum}_corpus_christi`,
+    tipo: 'feriado',
+    titulo: 'Corpus Christi',
+    nome: 'Corpus Christi',
+    data: dataCorpus,
+    hora: '',
+    diaInteiro: true,
+    cor: '#10B981',
+    icone: '⛪',
+    subtexto: 'Ponto Facultativo / Feriado',
+    descricao: 'Corpus Christi no Brasil'
+  });
+
+  return feriados.sort((a, b) => a.data.localeCompare(b.data));
+}
+
+const FERIADOS_BRASIL = obterFeriadosBrasilAno(new Date().getFullYear());
+
 let visaoCalendarioAtual = 'mes'; // 'mes' | 'semana' | 'dia' | 'agenda'
 let dataReferenciaCalendario = new Date();
 let filtroMembroCalendario = 'todos';
@@ -2879,10 +3065,12 @@ let camadasCalendarioAtivas = {
   eventos: true,
   financas: true,
   tarefas: true,
-  aniversarios: true
+  aniversarios: true,
+  feriados: true
 };
 let diaSelecionadoCalendario = new Date().toISOString().slice(0, 10);
 let eventoEditandoId = null;
+let eventoDetalheAtualId = null;
 
 /**
  * Verifica se o membro ativo atual possui permissão para visualizar finanças familiares.
@@ -3231,6 +3419,21 @@ function obterEventosConsolidadosPeriodo(dataInicioISO, dataFimISO, filtros = {}
     });
   }
 
+  // 5. FERIADOS NACIONAIS DO BRASIL (se camada feriados ativa e S.configCalendario.feriadosBrasil !== false)
+  const feriadosAtivos = camadas.feriados !== false && (!S.configCalendario || S.configCalendario.feriadosBrasil !== false);
+  if (feriadosAtivos) {
+    const anoInicio = parseInt(dtIni.slice(0, 4), 10);
+    const anoFim = parseInt(dtFim.slice(0, 4), 10);
+    for (let y = anoInicio; y <= anoFim; y++) {
+      const feriadosAno = obterFeriadosBrasilAno(y);
+      feriadosAno.forEach(fer => {
+        if (fer.data >= dtIni && fer.data <= dtFim) {
+          consolidados.push(fer);
+        }
+      });
+    }
+  }
+
   // Ordenação cronológica por data e hora
   consolidados.sort((a, b) => {
     if (a.data !== b.data) return a.data.localeCompare(b.data);
@@ -3243,7 +3446,8 @@ function obterEventosConsolidadosPeriodo(dataInicioISO, dataFimISO, filtros = {}
 }
 
 /**
- * Cria um novo evento no calendário compartilhado.
+ * Cria um novo evento no calendário compartilhado com suporte a cores nomeadas,
+ * múltiplos lembretes, visibilidade, curtidas e comentários.
  */
 function criarEventoCalendario(dados) {
   if (!dados || !dados.titulo) return null;
@@ -3253,9 +3457,24 @@ function criarEventoCalendario(dados) {
   if (!S) return null;
   if (!Array.isArray(S.eventosCalendario)) S.eventosCalendario = [];
 
-  const membroAtivo = obterMembroAtivo();
+  const membroAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : { id: 'm_1', nome: 'Alex', cor: '#5581E3' };
   const agoraIso = new Date().toISOString();
   const dataIni = dados.dataInicio || agoraIso.slice(0, 10);
+
+  // Tratamento de cor e nome da cor
+  const corFinal = dados.cor || membroAtivo.cor || '#D81B60';
+  const corNomeFinal = dados.corNome || obterNomeCorEvento(corFinal);
+
+  // Tratamento de múltiplos lembretes
+  let lembretesArray = [30];
+  if (Array.isArray(dados.lembretesMinutos) && dados.lembretesMinutos.length > 0) {
+    lembretesArray = dados.lembretesMinutos.map(Number).filter(n => !isNaN(n) && n >= 0);
+  } else if (dados.lembreteMinutos !== undefined) {
+    const num = Number(dados.lembreteMinutos);
+    if (!isNaN(num) && num >= 0) lembretesArray = [num];
+  } else if (S.configCalendario && S.configCalendario.lembretePadraoMin !== undefined) {
+    lembretesArray = [Number(S.configCalendario.lembretePadraoMin) || 30];
+  }
 
   const novoEvento = {
     id: dados.id || ('ev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6)),
@@ -3271,11 +3490,16 @@ function criarEventoCalendario(dados) {
     participantesIds: Array.isArray(dados.participantesIds) && dados.participantesIds.length > 0
       ? dados.participantesIds
       : [membroAtivo.id],
-    cor: dados.cor || membroAtivo.cor || '#5581E3',
+    visivelPara: dados.visivelPara || 'todos', // 'todos' | 'participantes' | 'adultos'
+    cor: corFinal,
+    corNome: corNomeFinal,
     repeticao: ['nenhuma', 'diaria', 'semanal', 'mensal', 'anual'].includes(dados.repeticao)
       ? dados.repeticao
       : 'nenhuma',
-    lembreteMinutos: Number(dados.lembreteMinutos) >= 0 ? Number(dados.lembreteMinutos) : 60,
+    lembretesMinutos: lembretesArray,
+    lembreteMinutos: lembretesArray[0] || 30, // Retrocompatibilidade
+    curtidasIds: Array.isArray(dados.curtidasIds) ? dados.curtidasIds : [],
+    comentarios: Array.isArray(dados.comentarios) ? dados.comentarios : [],
     gastoPrevisto: Number(dados.gastoPrevisto) > 0 ? Math.round(Number(dados.gastoPrevisto) * 100) / 100 : 0,
     uid: dados.uid || ('uid_' + Date.now().toString(36)),
     criadoPor: dados.criadoPor || membroAtivo.id,
@@ -3283,17 +3507,19 @@ function criarEventoCalendario(dados) {
   };
 
   S.eventosCalendario.push(novoEvento);
-  adicionarNaFilaSync('eventos_calendario', 'insert', novoEvento);
+  if (typeof adicionarNaFilaSync === 'function') adicionarNaFilaSync('eventos_calendario', 'insert', novoEvento);
 
-  registrarNotificacaoFamilia({
-    tipo: 'eventos',
-    titulo: 'Novo Evento no Calendário',
-    texto: `"${tituloLimpo}" agendado para ${dataIni} por ${membroAtivo.nome}`,
-    linkTela: 'calendario'
-  });
+  if (typeof registrarNotificacaoFamilia === 'function') {
+    registrarNotificacaoFamilia({
+      tipo: 'eventos',
+      titulo: 'Novo Evento no Calendário',
+      texto: `"${tituloLimpo}" agendado para ${dataIni} por ${membroAtivo.nome}`,
+      linkTela: 'calendario'
+    });
+  }
 
-  save();
-  render();
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
   return novoEvento;
 }
 
@@ -3309,19 +3535,33 @@ function editarEventoCalendario(id, dados) {
   const tituloLimpo = dados.titulo !== undefined ? String(dados.titulo).trim() : eventoAntigo.titulo;
   if (!tituloLimpo) return null;
 
+  const corFinal = dados.cor || eventoAntigo.cor || '#5581E3';
+  const corNomeFinal = dados.corNome || obterNomeCorEvento(corFinal);
+
+  let lembretesArray = eventoAntigo.lembretesMinutos || [eventoAntigo.lembreteMinutos || 30];
+  if (Array.isArray(dados.lembretesMinutos)) {
+    lembretesArray = dados.lembretesMinutos.map(Number).filter(n => !isNaN(n) && n >= 0);
+  } else if (dados.lembreteMinutos !== undefined) {
+    lembretesArray = [Number(dados.lembreteMinutos) || 30];
+  }
+
   const eventoAtualizado = {
     ...eventoAntigo,
     ...dados,
     id: eventoAntigo.id,
     titulo: tituloLimpo,
+    cor: corFinal,
+    corNome: corNomeFinal,
+    lembretesMinutos: lembretesArray,
+    lembreteMinutos: lembretesArray[0] || 30,
     atualizadoEm: new Date().toISOString()
   };
 
   S.eventosCalendario[idx] = eventoAtualizado;
-  adicionarNaFilaSync('eventos_calendario', 'update', eventoAtualizado);
+  if (typeof adicionarNaFilaSync === 'function') adicionarNaFilaSync('eventos_calendario', 'update', eventoAtualizado);
 
-  save();
-  render();
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
   return eventoAtualizado;
 }
 
@@ -3334,18 +3574,283 @@ function excluirEventoCalendario(id) {
   if (idx < 0) return false;
 
   const removido = S.eventosCalendario.splice(idx, 1)[0];
-  adicionarNaFilaSync('eventos_calendario', 'delete', { id });
+  if (typeof adicionarNaFilaSync === 'function') adicionarNaFilaSync('eventos_calendario', 'delete', { id });
 
-  registrarNotificacaoFamilia({
-    tipo: 'eventos',
-    titulo: 'Evento Cancelado',
-    texto: `"${removido.titulo}" foi removido do calendário`,
-    linkTela: 'calendario'
+  if (typeof registrarNotificacaoFamilia === 'function') {
+    registrarNotificacaoFamilia({
+      tipo: 'eventos',
+      titulo: 'Evento Cancelado',
+      texto: `"${removido.titulo}" foi removido do calendário`,
+      linkTela: 'calendario'
+    });
+  }
+
+  if (typeof save === 'function') save();
+  if (typeof render === 'function') render();
+  return true;
+}
+
+/**
+ * Alterna a curtida de um membro em um evento da família.
+ */
+function curtirEventoCalendario(eventoId, membroId) {
+  if (!S || !Array.isArray(S.eventosCalendario) || !eventoId) return { ok: false, erro: 'ID inválido' };
+  const ev = S.eventosCalendario.find(e => e.id === eventoId);
+  if (!ev) return { ok: false, erro: 'Evento não encontrado' };
+
+  if (!Array.isArray(ev.curtidasIds)) ev.curtidasIds = [];
+  const mId = membroId || S.membroAtivoId || 'm_1';
+  const idx = ev.curtidasIds.indexOf(mId);
+
+  let curtido = false;
+  if (idx >= 0) {
+    ev.curtidasIds.splice(idx, 1);
+    curtido = false;
+  } else {
+    ev.curtidasIds.push(mId);
+    curtido = true;
+    const m = (S.membrosPerfil || []).find(x => x.id === mId) || { nome: 'Familiar' };
+    if (typeof registrarNotificacaoFamilia === 'function') {
+      registrarNotificacaoFamilia({
+        tipo: 'eventos',
+        titulo: 'Curtida no Evento',
+        texto: `${m.nome} curtiu o evento "${ev.titulo}"`,
+        linkTela: 'calendario'
+      });
+    }
+  }
+
+  if (typeof adicionarNaFilaSync === 'function') adicionarNaFilaSync('eventos_calendario', 'update', ev);
+  if (typeof save === 'function') save();
+  if (typeof renderDetalheEventoModal === 'function') renderDetalheEventoModal(ev);
+
+  return { ok: true, curtido, total: ev.curtidasIds.length, totalCurtidas: ev.curtidasIds.length, curtidasIds: ev.curtidasIds };
+}
+
+/**
+ * Adiciona um comentário a um evento compartilhado da família.
+ */
+function adicionarComentarioEventoCalendario(eventoId, texto, membroId) {
+  if (!S || !Array.isArray(S.eventosCalendario) || !eventoId) return { ok: false, erro: 'ID inválido' };
+  const txtLimpo = String(texto || '').trim();
+  if (!txtLimpo) return { ok: false, erro: 'Texto do comentário obrigatório' };
+
+  const ev = S.eventosCalendario.find(e => e.id === eventoId);
+  if (!ev) return { ok: false, erro: 'Evento não encontrado' };
+
+  if (!Array.isArray(ev.comentarios)) ev.comentarios = [];
+  const mId = membroId || S.membroAtivoId || 'm_1';
+  const m = (S.membrosPerfil || []).find(x => x.id === mId) || { id: mId, nome: 'Familiar', cor: '#5581E3' };
+
+  const novoComentario = {
+    id: 'com_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6),
+    membroId: m.id,
+    membroNome: m.nome,
+    membroCor: m.cor || '#5581E3',
+    texto: txtLimpo,
+    criadoEm: new Date().toISOString()
+  };
+
+  ev.comentarios.push(novoComentario);
+
+  if (typeof registrarNotificacaoFamilia === 'function') {
+    registrarNotificacaoFamilia({
+      tipo: 'eventos',
+      titulo: 'Novo Comentário no Evento',
+      texto: `${m.nome} comentou em "${ev.titulo}": "${txtLimpo}"`,
+      linkTela: 'calendario'
+    });
+  }
+
+  if (typeof adicionarNaFilaSync === 'function') adicionarNaFilaSync('eventos_calendario', 'update', ev);
+  if (typeof save === 'function') save();
+  if (typeof renderDetalheEventoModal === 'function') renderDetalheEventoModal(ev);
+
+  return { ok: true, total: ev.comentarios.length, comentario: novoComentario, comentarios: ev.comentarios };
+}
+
+/**
+ * Extrai dados estruturados de evento a partir de texto livre / e-mail / convite (IA / NLP).
+ */
+function preencherEventoPorTextoIA(textoLivre) {
+  const t = String(textoLivre || '').trim();
+  if (!t) {
+    return {
+      titulo: '',
+      dataInicio: new Date().toISOString().slice(0, 10),
+      horaInicio: '09:00',
+      horaFim: '10:00',
+      diaInteiro: false,
+      local: '',
+      descricao: ''
+    };
+  }
+
+  const hoje = new Date();
+  let dataISO = hoje.toISOString().slice(0, 10);
+  let horaInicio = '09:00';
+  let horaFim = '10:00';
+  let diaInteiro = false;
+  let local = '';
+  let titulo = t;
+
+  // 1. Extração de Data (ex: "dia 28/10", "28/10/2026", "28/10", "amanhã", "hoje")
+  const regexData = /\b(?:dia\s+)?(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b/i;
+  const matchData = t.match(regexData);
+  if (matchData) {
+    const dia = String(matchData[1]).padStart(2, '0');
+    const mes = String(matchData[2]).padStart(2, '0');
+    const ano = matchData[3] ? (matchData[3].length === 2 ? '20' + matchData[3] : matchData[3]) : String(hoje.getFullYear());
+    dataISO = `${ano}-${mes}-${dia}`;
+    titulo = titulo.replace(matchData[0], ' ');
+  } else if (/\bamanh[ãa]\b/i.test(t)) {
+    const amanha = new Date(Date.now() + 86400000);
+    dataISO = amanha.toISOString().slice(0, 10);
+    titulo = titulo.replace(/\bamanh[ãa]\b/i, ' ');
+  } else if (/\bhoje\b/i.test(t)) {
+    dataISO = hoje.toISOString().slice(0, 10);
+    titulo = titulo.replace(/\bhoje\b/i, ' ');
+  }
+
+  // 2. Extração de Horário (ex: "às 15h30", "15:30", "das 14:55 às 18:00", "15h")
+  const regexIntervalo = /\bdas?\s*(\d{1,2})(?:[:h](\d{2}))?\s*(?:h|hrs?)?\s*(?:às|ate|até|-)\s*(\d{1,2})(?:[:h](\d{2}))?\s*(?:h|hrs?)?\b/i;
+  const matchIntervalo = t.match(regexIntervalo);
+  if (matchIntervalo) {
+    const h1 = String(matchIntervalo[1]).padStart(2, '0');
+    const m1 = String(matchIntervalo[2] || '00').padStart(2, '0');
+    const h2 = String(matchIntervalo[3]).padStart(2, '0');
+    const m2 = String(matchIntervalo[4] || '00').padStart(2, '0');
+    horaInicio = `${h1}:${m1}`;
+    horaFim = `${h2}:${m2}`;
+    titulo = titulo.replace(matchIntervalo[0], ' ');
+  } else {
+    const regexHora = /\b(?:às|as)?\s*(\d{1,2})(?:[:h](\d{2}))\s*(?:h|hrs?)?\b/i;
+    const matchHora = t.match(regexHora);
+    if (matchHora) {
+      const h1 = String(matchHora[1]).padStart(2, '0');
+      const m1 = String(matchHora[2] || '00').padStart(2, '0');
+      horaInicio = `${h1}:${m1}`;
+      const hFimNum = (parseInt(h1, 10) + 1) % 24;
+      horaFim = `${String(hFimNum).padStart(2, '0')}:${m1}`;
+      titulo = titulo.replace(matchHora[0], ' ');
+    } else {
+      const regexHoraSimples = /\b(\d{1,2})h\b/i;
+      const matchHoraSimples = t.match(regexHoraSimples);
+      if (matchHoraSimples) {
+        const h1 = String(matchHoraSimples[1]).padStart(2, '0');
+        horaInicio = `${h1}:00`;
+        const hFimNum = (parseInt(h1, 10) + 1) % 24;
+        horaFim = `${String(hFimNum).padStart(2, '0')}:00`;
+        titulo = titulo.replace(matchHoraSimples[0], ' ');
+      }
+    }
+  }
+
+  // 3. Extração de Gasto Previsto (ex: "R$ 380,00", "R$ 450", "custo de R$ 380")
+  let gastoPrevisto = 0;
+  const matchGasto = t.match(/R\$\s*(\d+(?:[.,]\d{1,2})?)/i);
+  if (matchGasto) {
+    gastoPrevisto = parseFloat(matchGasto[1].replace(',', '.'));
+    titulo = titulo.replace(matchGasto[0], ' ');
+  }
+
+  // 4. Extração de Local (ex: "na Av. Paulista 1000", "no Buffet Alegria com custo...")
+  const regexLocal = /\b(?:na|no|em|local:)\s+([^,.\n]+?)(?=\s+com\s+custo|\s+às|[.,\n]|$)/i;
+  const matchLocal = t.match(regexLocal);
+  if (matchLocal) {
+    local = matchLocal[1].trim();
+    titulo = titulo.replace(matchLocal[0], ' ');
+  }
+
+  // Limpeza final do título
+  titulo = titulo.replace(/\s+/g, ' ').trim();
+  if (!titulo) titulo = 'Compromisso';
+
+  return {
+    titulo,
+    dataInicio: dataISO,
+    horaInicio,
+    horaFim,
+    diaInteiro,
+    local,
+    gastoPrevisto,
+    descricao: t
+  };
+}
+
+/**
+ * Busca rápida de eventos, tarefas, aniversários e feriados no calendário.
+ */
+function buscarEventosCalendario(termo) {
+  const t = String(termo || '').trim().toLowerCase();
+  if (!t) return [];
+
+  // Intervalo amplo de busca: 1 ano antes e 1 ano depois
+  const hoje = new Date();
+  const dtIni = `${hoje.getFullYear() - 1}-01-01`;
+  const dtFim = `${hoje.getFullYear() + 1}-12-31`;
+
+  const todos = obterEventosConsolidadosPeriodo(dtIni, dtFim);
+  return todos.filter(ev => {
+    const tit = String(ev.titulo || '').toLowerCase();
+    const loc = String(ev.local || '').toLowerCase();
+    const sub = String(ev.subtexto || '').toLowerCase();
+    const desc = String(ev.descricao || '').toLowerCase();
+    const pes = String(ev.nomePessoa || '').toLowerCase();
+    return tit.includes(t) || loc.includes(t) || sub.includes(t) || desc.includes(t) || pes.includes(t);
+  });
+}
+
+/**
+ * Salva as configurações gerais do calendário pro.
+ */
+function salvarConfigCalendario(dados) {
+  if (!S) return { ok: false };
+  if (!S.configCalendario) S.configCalendario = {};
+
+  if (dados) {
+    if (dados.feriadosBrasil !== undefined) S.configCalendario.feriadosBrasil = Boolean(dados.feriadosBrasil);
+    if (dados.mostrarNumeroSemana !== undefined) S.configCalendario.mostrarNumeroSemana = Boolean(dados.mostrarNumeroSemana);
+    if (dados.primeiroDiaSemana !== undefined) S.configCalendario.primeiroDiaSemana = Number(dados.primeiroDiaSemana) === 1 ? 1 : 0;
+    if (dados.lembretePadraoMin !== undefined || dados.lembretePadraoMinutos !== undefined) {
+      const valLembrete = Number(dados.lembretePadraoMinutos !== undefined ? dados.lembretePadraoMinutos : dados.lembretePadraoMin) || 30;
+      S.configCalendario.lembretePadraoMin = valLembrete;
+      S.configCalendario.lembretePadraoMinutos = valLembrete;
+    }
+    if (dados.lembreteDiarioAgenda !== undefined) S.configCalendario.lembreteDiarioAgenda = String(dados.lembreteDiarioAgenda);
+    if (dados.limpezaMeses !== undefined) S.configCalendario.limpezaMeses = Number(dados.limpezaMeses) || 6;
+
+    if (dados.camadas) {
+      camadasCalendarioAtivas = Object.assign({}, camadasCalendarioAtivas, dados.camadas);
+    }
+  }
+
+  if (typeof save === 'function') save();
+  if (typeof renderCalendario === 'function') renderCalendario();
+  return { ok: true, config: S.configCalendario, camadas: camadasCalendarioAtivas };
+}
+
+/**
+ * Remove eventos pontuais do calendário anteriores a uma quantidade de meses.
+ */
+function limparEventosAntigosCalendario(mesesAntes = 6) {
+  if (!S || !Array.isArray(S.eventosCalendario)) return { ok: false, removidos: 0 };
+  const m = Number(mesesAntes) || 6;
+  const limiteData = new Date(Date.now() - m * 30 * 86400000).toISOString().slice(0, 10);
+
+  const totalAntes = S.eventosCalendario.length;
+  S.eventosCalendario = S.eventosCalendario.filter(ev => {
+    // Preserva eventos recorrentes
+    if (ev.repeticao && ev.repeticao !== 'nenhuma') return true;
+    const dtEv = ev.dataFim || ev.dataInicio || '';
+    return dtEv >= limiteData;
   });
 
-  save();
-  render();
-  return true;
+  const removidos = totalAntes - S.eventosCalendario.length;
+  if (typeof save === 'function') save();
+  if (typeof renderCalendario === 'function') renderCalendario();
+
+  return { ok: true, removidos, restantes: S.eventosCalendario.length };
 }
 
 /**
@@ -3691,7 +4196,17 @@ function adicionarEventoNoDiaModal() {
 
 // --- MODAIS DO CALENDÁRIO ---
 
-function abrirModalEventoCalendario(eventoId = null, dataPadrao = null) {
+// --- ESTADO AUXILIAR DO CALENDÁRIO PRO v2.1 ---
+let lembretesEditandoForm = [30];
+let eventoVisualizandoDetalheId = null;
+
+// --- MODAIS DO CALENDÁRIO PRO v2.1 ---
+
+/**
+ * Abre o modal de criação/edição de evento com suporte Pro v2.1:
+ * Cores nomeadas dinâmicas, avatares de participantes, visibilidade e múltiplos lembretes.
+ */
+function abrirModalEventoCalendario(eventoId = null, dataPadrao = null, dadosPreenchidosIA = null) {
   if (typeof document === 'undefined') return;
 
   eventoEditandoId = eventoId;
@@ -3707,44 +4222,73 @@ function abrirModalEventoCalendario(eventoId = null, dataPadrao = null) {
   const localInput = document.getElementById('ev-local');
   const descInput = document.getElementById('ev-descricao');
   const repSelect = document.getElementById('ev-repeticao');
-  const lembreteSelect = document.getElementById('ev-lembrete');
+  const visivelSelect = document.getElementById('ev-visivel-para');
   const gastoInput = document.getElementById('ev-gasto-previsto');
   const blocoGasto = document.getElementById('ev-bloco-gasto');
 
-  // Controle de visibilidade de finanças no modal
+  // Controle de visibilidade de finanças no modal (RLS de proteção infantil)
   if (blocoGasto) {
     blocoGasto.style.display = membroAtualPodeVerFinancas() ? 'block' : 'none';
   }
 
-  // Preenchimento de Participantes
-  const partContainer = document.getElementById('ev-participantes-container');
   let participantesSel = [];
-
-  // Paleta de Cores
-  const coresContainer = document.getElementById('ev-cores-grid');
   let corSel = '#5581E3';
+  let visivelPara = 'todos';
+  lembretesEditandoForm = [S.configCalendario?.lembretePadraoMinutos || 30];
 
-  if (eventoId) {
+  if (dadosPreenchidosIA) {
+    // Evento pré-preenchido pelo Parser IA
+    if (titModal) titModal.textContent = '✨ Revisar Evento Criado com IA';
+    if (btnExcluir) btnExcluir.style.display = 'none';
+    if (idHidden) idHidden.value = '';
+    if (titInput) titInput.value = dadosPreenchidosIA.titulo || '';
+    if (diaIntChk) diaIntChk.checked = Boolean(dadosPreenchidosIA.diaInteiro);
+    if (dtIniInput) dtIniInput.value = dadosPreenchidosIA.dataInicio || new Date().toISOString().slice(0, 10);
+    if (hrIniInput) hrIniInput.value = dadosPreenchidosIA.horaInicio || '09:00';
+    if (dtFimInput) dtFimInput.value = dadosPreenchidosIA.dataFim || dadosPreenchidosIA.dataInicio || new Date().toISOString().slice(0, 10);
+    if (hrFimInput) hrFimInput.value = dadosPreenchidosIA.horaFim || '10:00';
+    if (localInput) localInput.value = dadosPreenchidosIA.local || '';
+    if (descInput) descInput.value = dadosPreenchidosIA.descricao || '';
+    if (repSelect) repSelect.value = dadosPreenchidosIA.repeticao || 'nenhuma';
+    if (visivelSelect) visivelSelect.value = dadosPreenchidosIA.visivelPara || 'todos';
+    if (gastoInput) gastoInput.value = dadosPreenchidosIA.gastoPrevisto > 0 ? dadosPreenchidosIA.gastoPrevisto.toFixed(2) : '';
+
+    corSel = dadosPreenchidosIA.cor || '#5581E3';
+    participantesSel = Array.isArray(dadosPreenchidosIA.participantesIds) && dadosPreenchidosIA.participantesIds.length > 0
+      ? [...dadosPreenchidosIA.participantesIds]
+      : [S.membroAtivoId || 'm_1'];
+
+    if (Array.isArray(dadosPreenchidosIA.lembretesMinutos) && dadosPreenchidosIA.lembretesMinutos.length > 0) {
+      lembretesEditandoForm = [...dadosPreenchidosIA.lembretesMinutos];
+    }
+  } else if (eventoId) {
     const evento = (S.eventosCalendario || []).find(e => e.id === eventoId);
     if (!evento) return;
 
     if (titModal) titModal.textContent = '✏️ Editar Evento Familiar';
     if (btnExcluir) btnExcluir.style.display = 'block';
     if (idHidden) idHidden.value = evento.id;
-    if (titInput) titInput.value = evento.titulo;
+    if (titInput) titInput.value = evento.titulo || '';
     if (diaIntChk) diaIntChk.checked = Boolean(evento.diaInteiro);
-    if (dtIniInput) dtIniInput.value = evento.dataInicio;
+    if (dtIniInput) dtIniInput.value = evento.dataInicio || '';
     if (hrIniInput) hrIniInput.value = evento.horaInicio || '09:00';
-    if (dtFimInput) dtFimInput.value = evento.dataFim || evento.dataInicio;
+    if (dtFimInput) dtFimInput.value = evento.dataFim || evento.dataInicio || '';
     if (hrFimInput) hrFimInput.value = evento.horaFim || '10:00';
     if (localInput) localInput.value = evento.local || '';
     if (descInput) descInput.value = evento.descricao || '';
     if (repSelect) repSelect.value = evento.repeticao || 'nenhuma';
-    if (lembreteSelect) lembreteSelect.value = String(evento.lembreteMinutos || 60);
+    if (visivelSelect) visivelSelect.value = evento.visivelPara || 'todos';
     if (gastoInput) gastoInput.value = evento.gastoPrevisto > 0 ? evento.gastoPrevisto.toFixed(2) : '';
 
     participantesSel = Array.isArray(evento.participantesIds) ? [...evento.participantesIds] : [];
     corSel = evento.cor || '#5581E3';
+    visivelPara = evento.visivelPara || 'todos';
+
+    if (Array.isArray(evento.lembretesMinutos) && evento.lembretesMinutos.length > 0) {
+      lembretesEditandoForm = [...evento.lembretesMinutos];
+    } else if (evento.lembreteMinutos !== undefined) {
+      lembretesEditandoForm = [Number(evento.lembreteMinutos)];
+    }
   } else {
     if (titModal) titModal.textContent = '📅 Novo Evento Familiar';
     if (btnExcluir) btnExcluir.style.display = 'none';
@@ -3760,37 +4304,212 @@ function abrirModalEventoCalendario(eventoId = null, dataPadrao = null) {
     if (localInput) localInput.value = '';
     if (descInput) descInput.value = '';
     if (repSelect) repSelect.value = 'nenhuma';
-    if (lembreteSelect) lembreteSelect.value = '60';
+    if (visivelSelect) visivelSelect.value = 'todos';
     if (gastoInput) gastoInput.value = '';
 
     participantesSel = [S.membroAtivoId || 'm_1'];
     const membro = obterMembroAtivo();
-    corSel = membro.cor || '#5581E3';
+    corSel = membro?.cor || '#5581E3';
   }
 
-  // Renderiza botões de participantes
-  if (partContainer) {
-    partContainer.innerHTML = (S.membrosPerfil || []).map(m => {
-      const isSel = participantesSel.includes(m.id);
-      return `
-        <button type="button" class="filtro-pill ${isSel ? 'sel' : ''}" data-mid="${m.id}" style="${isSel ? `background:${m.cor};color:#fff;border-color:${m.cor};` : ''}" onclick="toggleParticipanteEventoModal('${m.id}')">
-          ${escapeHtml(m.nome)}
-        </button>
-      `;
-    }).join('');
-  }
+  // Renderiza avatares circulares de participantes
+  renderParticipantesAvataresEventoModal(participantesSel);
 
-  // Renderiza grade de cores
-  const corHidden = document.getElementById('ev-cor');
-  if (corHidden) corHidden.value = corSel;
-  if (coresContainer) {
-    coresContainer.innerHTML = PALETA_FAMILIAR.map(c => `
-      <div data-cor="${c}" onclick="selecionarCorEventoModal('${c}')" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c === corSel ? '#fff' : 'transparent'};"></div>
-    `).join('');
-  }
+  // Renderiza paleta de 10 cores nomeadas e aplica ao header do modal
+  renderCoresNomeadasEventoModal(corSel);
+
+  // Renderiza lista de múltiplos lembretes
+  renderLembretesEventoForm();
 
   toggleDiaInteiroEventoModal();
   openM('m-evento-calendario');
+}
+
+/**
+ * Renderiza os avatares circulares dos membros com botão "👥 Todos" (Print 2).
+ */
+function renderParticipantesAvataresEventoModal(participantesSel = []) {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('ev-participantes-container');
+  if (!container) return;
+
+  const membros = S.membrosPerfil || [];
+  const todosMarcados = membros.length > 0 && membros.every(m => participantesSel.includes(m.id));
+
+  let html = `
+    <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;align-items:center;width:100%;">
+      <!-- Botão Marcar Todos -->
+      <button type="button" class="btn ${todosMarcados ? 'btn-primary' : ''}" style="width:auto;margin:0;padding:6px 10px;font-size:11px;border-radius:20px;white-space:nowrap;" onclick="toggleTodosParticipantesEventoModal()">
+        👥 Todos
+      </button>
+  `;
+
+  membros.forEach(m => {
+    const isSel = participantesSel.includes(m.id);
+    const iniciais = (m.nome || 'M').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+
+    html += `
+      <div class="cal-avatar-part-wrap" onclick="toggleParticipanteAvatarModal('${m.id}')" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;user-select:none;min-width:48px;">
+        <div class="cal-avatar-circ ${isSel ? 'sel' : ''}" data-mid="${m.id}" style="width:40px;height:40px;border-radius:50%;background:${m.cor || 'var(--primary)'};display:flex;align-items:center;justify-content:center;position:relative;border:2.5px solid ${isSel ? '#ffffff' : 'transparent'};box-shadow:${isSel ? '0 0 0 2px ' + (m.cor || 'var(--primary)') : 'none'};transition:all 0.15s ease;">
+          <span style="color:#ffffff;font-size:12px;font-weight:800;">${iniciais}</span>
+          ${isSel ? '<span class="cal-avatar-check" style="position:absolute;bottom:-2px;right:-2px;background:#10B981;color:#ffffff;width:16px;height:16px;border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;border:1.5px solid #ffffff;font-weight:900;">✓</span>' : ''}
+        </div>
+        <span style="font-size:10px;color:var(--text);margin-top:4px;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${isSel ? '700' : '400'};">${escapeHtml(m.nome.split(' ')[0])}</span>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function toggleParticipanteAvatarModal(membroId) {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('ev-participantes-container');
+  if (!container) return;
+
+  const circ = container.querySelector(`.cal-avatar-circ[data-mid="${membroId}"]`);
+  if (!circ) return;
+
+  const wrap = circ.closest('.cal-avatar-part-wrap');
+  const nomeLabel = wrap ? wrap.querySelector('span:last-child') : null;
+  const membro = (S.membrosPerfil || []).find(m => m.id === membroId);
+  const cor = membro?.cor || 'var(--primary)';
+
+  if (circ.classList.contains('sel')) {
+    circ.classList.remove('sel');
+    circ.style.borderColor = 'transparent';
+    circ.style.boxShadow = 'none';
+    const chk = circ.querySelector('.cal-avatar-check');
+    if (chk) chk.remove();
+    if (nomeLabel) nomeLabel.style.fontWeight = '400';
+  } else {
+    circ.classList.add('sel');
+    circ.style.borderColor = '#ffffff';
+    circ.style.boxShadow = `0 0 0 2px ${cor}`;
+    if (!circ.querySelector('.cal-avatar-check')) {
+      const chk = document.createElement('span');
+      chk.className = 'cal-avatar-check';
+      chk.style.cssText = 'position:absolute;bottom:-2px;right:-2px;background:#10B981;color:#ffffff;width:16px;height:16px;border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;border:1.5px solid #ffffff;font-weight:900;';
+      chk.textContent = '✓';
+      circ.appendChild(chk);
+    }
+    if (nomeLabel) nomeLabel.style.fontWeight = '700';
+  }
+}
+
+function toggleParticipanteEventoModal(membroId) {
+  return toggleParticipanteAvatarModal(membroId);
+}
+
+function toggleTodosParticipantesEventoModal() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('ev-participantes-container');
+  if (!container) return;
+
+  const circs = Array.from(container.querySelectorAll('.cal-avatar-circ'));
+  const todosMarcados = circs.length > 0 && circs.every(c => c.classList.contains('sel'));
+
+  circs.forEach(c => {
+    const mid = c.dataset.mid;
+    if (todosMarcados) {
+      if (c.classList.contains('sel')) toggleParticipanteAvatarModal(mid);
+    } else {
+      if (!c.classList.contains('sel')) toggleParticipanteAvatarModal(mid);
+    }
+  });
+}
+
+/**
+ * Renderiza as 10 cores nomeadas com indicador textual e estilização do header (Print 2).
+ */
+function renderCoresNomeadasEventoModal(corAtiva = '#5581E3') {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('ev-cores-grid');
+  const corHidden = document.getElementById('ev-cor');
+  const nomeLabel = document.getElementById('ev-cor-nome-label');
+  const headerModal = document.getElementById('ev-modal-header');
+
+  if (corHidden) corHidden.value = corAtiva;
+  if (nomeLabel) nomeLabel.textContent = obterNomeCorEvento(corAtiva);
+
+  if (headerModal) {
+    headerModal.style.background = corAtiva;
+    headerModal.style.color = '#ffffff';
+  }
+
+  if (container) {
+    container.innerHTML = CORES_EVENTO_NOMEADAS.map(c => {
+      const isSel = c.hex.toLowerCase() === corAtiva.toLowerCase();
+      return `
+        <div data-cor="${c.hex}" title="${c.nome}" onclick="selecionarCorEventoNomeada('${c.hex}')" style="width:28px;height:28px;border-radius:50%;background:${c.hex};cursor:pointer;border:2.5px solid ${isSel ? '#ffffff' : 'transparent'};box-shadow:${isSel ? '0 0 0 2px ' + c.hex : 'none'};transition:all 0.15s ease;" role="button" aria-label="${c.nome}"></div>
+      `;
+    }).join('');
+  }
+}
+
+function selecionarCorEventoNomeada(hex) {
+  renderCoresNomeadasEventoModal(hex);
+}
+
+function selecionarCorEventoModal(cor) {
+  // Alias de compatibilidade
+  selecionarCorEventoNomeada(cor);
+}
+
+function formatarMinutosLembreteLegivel(minutos) {
+  const m = Number(minutos);
+  if (m === 0) return 'Na hora do evento';
+  if (m === 5) return '5 minutos antes';
+  if (m === 10) return '10 minutos antes';
+  if (m === 15) return '15 minutos antes';
+  if (m === 30) return '30 minutos antes';
+  if (m === 60) return '1 hora antes';
+  if (m === 120) return '2 horas antes';
+  if (m === 1440) return '1 dia antes';
+  if (m === 2880) return '2 dias antes';
+  return `${m} min antes`;
+}
+
+/**
+ * Renderiza a lista dinâmica de múltiplos lembretes configurados para o evento.
+ */
+function renderLembretesEventoForm() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('ev-lembretes-lista');
+  if (!container) return;
+
+  if (lembretesEditandoForm.length === 0) {
+    container.innerHTML = '<span style="font-size:11px;color:var(--muted);">Nenhum lembrete configurado.</span>';
+    return;
+  }
+
+  container.innerHTML = lembretesEditandoForm.map((min, idx) => `
+    <span class="badge" style="background:var(--bg3);color:var(--text);border:1px solid var(--border2);padding:4px 8px;font-size:11px;display:inline-flex;align-items:center;gap:6px;border-radius:14px;">
+      🔔 ${formatarMinutosLembreteLegivel(min)}
+      <span style="cursor:pointer;font-weight:800;color:var(--red);font-size:12px;" onclick="removerLembreteEventoForm(${idx})" title="Remover lembrete">✕</span>
+    </span>
+  `).join('');
+}
+
+function adicionarLembreteEventoForm() {
+  if (typeof document === 'undefined') return;
+  const select = document.getElementById('ev-lembrete-seletor-novo');
+  if (!select) return;
+
+  const min = parseInt(select.value, 10);
+  if (!isNaN(min) && !lembretesEditandoForm.includes(min)) {
+    lembretesEditandoForm.push(min);
+    lembretesEditandoForm.sort((a, b) => a - b);
+    renderLembretesEventoForm();
+  }
+}
+
+function removerLembreteEventoForm(index) {
+  if (index >= 0 && index < lembretesEditandoForm.length) {
+    lembretesEditandoForm.splice(index, 1);
+    renderLembretesEventoForm();
+  }
 }
 
 function toggleDiaInteiroEventoModal() {
@@ -3804,37 +4523,6 @@ function toggleDiaInteiroEventoModal() {
   if (colHrFim) colHrFim.style.display = isDiaInteiro ? 'none' : 'block';
 }
 
-function toggleParticipanteEventoModal(membroId) {
-  if (typeof document === 'undefined') return;
-  const btn = document.querySelector(`#ev-participantes-container button[data-mid="${membroId}"]`);
-  if (!btn) return;
-
-  const membro = (S.membrosPerfil || []).find(m => m.id === membroId);
-  const cor = membro ? membro.cor : 'var(--primary)';
-
-  if (btn.classList.contains('sel')) {
-    btn.classList.remove('sel');
-    btn.style.background = 'transparent';
-    btn.style.color = 'var(--muted)';
-    btn.style.borderColor = 'var(--border2)';
-  } else {
-    btn.classList.add('sel');
-    btn.style.background = cor;
-    btn.style.color = '#fff';
-    btn.style.borderColor = cor;
-  }
-}
-
-function selecionarCorEventoModal(cor) {
-  const corHidden = document.getElementById('ev-cor');
-  if (corHidden) corHidden.value = cor;
-  if (typeof document !== 'undefined') {
-    document.querySelectorAll('#ev-cores-grid div').forEach(d => {
-      d.style.borderColor = d.dataset.cor === cor ? '#fff' : 'transparent';
-    });
-  }
-}
-
 function salvarEventoCalendarioModal() {
   const titInput = document.getElementById('ev-titulo');
   const diaIntChk = document.getElementById('ev-dia-inteiro');
@@ -3846,7 +4534,7 @@ function salvarEventoCalendarioModal() {
   const descInput = document.getElementById('ev-descricao');
   const corHidden = document.getElementById('ev-cor');
   const repSelect = document.getElementById('ev-repeticao');
-  const lembreteSelect = document.getElementById('ev-lembrete');
+  const visivelSelect = document.getElementById('ev-visivel-para');
   const gastoInput = document.getElementById('ev-gasto-previsto');
 
   const titulo = titInput ? titInput.value.trim() : '';
@@ -3863,15 +4551,20 @@ function salvarEventoCalendarioModal() {
   const local = localInput ? localInput.value.trim() : '';
   const descricao = descInput ? descInput.value.trim() : '';
   const cor = corHidden ? corHidden.value : '#5581E3';
+  const corNome = obterNomeCorEvento(cor);
   const repeticao = repSelect ? repSelect.value : 'nenhuma';
-  const lembreteMinutos = lembreteSelect ? parseInt(lembreteSelect.value, 10) : 60;
+  const visivelPara = visivelSelect ? visivelSelect.value : 'todos';
+  const lembretesMinutos = Array.isArray(lembretesEditandoForm) && lembretesEditandoForm.length > 0
+    ? [...lembretesEditandoForm]
+    : [30];
+  const lembreteMinutos = lembretesMinutos[0] || 30; // Compatibilidade legada
   const gastoPrevisto = gastoInput && membroAtualPodeVerFinancas() ? parseFloat(gastoInput.value) || 0 : 0;
 
-  // Participantes selecionados
+  // Participantes selecionados nos avatares
   const participantesIds = [];
   if (typeof document !== 'undefined') {
-    document.querySelectorAll('#ev-participantes-container button.sel').forEach(btn => {
-      if (btn.dataset.mid) participantesIds.push(btn.dataset.mid);
+    document.querySelectorAll('#ev-participantes-container .cal-avatar-circ.sel').forEach(circ => {
+      if (circ.dataset.mid) participantesIds.push(circ.dataset.mid);
     });
   }
   if (participantesIds.length === 0) {
@@ -3889,7 +4582,10 @@ function salvarEventoCalendarioModal() {
     descricao,
     participantesIds,
     cor,
+    corNome,
     repeticao,
+    visivelPara,
+    lembretesMinutos,
     lembreteMinutos,
     gastoPrevisto
   };
@@ -3914,6 +4610,441 @@ function excluirEventoCalendarioModal() {
   closeM('m-evento-calendario');
   eventoEditandoId = null;
   exibirToastNotificacao('Evento removido do calendário', '🗑️');
+}
+
+// --- MODAL DETALHES DO EVENTO (PRINT 1 - Calendário Pro v2.1) ---
+
+/**
+ * Abre o modal de Detalhes Ricos do Evento:
+ * Cabeçalho colorido, data extensa, participantes com foto, cor, lembretes,
+ * local com botão de rota e preview de mapa, além de curtidas e feed de comentários.
+ */
+function abrirDetalheEventoCalendario(eventoId) {
+  if (typeof document === 'undefined') return;
+
+  // Procura em S.eventosCalendario ou evento consolidado
+  let evento = (S.eventosCalendario || []).find(e => e.id === eventoId);
+  if (!evento) {
+    // Tenta obter evento consolidado por ID
+    const consolidados = obterEventosConsolidadosPeriodo('2020-01-01', '2030-12-31');
+    evento = consolidados.find(e => e.origemId === eventoId || e.id === eventoId);
+  }
+
+  if (!evento) return;
+  eventoVisualizandoDetalheId = evento.id || evento.origemId;
+
+  renderDetalheEventoModal(evento);
+  openM('m-detalhe-evento-calendario');
+}
+
+function fecharDetalheEventoCalendario() {
+  closeM('m-detalhe-evento-calendario');
+  eventoVisualizandoDetalheId = null;
+}
+
+function editarEventoAtualModal() {
+  const id = eventoVisualizandoDetalheId;
+  fecharDetalheEventoCalendario();
+  if (id) {
+    abrirModalEventoCalendario(id);
+  }
+}
+
+function confirmarExcluirEventoAtualModal() {
+  const id = eventoVisualizandoDetalheId;
+  if (!id) return;
+  if (typeof confirm === 'function' && !confirm('Deseja realmente excluir este evento?')) {
+    return;
+  }
+  fecharDetalheEventoCalendario();
+  excluirEventoCalendario(id);
+  exibirToastNotificacao('Evento removido com sucesso.', '🗑️');
+}
+
+/**
+ * Renderiza o conteúdo rico de `#m-detalhe-evento-calendario` (Print 1).
+ */
+function renderDetalheEventoModal(evento) {
+  if (typeof document === 'undefined') return;
+
+  const headerEl = document.getElementById('ev-det-header');
+  const titEl = document.getElementById('ev-det-titulo');
+  const dataEl = document.getElementById('ev-det-data-hora');
+  const partEl = document.getElementById('ev-det-participantes');
+  const corEl = document.getElementById('ev-det-cor-tag');
+  const lembretesEl = document.getElementById('ev-det-lembretes');
+  const localEl = document.getElementById('ev-det-local-container');
+  const descEl = document.getElementById('ev-det-descricao-container');
+  const curtidasBtn = document.getElementById('ev-det-btn-curtir');
+  const curtidasTexto = document.getElementById('ev-det-curtidas-texto');
+  const comentariosContainer = document.getElementById('ev-det-comentarios-lista');
+
+  const corHex = evento.cor || '#5581E3';
+  const corNome = evento.corNome || obterNomeCorEvento(corHex);
+
+  // 1. Cabeçalho colorido
+  if (headerEl) {
+    headerEl.style.background = corHex;
+    headerEl.style.color = '#ffffff';
+  }
+
+  // 2. Título
+  if (titEl) {
+    titEl.textContent = evento.titulo || 'Evento';
+  }
+
+  // 3. Data e Horário por Extenso
+  if (dataEl) {
+    const dataIso = evento.dataInicio || evento.data || '';
+    let dataFormatada = dataIso;
+    if (dataIso) {
+      const [y, m, d] = dataIso.split('-').map(Number);
+      const dtObj = new Date(y, m - 1, d);
+      const diasSemanaNomes = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+      const mesesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      dataFormatada = `${diasSemanaNomes[dtObj.getDay()]}, ${d} de ${mesesNomes[m - 1]} de ${y}`;
+    }
+
+    const horarioStr = evento.diaInteiro
+      ? 'Dia inteiro'
+      : (evento.horaInicio ? `${evento.horaInicio}${evento.horaFim ? ' – ' + evento.horaFim : ''}` : 'Horário não definido');
+
+    dataEl.innerHTML = `
+      <div style="font-size:13px;font-weight:700;color:var(--text);">${dataFormatada}</div>
+      <div style="font-size:12px;color:var(--muted);">${horarioStr}</div>
+    `;
+  }
+
+  // 4. Participantes
+  if (partEl) {
+    const partIds = Array.isArray(evento.participantesIds) ? evento.participantesIds : [];
+    const membros = (S.membrosPerfil || []).filter(m => partIds.includes(m.id));
+
+    if (membros.length === 0) {
+      partEl.innerHTML = '<span style="font-size:12px;color:var(--muted);">Toda a família</span>';
+    } else {
+      partEl.innerHTML = `
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          ${membros.map(m => {
+            const iniciais = (m.nome || 'M').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+            return `
+              <span class="badge" style="background:${m.cor}22;color:${m.cor};border:1px solid ${m.cor}44;padding:3px 8px;font-size:11px;display:inline-flex;align-items:center;gap:4px;border-radius:12px;">
+                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${m.cor};color:#fff;font-size:9px;line-height:16px;text-align:center;font-weight:800;">${iniciais}</span>
+                ${escapeHtml(m.nome)}
+              </span>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+  }
+
+  // 5. Cor
+  if (corEl) {
+    corEl.innerHTML = `
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${corHex};"></span>
+        ${escapeHtml(corNome)}
+      </span>
+    `;
+  }
+
+  // 6. Lembretes
+  if (lembretesEl) {
+    const lembretes = Array.isArray(evento.lembretesMinutos) && evento.lembretesMinutos.length > 0
+      ? evento.lembretesMinutos
+      : (evento.lembreteMinutos !== undefined ? [evento.lembreteMinutos] : [30]);
+
+    lembretesEl.innerHTML = lembretes.map(min => `
+      <span class="badge" style="background:var(--bg3);color:var(--text);border:1px solid var(--border2);font-size:11px;padding:3px 8px;border-radius:10px;">
+        🔔 ${formatarMinutosLembreteLegivel(min)}
+      </span>
+    `).join(' ');
+  }
+
+  // 7. Local com Botão e Preview de Mapa
+  if (localEl) {
+    if (evento.local && evento.local.trim()) {
+      const localEncoded = encodeURIComponent(evento.local.trim());
+      localEl.style.display = 'block';
+      localEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:15px;">📍</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text);">${escapeHtml(evento.local)}</span>
+          </div>
+          <a href="https://www.google.com/maps/search/?api=1&query=${localEncoded}" target="_blank" rel="noopener noreferrer" class="btn" style="width:auto;margin:0;padding:4px 8px;font-size:11px;text-decoration:none;">
+            🗺️ Rota
+          </a>
+        </div>
+        <!-- Card Visual de Preview do Mapa -->
+        <div class="cal-map-preview" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${localEncoded}','_blank')" style="background:linear-gradient(135deg, #1e293b, #0f172a);border-radius:8px;padding:12px;display:flex;align-items:center;gap:12px;cursor:pointer;border:1px solid var(--border2);">
+          <div style="width:36px;height:36px;border-radius:50%;background:rgba(239,68,68,0.2);display:flex;align-items:center;justify-content:center;color:#ef4444;font-size:18px;">
+            📍
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#ffffff;">Visualizar no Google Maps</div>
+            <div style="font-size:10px;color:#94a3b8;">${escapeHtml(evento.local)}</div>
+          </div>
+        </div>
+      `;
+    } else {
+      localEl.style.display = 'none';
+      localEl.innerHTML = '';
+    }
+  }
+
+  // 8. Descrição
+  if (descEl) {
+    if (evento.descricao && evento.descricao.trim()) {
+      descEl.style.display = 'block';
+      descEl.innerHTML = `
+        <div style="font-size:11px;color:var(--muted);margin-bottom:2px;font-weight:700;">OBSERVAÇÕES</div>
+        <p style="font-size:12px;color:var(--text);margin:0;white-space:pre-line;">${escapeHtml(evento.descricao)}</p>
+      `;
+    } else {
+      descEl.style.display = 'none';
+      descEl.innerHTML = '';
+    }
+  }
+
+  // 9. Bloco Social: Curtidas
+  const membroAtivoId = S.membroAtivoId || 'm_1';
+  const curtidas = Array.isArray(evento.curtidasIds) ? evento.curtidasIds : [];
+  const jaCurtiu = curtidas.includes(membroAtivoId);
+
+  if (curtidasBtn) {
+    curtidasBtn.innerHTML = jaCurtiu ? '❤️ Curtido' : '🤍 Curtir';
+    curtidasBtn.style.color = jaCurtiu ? '#EF4444' : 'var(--text)';
+  }
+
+  if (curtidasTexto) {
+    if (curtidas.length === 0) {
+      curtidasTexto.textContent = 'Seja o primeiro a curtir este compromisso!';
+    } else {
+      const nomes = (S.membrosPerfil || [])
+        .filter(m => curtidas.includes(m.id))
+        .map(m => m.id === membroAtivoId ? 'Você' : m.nome.split(' ')[0]);
+      curtidasTexto.textContent = `${nomes.join(', ')} curtiram (${curtidas.length})`;
+    }
+  }
+
+  // 10. Bloco Social: Feed de Comentários
+  if (comentariosContainer) {
+    const comentarios = Array.isArray(evento.comentarios) ? evento.comentarios : [];
+    if (comentarios.length === 0) {
+      comentariosContainer.innerHTML = '<p style="font-size:11px;color:var(--muted);margin:4px 0;">Nenhum comentário ainda. Deixe uma mensagem para a família!</p>';
+    } else {
+      comentariosContainer.innerHTML = comentarios.map(c => `
+        <div style="background:var(--bg3);border-radius:8px;padding:8px 10px;margin-bottom:6px;border:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+            <span style="font-size:11px;font-weight:700;color:var(--text);">${escapeHtml(c.membroNome || 'Familiar')}</span>
+            <span style="font-size:10px;color:var(--muted);">${c.criadoEm ? new Date(c.criadoEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+          </div>
+          <p style="font-size:12px;margin:0;color:var(--text);">${escapeHtml(c.texto)}</p>
+        </div>
+      `).join('');
+    }
+  }
+}
+
+function curtirEventoAtualDetalhe() {
+  if (!eventoVisualizandoDetalheId) return;
+  const res = curtirEventoCalendario(eventoVisualizandoDetalheId);
+  if (res.ok) {
+    const evento = (S.eventosCalendario || []).find(e => e.id === eventoVisualizandoDetalheId);
+    if (evento) renderDetalheEventoModal(evento);
+  }
+}
+
+function enviarComentarioEventoDetalhe() {
+  if (!eventoVisualizandoDetalheId) return;
+  const input = document.getElementById('ev-detalhe-novo-comentario');
+  if (!input) return;
+
+  const texto = input.value.trim();
+  if (!texto) return;
+
+  const res = adicionarComentarioEventoCalendario(eventoVisualizandoDetalheId, texto);
+  if (res.ok) {
+    input.value = '';
+    const evento = (S.eventosCalendario || []).find(e => e.id === eventoVisualizandoDetalheId);
+    if (evento) renderDetalheEventoModal(evento);
+  }
+}
+
+// --- MODAL CONFIGURAÇÕES DO CALENDÁRIO (PRINTS 3 e 4) ---
+
+function abrirModalConfigCalendario() {
+  if (typeof document === 'undefined') return;
+
+  const cfg = S.configCalendario || {};
+
+  // Checkboxes de Camadas
+  const chkEventos = document.getElementById('cfg-cal-camada-eventos');
+  const chkTarefas = document.getElementById('cfg-cal-camada-tarefas');
+  const chkFeriados = document.getElementById('cfg-cal-camada-feriados');
+  const chkAniv = document.getElementById('cfg-cal-camada-aniversarios');
+  const chkFin = document.getElementById('cfg-cal-camada-financas');
+  const wrapFin = document.getElementById('cfg-cal-wrap-financas');
+
+  if (chkEventos) chkEventos.checked = Boolean(camadasCalendarioAtivas.eventos);
+  if (chkTarefas) chkTarefas.checked = Boolean(camadasCalendarioAtivas.tarefas);
+  if (chkFeriados) chkFeriados.checked = Boolean(camadasCalendarioAtivas.feriados);
+  if (chkAniv) chkAniv.checked = Boolean(camadasCalendarioAtivas.aniversarios);
+
+  if (wrapFin) {
+    wrapFin.style.display = membroAtualPodeVerFinancas() ? 'block' : 'none';
+  }
+  if (chkFin) {
+    chkFin.checked = Boolean(camadasCalendarioAtivas.financas);
+  }
+
+  // Preferências
+  const swFeriadosBrasil = document.getElementById('cfg-cal-feriados-brasil');
+  const swNumSemana = document.getElementById('cfg-cal-num-semana');
+  const selDiaSemana = document.getElementById('cfg-cal-primeiro-dia');
+  const selLembretePadrao = document.getElementById('cfg-cal-lembrete-padrao');
+  const swLembreteDiario = document.getElementById('cfg-cal-lembrete-diario');
+
+  if (swFeriadosBrasil) swFeriadosBrasil.checked = cfg.feriadosBrasil !== false;
+  if (swNumSemana) swNumSemana.checked = Boolean(cfg.mostrarNumeroSemana);
+  if (selDiaSemana) selDiaSemana.value = String(cfg.primeiroDiaSemana || 0);
+  if (selLembretePadrao) selLembretePadrao.value = String(cfg.lembretePadraoMinutos || 30);
+  if (swLembreteDiario) swLembreteDiario.checked = Boolean(cfg.lembreteDiarioAgenda);
+
+  openM('m-config-calendario');
+}
+
+function fecharModalConfigCalendario() {
+  closeM('m-config-calendario');
+}
+
+function salvarConfigCalendarioModal() {
+  const swFeriadosBrasil = document.getElementById('cfg-cal-feriados-brasil');
+  const swNumSemana = document.getElementById('cfg-cal-num-semana');
+  const selDiaSemana = document.getElementById('cfg-cal-primeiro-dia');
+  const selLembretePadrao = document.getElementById('cfg-cal-lembrete-padrao');
+  const swLembreteDiario = document.getElementById('cfg-cal-lembrete-diario');
+
+  const chkEventos = document.getElementById('cfg-cal-camada-eventos');
+  const chkTarefas = document.getElementById('cfg-cal-camada-tarefas');
+  const chkFeriados = document.getElementById('cfg-cal-camada-feriados');
+  const chkAniv = document.getElementById('cfg-cal-camada-aniversarios');
+  const chkFin = document.getElementById('cfg-cal-camada-financas');
+
+  // Atualiza camadas
+  if (chkEventos) camadasCalendarioAtivas.eventos = chkEventos.checked;
+  if (chkTarefas) camadasCalendarioAtivas.tarefas = chkTarefas.checked;
+  if (chkFeriados) camadasCalendarioAtivas.feriados = chkFeriados.checked;
+  if (chkAniv) camadasCalendarioAtivas.aniversarios = chkAniv.checked;
+  if (chkFin && membroAtualPodeVerFinancas()) camadasCalendarioAtivas.financas = chkFin.checked;
+
+  const dadosConfig = {
+    feriadosBrasil: swFeriadosBrasil ? swFeriadosBrasil.checked : true,
+    mostrarNumeroSemana: swNumSemana ? swNumSemana.checked : false,
+    primeiroDiaSemana: selDiaSemana ? parseInt(selDiaSemana.value, 10) : 0,
+    lembretePadraoMinutos: selLembretePadrao ? parseInt(selLembretePadrao.value, 10) : 30,
+    lembreteDiarioAgenda: swLembreteDiario ? swLembreteDiario.checked : false
+  };
+
+  salvarConfigCalendario(dadosConfig);
+  closeM('m-config-calendario');
+  exibirToastNotificacao('Configurações do Calendário salvas!', '⚙️');
+}
+
+function executarLimpezaEventosAntigosModal() {
+  if (typeof confirm === 'function' && !confirm('Deseja remover eventos antigos com mais de 3 meses do calendário? Contas e finanças não serão afetadas.')) {
+    return;
+  }
+  const res = limparEventosAntigosCalendario(3);
+  exibirToastNotificacao(`Limpeza concluída: ${res.removidos} eventos antigos removidos.`, '🧹');
+}
+
+// --- MODAL DE BUSCA NO CALENDÁRIO ---
+
+function abrirModalBuscaCalendario() {
+  if (typeof document === 'undefined') return;
+  const input = document.getElementById('cal-busca-termo');
+  const container = document.getElementById('cal-busca-resultados');
+  if (input) input.value = '';
+  if (container) container.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:16px;">Digite acima para buscar eventos, locais, pessoas ou feriados...</p>';
+  openM('m-busca-calendario');
+  if (input) setTimeout(() => input.focus(), 100);
+}
+
+function fecharModalBuscaCalendario() {
+  closeM('m-busca-calendario');
+}
+
+function executarBuscaCalendarioModal() {
+  if (typeof document === 'undefined') return;
+  const input = document.getElementById('cal-busca-termo');
+  const container = document.getElementById('cal-busca-resultados');
+  if (!input || !container) return;
+
+  const termo = input.value.trim();
+  if (!termo) {
+    container.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:16px;">Digite algo para buscar.</p>';
+    return;
+  }
+
+  const resultados = buscarEventosCalendario(termo);
+  if (resultados.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:24px;color:var(--muted);">
+        <p style="font-size:24px;margin-bottom:6px;">🔍</p>
+        <p style="font-size:13px;font-weight:700;color:var(--text);margin:0 0 2px;">Nenhum evento encontrado</p>
+        <p style="font-size:11px;margin:0;">Tente outro termo ou verifique se as camadas estão ativas.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = resultados.map(r => `
+    <div class="cal-item-card" style="border-left:4px solid ${r.cor};margin-bottom:8px;" onclick="closeM('m-busca-calendario');${r.tipo === 'evento' ? `abrirDetalheEventoCalendario('${r.origemId}')` : `abrirDiaCalendario('${r.data}')`}">
+      <div style="font-size:20px;">${r.icone}</div>
+      <div style="flex:1;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;font-weight:800;color:var(--text);">${escapeHtml(r.titulo)}</span>
+          <span style="font-size:11px;color:var(--muted);">${r.data}</span>
+        </div>
+        ${r.subtexto ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escapeHtml(r.subtexto)}</div>` : ''}
+        ${r.local ? `<div style="font-size:11px;color:var(--primary);margin-top:2px;">📍 ${escapeHtml(r.local)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// --- MODAL DE CRIAÇÃO DE EVENTO POR TEXTO LIVRE / IA (Print 2 Banner) ---
+
+function abrirModalParserTextoIA() {
+  if (typeof document === 'undefined') return;
+  const input = document.getElementById('parser-texto-ia-input');
+  if (input) input.value = '';
+  openM('m-parser-texto-ia');
+  if (input) setTimeout(() => input.focus(), 100);
+}
+
+function fecharModalParserTextoIA() {
+  closeM('m-parser-texto-ia');
+}
+
+function processarParserTextoIAModal() {
+  if (typeof document === 'undefined') return;
+  const input = document.getElementById('parser-texto-ia-input');
+  const texto = input ? input.value.trim() : '';
+  if (!texto) {
+    if (typeof alert === 'function') alert('Cole uma mensagem de WhatsApp, e-mail ou convite para processar.');
+    return;
+  }
+
+  const dadosDetectados = preencherEventoPorTextoIA(texto);
+  fecharModalParserTextoIA();
+
+  // Abre o modal de evento já pré-preenchido pela IA para revisão
+  abrirModalEventoCalendario(null, null, dadosDetectados);
+  exibirToastNotificacao('Dados preenchidos pela IA! Revise e confirme.', '✨');
 }
 
 // --- ANIVERSÁRIOS ---
@@ -4075,7 +5206,20 @@ function confirmarImportarICalModal() {
 }
 
 /**
- * Renderizador mestre da interface do Calendário Compartilhado (Etapa 3).
+ * Retorna o número da semana ISO (W1..W52) para exibição de badge no calendário.
+ */
+function obterNumeroSemanaISO(data) {
+  const d = new Date(Date.UTC(data.getFullYear(), data.getMonth(), data.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+/**
+ * Renderizador mestre da interface do Calendário Compartilhado Pro v2.1 (Print 5).
+ * Respeita primeiroDiaSemana (0=Dom, 1=Seg), mostrarNumeroSemana (#Sem),
+ * células altas, dias de borda e pílulas horizontais completas com link para detalhes.
  */
 function renderCalendario() {
   if (typeof document === 'undefined') return;
@@ -4085,7 +5229,15 @@ function renderCalendario() {
   const mesRef = refDate.getMonth(); // 0-11
   const mesesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const mesesNomesAbrev = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  const diasSemanaNomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  const cfg = S.configCalendario || {};
+  const primeiroDiaSem = cfg.primeiroDiaSemana === 1 ? 1 : 0; // 0=Dom, 1=Seg
+  const mostrarSemana = Boolean(cfg.mostrarNumeroSemana);
+
+  // Ordem dos dias da semana no cabeçalho
+  const diasSemanaNomes = primeiroDiaSem === 1
+    ? ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+    : ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   // Atualiza título do período no cabeçalho
   const titPeriodo = document.getElementById('cal-titulo-periodo');
@@ -4094,7 +5246,8 @@ function renderCalendario() {
       titPeriodo.textContent = `${mesesNomes[mesRef]} ${anoRef}`;
     } else if (visaoCalendarioAtual === 'semana') {
       const dtSemanaIni = new Date(refDate);
-      dtSemanaIni.setDate(refDate.getDate() - refDate.getDay());
+      const diff = dtSemanaIni.getDay() - primeiroDiaSem;
+      dtSemanaIni.setDate(refDate.getDate() - (diff < 0 ? diff + 7 : diff));
       const dtSemanaFim = new Date(dtSemanaIni);
       dtSemanaFim.setDate(dtSemanaIni.getDate() + 6);
       titPeriodo.textContent = `${dtSemanaIni.getDate()} ${mesesNomesAbrev[dtSemanaIni.getMonth()]} - ${dtSemanaFim.getDate()} ${mesesNomesAbrev[dtSemanaFim.getMonth()]} ${anoRef}`;
@@ -4119,14 +5272,14 @@ function renderCalendario() {
     ].join('');
   }
 
-  // Toggles de Camadas (oculta 'financas' se for criança)
+  // Toggles de Camadas (oculta 'financas' se for criança - RLS infantil)
   const podeVerFin = membroAtualPodeVerFinancas();
   const btnFinancas = document.getElementById('toggle-camada-financas');
   if (btnFinancas) {
     btnFinancas.style.display = podeVerFin ? 'inline-block' : 'none';
   }
 
-  ['eventos', 'financas', 'tarefas', 'aniversarios'].forEach(camada => {
+  ['eventos', 'financas', 'tarefas', 'aniversarios', 'feriados'].forEach(camada => {
     const btn = document.getElementById(`toggle-camada-${camada}`);
     if (btn) {
       if (camadasCalendarioAtivas[camada]) btn.classList.add('sel');
@@ -4137,17 +5290,29 @@ function renderCalendario() {
   // Data atual em formato YYYY-MM-DD
   const hojeISO = new Date().toISOString().slice(0, 10);
 
-  // --- 1. VISÃO MÊS ---
+  // --- 1. VISÃO MÊS (Print 5) ---
   const secMes = document.getElementById('cal-visao-mes');
   if (secMes && visaoCalendarioAtual === 'mes') {
-    const primeiroDiaSemana = new Date(anoRef, mesRef, 1).getDay(); // 0 a 6
+    const dia1Obj = new Date(anoRef, mesRef, 1);
     const totalDiasMes = new Date(anoRef, mesRef + 1, 0).getDate();
     const totalDiasMesAnt = new Date(anoRef, mesRef, 0).getDate();
 
-    // Início e fim do mês visualizado para carregar eventos
-    const dtIniMes = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-01`;
-    const dtFimMes = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-${String(totalDiasMes).padStart(2, '0')}`;
-    const eventosDoMes = obterEventosConsolidadosPeriodo(dtIniMes, dtFimMes);
+    // Cálculo do deslocamento inicial respeitando primeiroDiaSemana
+    let primeiroDiaSemanaOffset = dia1Obj.getDay(); // 0=Dom..6=Sáb
+    if (primeiroDiaSem === 1) {
+      // 1=Segunda: Seg(1)->0, Ter(2)->1, ..., Dom(0)->6
+      primeiroDiaSemanaOffset = (primeiroDiaSemanaOffset + 6) % 7;
+    }
+
+    // Intervalo estendido cobrindo bordas do mês para obter eventos completos
+    const dtIniMesAnt = new Date(anoRef, mesRef, 1 - primeiroDiaSemanaOffset);
+    const totalCelulas = primeiroDiaSemanaOffset + totalDiasMes;
+    const celulasFinais = (7 - (totalCelulas % 7)) % 7;
+    const dtFimMesProx = new Date(anoRef, mesRef, totalDiasMes + celulasFinais);
+
+    const dtIniRange = dtIniMesAnt.toISOString().slice(0, 10);
+    const dtFimRange = dtFimMesProx.toISOString().slice(0, 10);
+    const eventosDoMes = obterEventosConsolidadosPeriodo(dtIniRange, dtFimRange);
 
     // Mapeia eventos por dia 'YYYY-MM-DD'
     const mapaEventosDia = {};
@@ -4157,64 +5322,94 @@ function renderCalendario() {
     });
 
     let htmlGrade = `
-      <div class="cal-grid-dias" style="margin-bottom:6px;">
-        ${diasSemanaNomes.map(d => `<div class="cal-header-dia">${d}</div>`).join('')}
+      <div class="cal-grid-dias" style="display:grid;grid-template-columns:${mostrarSemana ? '32px ' : ''}repeat(7, 1fr);gap:4px;margin-bottom:6px;">
+        ${mostrarSemana ? '<div class="cal-header-dia" style="font-size:10px;color:var(--muted);text-align:center;">#Sem</div>' : ''}
+        ${diasSemanaNomes.map(d => `<div class="cal-header-dia" style="text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:4px 0;">${d}</div>`).join('')}
       </div>
-      <div class="cal-grid-dias">
+      <div class="cal-grid-dias" style="display:grid;grid-template-columns:${mostrarSemana ? '32px ' : ''}repeat(7, 1fr);gap:4px;">
     `;
 
-    // Dias do mês anterior para completar o grid
-    for (let i = primeiroDiaSemana - 1; i >= 0; i--) {
-      const numDia = totalDiasMesAnt - i;
-      htmlGrade += `
-        <div class="cal-celula-dia outro-mes">
-          <span class="cal-dia-num" style="color:var(--muted);">${numDia}</span>
-        </div>
-      `;
-    }
-
-    // Dias do mês atual
-    for (let d = 1; d <= totalDiasMes; d++) {
-      const diaISO = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    // Função auxiliar para renderizar uma célula de dia completa
+    function renderCelulaDia(diaISO, numDia, isOutroMes, numSemana = null) {
       const isHoje = diaISO === hojeISO;
       const isSel = diaISO === diaSelecionadoCalendario;
       const itensDoDia = mapaEventosDia[diaISO] || [];
 
-      // Bolinhas/dots dos primeiros 4 eventos
-      const dotsHtml = itensDoDia.slice(0, 4).map(it => `
-        <span class="cal-dot" style="background:${it.cor};"></span>
-      `).join('');
+      // Pílulas coloridas horizontais (até 3 visíveis na célula alta)
+      const pillsHtml = itensDoDia.slice(0, 3).map(it => {
+        const isEvProprio = it.tipo === 'evento' && it.origemId;
+        const cliqueAcao = isEvProprio
+          ? `event.stopPropagation();abrirDetalheEventoCalendario('${it.origemId}')`
+          : `event.stopPropagation();abrirDiaCalendario('${diaISO}')`;
 
-      // Até 2 pílulas de texto resumido
-      const pillsHtml = itensDoDia.slice(0, 2).map(it => `
-        <span class="cal-event-pill" style="background:${it.cor}22;color:${it.cor};border:1px solid ${it.cor}44;" title="${escapeHtml(it.titulo)}">
-          ${it.icone} ${escapeHtml(it.titulo)}
-        </span>
-      `).join('');
-
-      const maisQtd = itensDoDia.length > 2 ? `<span style="font-size:9px;color:var(--muted);font-weight:700;">+${itensDoDia.length - 2}</span>` : '';
-
-      htmlGrade += `
-        <div class="cal-celula-dia ${isHoje ? 'hoje' : ''} ${isSel ? 'selecionado' : ''}" onclick="abrirDiaCalendario('${diaISO}')">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span class="cal-dia-num" style="${isHoje ? 'color:var(--primary);' : ''}">${d}</span>
-            <div style="display:flex;gap:2px;">${dotsHtml}</div>
+        return `
+          <div class="cal-event-pill" style="background:${it.cor};color:#ffffff;padding:2px 4px;border-radius:4px;font-size:9.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;cursor:pointer;line-height:1.2;box-shadow:0 1px 2px rgba(0,0,0,0.15);" onclick="${cliqueAcao}" title="${escapeHtml(it.titulo)}">
+            ${it.icone ? it.icone + ' ' : ''}${escapeHtml(it.titulo)}
           </div>
-          ${pillsHtml}
+        `;
+      }).join('');
+
+      const maisQtd = itensDoDia.length > 3
+        ? `<div style="font-size:9px;color:var(--muted);font-weight:800;margin-top:2px;text-align:right;">+${itensDoDia.length - 3} mais</div>`
+        : '';
+
+      const badgeSemanaHtml = (mostrarSemana && numSemana !== null)
+        ? `<div class="cal-col-semana" style="display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--muted);background:var(--bg3);border-radius:6px;padding:2px 0;">W${numSemana}</div>`
+        : '';
+
+      return `
+        ${badgeSemanaHtml}
+        <div class="cal-celula-dia ${isOutroMes ? 'outro-mes' : ''} ${isHoje ? 'hoje' : ''} ${isSel ? 'selecionado' : ''}" style="min-height:85px;padding:4px;border-radius:8px;background:var(--bg2);border:1px solid ${isHoje ? 'var(--primary)' : 'var(--border)'};display:flex;flex-direction:column;cursor:pointer;position:relative;${isOutroMes ? 'opacity:0.55;' : ''}" onclick="abrirDiaCalendario('${diaISO}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+            <span class="cal-dia-num" style="font-size:12px;font-weight:${isHoje ? '800' : '600'};color:${isHoje ? 'var(--primary)' : 'var(--text)'};">${numDia}</span>
+            ${itensDoDia.length > 0 ? `<span style="width:5px;height:5px;border-radius:50%;background:${itensDoDia[0].cor};"></span>` : ''}
+          </div>
+          <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:1px;">
+            ${pillsHtml}
+          </div>
           ${maisQtd}
         </div>
       `;
     }
 
-    // Dias do próximo mês para fechar a última linha
-    const totalCelulas = primeiroDiaSemana + totalDiasMes;
-    const celulasRestantes = (7 - (totalCelulas % 7)) % 7;
-    for (let d = 1; d <= celulasRestantes; d++) {
-      htmlGrade += `
-        <div class="cal-celula-dia outro-mes">
-          <span class="cal-dia-num" style="color:var(--muted);">${d}</span>
-        </div>
-      `;
+    let contadorColunaSemana = 0;
+
+    // 1. Dias do mês anterior para completar o início da grade (Bordas com eventos visíveis)
+    for (let i = primeiroDiaSemanaOffset - 1; i >= 0; i--) {
+      const numDia = totalDiasMesAnt - i;
+      const mesAntRef = mesRef === 0 ? 11 : mesRef - 1;
+      const anoAntRef = mesRef === 0 ? anoRef - 1 : anoRef;
+      const diaISO = `${anoAntRef}-${String(mesAntRef + 1).padStart(2, '0')}-${String(numDia).padStart(2, '0')}`;
+      const dtObj = new Date(anoAntRef, mesAntRef, numDia);
+      const isInicioSemana = contadorColunaSemana % 7 === 0;
+      const numSem = isInicioSemana ? obterNumeroSemanaISO(dtObj) : null;
+
+      htmlGrade += renderCelulaDia(diaISO, numDia, true, numSem);
+      contadorColunaSemana++;
+    }
+
+    // 2. Dias do mês atual
+    for (let d = 1; d <= totalDiasMes; d++) {
+      const diaISO = `${anoRef}-${String(mesRef + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dtObj = new Date(anoRef, mesRef, d);
+      const isInicioSemana = contadorColunaSemana % 7 === 0;
+      const numSem = isInicioSemana ? obterNumeroSemanaISO(dtObj) : null;
+
+      htmlGrade += renderCelulaDia(diaISO, d, false, numSem);
+      contadorColunaSemana++;
+    }
+
+    // 3. Dias do próximo mês para fechar as colunas restantes da grade
+    for (let d = 1; d <= celulasFinais; d++) {
+      const mesProxRef = mesRef === 11 ? 0 : mesRef + 1;
+      const anoProxRef = mesRef === 11 ? anoRef + 1 : anoRef;
+      const diaISO = `${anoProxRef}-${String(mesProxRef + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dtObj = new Date(anoProxRef, mesProxRef, d);
+      const isInicioSemana = contadorColunaSemana % 7 === 0;
+      const numSem = isInicioSemana ? obterNumeroSemanaISO(dtObj) : null;
+
+      htmlGrade += renderCelulaDia(diaISO, d, true, numSem);
+      contadorColunaSemana++;
     }
 
     htmlGrade += '</div>';
@@ -4225,9 +5420,10 @@ function renderCalendario() {
   const secSemana = document.getElementById('cal-visao-semana');
   if (secSemana && visaoCalendarioAtual === 'semana') {
     const dtSemanaIni = new Date(refDate);
-    dtSemanaIni.setDate(refDate.getDate() - refDate.getDay()); // Domingo
+    const diff = dtSemanaIni.getDay() - primeiroDiaSem;
+    dtSemanaIni.setDate(refDate.getDate() - (diff < 0 ? diff + 7 : diff));
     const dtSemanaFim = new Date(dtSemanaIni);
-    dtSemanaFim.setDate(dtSemanaIni.getDate() + 6); // Sábado
+    dtSemanaFim.setDate(dtSemanaIni.getDate() + 6);
 
     const dtSemIniISO = dtSemanaIni.toISOString().slice(0, 10);
     const dtSemFimISO = dtSemanaFim.toISOString().slice(0, 10);
@@ -4247,7 +5443,7 @@ function renderCalendario() {
       const curDiaISO = curDiaObj.toISOString().slice(0, 10);
       const isHoje = curDiaISO === hojeISO;
       const diaNum = curDiaObj.getDate();
-      const diaNome = diasSemanaNomes[curDiaObj.getDay()];
+      const diaNome = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][curDiaObj.getDay()];
       const itensDesteDia = mapaSemana[curDiaISO] || [];
 
       htmlSemana += `
@@ -4262,7 +5458,7 @@ function renderCalendario() {
 
           <div style="display:flex;flex-direction:column;gap:6px;">
             ${itensDesteDia.length === 0 ? '<p style="font-size:11px;color:var(--muted);margin:0;">Nenhum compromisso.</p>' : itensDesteDia.map(it => `
-              <div style="background:var(--bg3);border-radius:6px;padding:6px 8px;display:flex;justify-content:space-between;align-items:center;border-left:3px solid ${it.cor};cursor:pointer;" onclick="abrirDiaCalendario('${curDiaISO}')">
+              <div style="background:var(--bg3);border-radius:6px;padding:6px 8px;display:flex;justify-content:space-between;align-items:center;border-left:3px solid ${it.cor};cursor:pointer;" onclick="${it.tipo === 'evento' && it.origemId ? `abrirDetalheEventoCalendario('${it.origemId}')` : `abrirDiaCalendario('${curDiaISO}')`}">
                 <span style="font-size:12px;font-weight:600;">${it.icone} ${escapeHtml(it.titulo)}</span>
                 <span style="font-size:10px;color:var(--muted);">${it.hora || 'Dia inteiro'}</span>
               </div>
@@ -4305,7 +5501,7 @@ function renderCalendario() {
       `;
     } else {
       htmlDia += eventosDia.map(it => `
-        <div class="cal-item-card" style="border-left: 4px solid ${it.cor};" onclick="abrirDiaCalendario('${diaISO}')">
+        <div class="cal-item-card" style="border-left: 4px solid ${it.cor};" onclick="${it.tipo === 'evento' && it.origemId ? `abrirDetalheEventoCalendario('${it.origemId}')` : `abrirDiaCalendario('${diaISO}')`}">
           <div class="cal-hora-col">${it.hora || 'Dia'}</div>
           <div style="flex:1;">
             <p style="font-weight:700;font-size:14px;margin:0 0 2px;">${it.icone} ${escapeHtml(it.titulo)}</p>
@@ -4346,7 +5542,7 @@ function renderCalendario() {
       secAgenda.innerHTML = Object.keys(grupos).map(dataKey => {
         const [y, m, d] = dataKey.split('-').map(Number);
         const dataObj = new Date(y, m - 1, d);
-        const diaNome = diasSemanaNomes[dataObj.getDay()];
+        const diaNome = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][dataObj.getDay()];
         const isHoje = dataKey === hojeISO;
         const itensDaData = grupos[dataKey];
 
@@ -4358,7 +5554,7 @@ function renderCalendario() {
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;">
               ${itensDaData.map(it => `
-                <div class="cal-item-card" style="border-left:4px solid ${it.cor};margin-bottom:0;" onclick="abrirDiaCalendario('${dataKey}')">
+                <div class="cal-item-card" style="border-left:4px solid ${it.cor};margin-bottom:0;" onclick="${it.tipo === 'evento' && it.origemId ? `abrirDetalheEventoCalendario('${it.origemId}')` : `abrirDiaCalendario('${dataKey}')`}">
                   <div class="cal-hora-col">${it.hora || 'Dia'}</div>
                   <div style="flex:1;">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -15852,13 +17048,24 @@ if (typeof window !== 'undefined') {
   window.excluirListaAtualDetalhe = excluirListaAtualDetalhe;
   window.selecionarTipoNovaLista = selecionarTipoNovaLista;
   window.renderListas = renderListas;
-  // Super-App Familiar v2.0 - Calendário & Aniversários (Etapa 3)
+  // Super-App Familiar v2.0 - Calendário Pro v2.1 (Etapa 3)
   window.CORES_CALENDARIO = CORES_CALENDARIO;
+  window.CORES_EVENTO_NOMEADAS = CORES_EVENTO_NOMEADAS;
+  window.obterNomeCorEvento = obterNomeCorEvento;
+  window.FERIADOS_BRASIL = FERIADOS_BRASIL;
+  window.calcularPascoa = calcularPascoa;
+  window.obterFeriadosBrasilAno = obterFeriadosBrasilAno;
   window.membroAtualPodeVerFinancas = membroAtualPodeVerFinancas;
   window.obterEventosConsolidadosPeriodo = obterEventosConsolidadosPeriodo;
   window.criarEventoCalendario = criarEventoCalendario;
   window.editarEventoCalendario = editarEventoCalendario;
   window.excluirEventoCalendario = excluirEventoCalendario;
+  window.curtirEventoCalendario = curtirEventoCalendario;
+  window.adicionarComentarioEventoCalendario = adicionarComentarioEventoCalendario;
+  window.preencherEventoPorTextoIA = preencherEventoPorTextoIA;
+  window.buscarEventosCalendario = buscarEventosCalendario;
+  window.salvarConfigCalendario = salvarConfigCalendario;
+  window.limparEventosAntigosCalendario = limparEventosAntigosCalendario;
   window.adicionarAniversariante = adicionarAniversariante;
   window.excluirAniversariante = excluirAniversariante;
   window.calcularProximoAniversario = calcularProximoAniversario;
@@ -15870,17 +17077,43 @@ if (typeof window !== 'undefined') {
   window.abrirDiaCalendario = abrirDiaCalendario;
   window.adicionarEventoNoDiaModal = adicionarEventoNoDiaModal;
   window.abrirModalEventoCalendario = abrirModalEventoCalendario;
+  window.renderParticipantesAvataresEventoModal = renderParticipantesAvataresEventoModal;
+  window.toggleParticipanteAvatarModal = toggleParticipanteAvatarModal;
+  window.toggleTodosParticipantesEventoModal = toggleTodosParticipantesEventoModal;
+  window.renderCoresNomeadasEventoModal = renderCoresNomeadasEventoModal;
+  window.selecionarCorEventoNomeada = selecionarCorEventoNomeada;
+  window.renderLembretesEventoForm = renderLembretesEventoForm;
+  window.adicionarLembreteEventoForm = adicionarLembreteEventoForm;
+  window.removerLembreteEventoForm = removerLembreteEventoForm;
   window.toggleDiaInteiroEventoModal = toggleDiaInteiroEventoModal;
   window.toggleParticipanteEventoModal = toggleParticipanteEventoModal;
   window.selecionarCorEventoModal = selecionarCorEventoModal;
   window.salvarEventoCalendarioModal = salvarEventoCalendarioModal;
   window.excluirEventoCalendarioModal = excluirEventoCalendarioModal;
+  window.abrirDetalheEventoCalendario = abrirDetalheEventoCalendario;
+  window.fecharDetalheEventoCalendario = fecharDetalheEventoCalendario;
+  window.renderDetalheEventoModal = renderDetalheEventoModal;
+  window.editarEventoAtualModal = editarEventoAtualModal;
+  window.confirmarExcluirEventoAtualModal = confirmarExcluirEventoAtualModal;
+  window.curtirEventoAtualDetalhe = curtirEventoAtualDetalhe;
+  window.enviarComentarioEventoDetalhe = enviarComentarioEventoDetalhe;
+  window.abrirModalConfigCalendario = abrirModalConfigCalendario;
+  window.fecharModalConfigCalendario = fecharModalConfigCalendario;
+  window.salvarConfigCalendarioModal = salvarConfigCalendarioModal;
+  window.executarLimpezaEventosAntigosModal = executarLimpezaEventosAntigosModal;
+  window.abrirModalBuscaCalendario = abrirModalBuscaCalendario;
+  window.fecharModalBuscaCalendario = fecharModalBuscaCalendario;
+  window.executarBuscaCalendarioModal = executarBuscaCalendarioModal;
+  window.abrirModalParserTextoIA = abrirModalParserTextoIA;
+  window.fecharModalParserTextoIA = fecharModalParserTextoIA;
+  window.processarParserTextoIAModal = processarParserTextoIAModal;
   window.abrirModalAniversarios = abrirModalAniversarios;
   window.salvarAniversarianteModal = salvarAniversarianteModal;
   window.excluirAniversarianteModal = excluirAniversarianteModal;
   window.abrirModalImportarICal = abrirModalImportarICal;
   window.lerArquivoICal = lerArquivoICal;
   window.confirmarImportarICalModal = confirmarImportarICalModal;
+  window.obterNumeroSemanaISO = obterNumeroSemanaISO;
   window.renderCalendario = renderCalendario;
   // Super-App Familiar v2.0 - Carteiras VA/VR & Orçamento (Etapa 4)
   window.obterDiasNoMes = obterDiasNoMes;
@@ -16212,13 +17445,24 @@ if (typeof module !== 'undefined' && module.exports) {
     excluirListaAtualDetalhe,
     selecionarTipoNovaLista,
     renderListas,
-    // Super-App Familiar v2.0 (Etapa 3 - Calendário & Aniversários)
+    // Super-App Familiar v2.0 (Etapa 3 - Calendário Pro v2.1)
     CORES_CALENDARIO,
+    CORES_EVENTO_NOMEADAS,
+    obterNomeCorEvento,
+    FERIADOS_BRASIL,
+    calcularPascoa,
+    obterFeriadosBrasilAno,
     membroAtualPodeVerFinancas,
     obterEventosConsolidadosPeriodo,
     criarEventoCalendario,
     editarEventoCalendario,
     excluirEventoCalendario,
+    curtirEventoCalendario,
+    adicionarComentarioEventoCalendario,
+    preencherEventoPorTextoIA,
+    buscarEventosCalendario,
+    salvarConfigCalendario,
+    limparEventosAntigosCalendario,
     adicionarAniversariante,
     excluirAniversariante,
     calcularProximoAniversario,
@@ -16230,17 +17474,43 @@ if (typeof module !== 'undefined' && module.exports) {
     abrirDiaCalendario,
     adicionarEventoNoDiaModal,
     abrirModalEventoCalendario,
+    renderParticipantesAvataresEventoModal,
+    toggleParticipanteAvatarModal,
+    toggleTodosParticipantesEventoModal,
+    renderCoresNomeadasEventoModal,
+    selecionarCorEventoNomeada,
+    renderLembretesEventoForm,
+    adicionarLembreteEventoForm,
+    removerLembreteEventoForm,
     toggleDiaInteiroEventoModal,
     toggleParticipanteEventoModal,
     selecionarCorEventoModal,
     salvarEventoCalendarioModal,
     excluirEventoCalendarioModal,
+    abrirDetalheEventoCalendario,
+    fecharDetalheEventoCalendario,
+    renderDetalheEventoModal,
+    editarEventoAtualModal,
+    confirmarExcluirEventoAtualModal,
+    curtirEventoAtualDetalhe,
+    enviarComentarioEventoDetalhe,
+    abrirModalConfigCalendario,
+    fecharModalConfigCalendario,
+    salvarConfigCalendarioModal,
+    executarLimpezaEventosAntigosModal,
+    abrirModalBuscaCalendario,
+    fecharModalBuscaCalendario,
+    executarBuscaCalendarioModal,
+    abrirModalParserTextoIA,
+    fecharModalParserTextoIA,
+    processarParserTextoIAModal,
     abrirModalAniversarios,
     salvarAniversarianteModal,
     excluirAniversarianteModal,
     abrirModalImportarICal,
     lerArquivoICal,
     confirmarImportarICalModal,
+    obterNumeroSemanaISO,
     renderCalendario,
     // Super-App Familiar v2.0 (Etapa 4 - Carteiras VA/VR e Orçamento)
     obterDiasNoMes,
