@@ -5891,8 +5891,14 @@ function initFirebase() {
  * Cria a estrutura inicial com estado limpo para contas individuais recém-criadas.
  * Garante que dados de exemplo (Alex/Gabi/Dudu) não poluam novas contas reais.
  */
-function criarEstadoLimpoContaNova(uid, nomeUsuario = 'Eu') {
-  const nomeLimpo = nomeUsuario || 'Eu';
+function criarEstadoLimpoContaNova(uidOuObj, nomeUsuario = 'Eu') {
+  let uid = uidOuObj;
+  let nomeLimpo = nomeUsuario;
+  if (typeof uidOuObj === 'object' && uidOuObj !== null) {
+    uid = uidOuObj.uid;
+    nomeLimpo = uidOuObj.displayName || uidOuObj.nome || (uidOuObj.email ? uidOuObj.email.split('@')[0] : nomeUsuario);
+  }
+  nomeLimpo = nomeLimpo || 'Eu';
   return {
     versaoSchema: 2,
     tema: 'claro',
@@ -6262,6 +6268,10 @@ function abrirModalGerenciarConta() {
   const telInp = document.getElementById('gerenciar-conta-telefone');
   if (telInp) telInp.value = formatarTelefoneBR(membroAtual.telefone || '');
 
+  // E-mail de Recuperação (Opcional)
+  const emailRecInp = document.getElementById('gerenciar-conta-email-recuperacao');
+  if (emailRecInp) emailRecInp.value = membroAtual.emailRecuperacao || '';
+
   // Endereço
   const endInp = document.getElementById('gerenciar-conta-endereco');
   if (endInp) endInp.value = membroAtual.endereco || '';
@@ -6337,6 +6347,9 @@ function salvarDadosGerenciarConta() {
 
   const telInp = document.getElementById('gerenciar-conta-telefone');
   if (telInp) membroAtual.telefone = telInp.value;
+
+  const emailRecInp = document.getElementById('gerenciar-conta-email-recuperacao');
+  if (emailRecInp) membroAtual.emailRecuperacao = emailRecInp.value.trim();
 
   const endInp = document.getElementById('gerenciar-conta-endereco');
   if (endInp) membroAtual.endereco = endInp.value;
@@ -6752,7 +6765,7 @@ function fazerCadastro() {
     .catch(e => {
       console.error('Erro no cadastro Firebase:', e);
       if (e.code === 'auth/email-already-in-use') {
-        if (msg) msg.innerHTML = 'Esse telefone/e-mail já possui cadastro. Toque em <strong>Entrar na Conta</strong> acima.';
+        if (msg) msg.innerHTML = 'Esse telefone/e-mail já possui cadastro. <a href="javascript:void(0)" onclick="esqueciMinhaSenha()" style="color:var(--accent,#2563eb);text-decoration:underline;font-weight:700;">Esqueceu a senha? Toque aqui para redefinir ou recuperar seu acesso</a> ou faça login acima.';
       } else {
         if (msg) msg.textContent = 'Erro ao criar conta: ' + (e.message || e);
       }
@@ -6808,9 +6821,9 @@ function fazerLogin() {
       if (e.code === 'auth/user-not-found') {
         if (msg) msg.innerHTML = 'Essa conta ainda não existe. Toque em <strong>Criar Nova Conta</strong> logo abaixo.';
       } else if (e.code === 'auth/wrong-password') {
-        if (msg) msg.textContent = 'Senha incorreta. Verifique e tente novamente.';
+        if (msg) msg.innerHTML = 'Senha incorreta. <a href="javascript:void(0)" onclick="esqueciMinhaSenha()" style="color:var(--accent,#2563eb);text-decoration:underline;font-weight:700;">Esqueceu a senha? Toque aqui para redefinir ou recuperar seu acesso</a>.';
       } else if (e.code === 'auth/invalid-credential') {
-        if (msg) msg.innerHTML = 'Credenciais não encontradas ou incorretas. Se ainda não possui acesso, toque em <strong>Criar Nova Conta</strong> abaixo.';
+        if (msg) msg.innerHTML = 'Credenciais não encontradas ou incorretas. <a href="javascript:void(0)" onclick="esqueciMinhaSenha()" style="color:var(--accent,#2563eb);text-decoration:underline;font-weight:700;">Esqueceu a senha? Toque aqui para redefinir ou recuperar seu acesso</a> ou crie uma conta.';
       } else if (e.code === 'auth/invalid-email') {
         if (msg) msg.textContent = 'Formato de telefone ou e-mail inválido.';
       } else {
@@ -6861,6 +6874,97 @@ function fazerLoginGoogle() {
       }
       if (msg) msg.textContent = 'Erro ao entrar com Google: ' + (e.message || e);
     });
+}
+
+/**
+ * Recuperação de senha inteligente (E-mail real vs Telefone).
+ * - Se identificador for e-mail real: dispara firebase.auth().sendPasswordResetEmail(email)
+ * - Se identificador for telefone: abre o modal de orientação/suporte WhatsApp (#m-recuperar-senha-tel)
+ * Decisão de design: Contas cadastradas por telefone mapeiam para e-mails sintéticos (@negativoaomilhao.app)
+ * sem caixa de entrada de e-mail; por isso o reset é orientado via titular ou suporte WhatsApp oficial.
+ */
+function esqueciMinhaSenha() {
+  const telInput = (typeof document !== 'undefined') ? (document.getElementById('login-tel-email') || document.getElementById('login-tel')) : null;
+  const msg = (typeof document !== 'undefined') ? document.getElementById('login-msg') : null;
+  const identificador = telInput ? telInput.value.trim() : '';
+
+  if (!identificador) {
+    if (msg) {
+      msg.style.color = 'var(--accent, #2563eb)';
+      msg.textContent = 'Informe seu e-mail ou telefone no campo acima e toque novamente em Esqueci minha senha.';
+    }
+    return Promise.resolve({ success: false, reason: 'identificador_vazio' });
+  }
+
+  // Verifica se é e-mail real (contém @ e não é o domínio sintético interno)
+  if (identificador.includes('@') && !identificador.toLowerCase().endsWith('@negativoaomilhao.app')) {
+    if (typeof firebase === 'undefined' || !firebase.auth) {
+      if (msg) {
+        msg.style.color = 'var(--red)';
+        msg.textContent = 'Firebase indisponível no momento. Tente novamente mais tarde.';
+      }
+      return Promise.resolve({ success: false, reason: 'firebase_indisponivel' });
+    }
+
+    if (msg) {
+      msg.style.color = 'var(--accent, #2563eb)';
+      msg.textContent = 'Enviando e-mail de redefinição de senha...';
+    }
+
+    return firebase.auth().sendPasswordResetEmail(identificador)
+      .then(() => {
+        if (msg) {
+          msg.style.color = '#10B981';
+          msg.textContent = 'Link de redefinição enviado! Verifique sua caixa de entrada e pasta de spam.';
+        }
+        return { success: true, email: identificador };
+      })
+      .catch((error) => {
+        console.error('Erro ao enviar e-mail de redefinição de senha:', error);
+        if (msg) {
+          msg.style.color = 'var(--red)';
+          if (error.code === 'auth/user-not-found') {
+            msg.textContent = 'Não encontramos nenhuma conta com este e-mail.';
+          } else if (error.code === 'auth/invalid-email') {
+            msg.textContent = 'Formato de e-mail inválido.';
+          } else {
+            msg.textContent = 'Erro ao enviar redefinição: ' + (error.message || error);
+          }
+        }
+        return { success: false, error };
+      });
+  } else {
+    // É telefone (ou e-mail sintético de telefone): abre o modal amigável de recuperação por telefone
+    if (typeof openM === 'function') {
+      openM('m-recuperar-senha-tel');
+    } else if (typeof document !== 'undefined') {
+      const modal = document.getElementById('m-recuperar-senha-tel');
+      if (modal) modal.classList.add('open');
+    }
+    return Promise.resolve({ success: true, modalAberto: true, telefone: identificador });
+  }
+}
+
+/**
+ * Abre o WhatsApp de suporte com mensagem pré-preenchida para recuperação de conta por telefone.
+ * Decisão de design: Usuários sem e-mail de recuperação recebem assistência direta via canal de atendimento.
+ */
+function solicitarResetSenhaWhatsApp() {
+  const telInput = (typeof document !== 'undefined') ? (document.getElementById('login-tel-email') || document.getElementById('login-tel')) : null;
+  const identificador = telInput ? telInput.value.trim() : '';
+  const d = identificador.replace(/\D/g, '');
+  const telFormatado = d ? (typeof formatarTelefoneBR === 'function' ? formatarTelefoneBR(d) : d) : identificador;
+
+  const texto = encodeURIComponent(
+    `Olá! Preciso de ajuda para recuperar o acesso à minha conta no app Negativo ao Milhão.\n` +
+    (telFormatado ? `Meu telefone cadastrado é: ${telFormatado}` : `Esqueci minha senha de acesso.`)
+  );
+
+  const url = `https://wa.me/5511999999999?text=${texto}`;
+  if (typeof window !== 'undefined' && window.open) {
+    window.open(url, '_blank');
+  }
+  return url;
 }
 
 /**
@@ -7737,6 +7841,11 @@ function mesclarDadosFamilia(dadosFamilia, dadosIndividuais, usuarioEntrante) {
   if (!Array.isArray(resultado.membrosUids)) resultado.membrosUids = [];
   if (!resultado.membrosUids.includes(uid)) {
     resultado.membrosUids.push(uid);
+  }
+
+  // Sincroniza lista legada de nomes da família
+  if (Array.isArray(resultado.membrosPerfil)) {
+    resultado.membrosFamilia = resultado.membrosPerfil.map(m => m.nome);
   }
 
   return resultado;
@@ -19742,6 +19851,8 @@ if (typeof module !== 'undefined' && module.exports) {
     criarEstadoLimpoContaNova,
     redimensionarImagemCanvas,
     setFamiliaId,
+    esqueciMinhaSenha,
+    solicitarResetSenhaWhatsApp,
     AVATARES_ILUSTRADOS_LISTA,
     CORES_PALETA_MEMBRO,
     getState: () => S,
@@ -19813,5 +19924,7 @@ if (typeof window !== 'undefined') {
   window.criarEstadoLimpoContaNova = criarEstadoLimpoContaNova;
   window.redimensionarImagemCanvas = redimensionarImagemCanvas;
   window.setFamiliaId = setFamiliaId;
+  window.esqueciMinhaSenha = esqueciMinhaSenha;
+  window.solicitarResetSenhaWhatsApp = solicitarResetSenhaWhatsApp;
 }
 

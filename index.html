@@ -735,6 +735,12 @@
       <div class="key-input-wrap" style="margin:0;">
         <input type="password" id="login-senha" placeholder="Senha de acesso (mín. 6 dígitos)" style="text-align:left;padding:13px 14px;font-size:14px;"/>
       </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:-6px;margin-bottom:2px;">
+        <span onclick="esqueciMinhaSenha()" style="font-size:12px;color:var(--accent,#2563eb);cursor:pointer;text-decoration:underline;font-weight:600;">
+          Esqueci minha senha
+        </span>
+      </div>
       
       <button type="button" class="btn btn-primary" style="margin:0;padding:13px;font-weight:700;font-size:14px;" onclick="fazerLogin()">
         Entrar na Conta
@@ -3930,6 +3936,13 @@
           <input type="tel" id="gerenciar-conta-telefone" placeholder="(00) 00000-0000" oninput="this.value = formatarTelefoneBR(this.value)" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px;" />
         </div>
 
+        <!-- E-MAIL DE RECUPERAÇÃO -->
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px; color:var(--muted); font-weight:700; display:block; margin-bottom:4px;">E-mail de Recuperação (Opcional):</label>
+          <input type="email" id="gerenciar-conta-email-recuperacao" placeholder="seu-email@exemplo.com" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px;" />
+          <span style="font-size:11px; color:var(--muted); display:block; margin-top:2px;">Usado para redefinir sua senha caso use login por telefone.</span>
+        </div>
+
         <!-- ENDEREÇO -->
         <div style="margin-bottom:16px;">
           <label style="font-size:11px; color:var(--muted); font-weight:700; display:block; margin-bottom:4px;">Endereço:</label>
@@ -3986,6 +3999,36 @@
     <div style="flex:1; overflow-y:auto; padding:16px 20px;">
       <p style="font-size:12px; color:var(--muted); margin:0 0 12px; text-align:center;">Toque no avatar que melhor representa você no círculo:</p>
       <div class="avatar-grid-picker" id="grade-avatares-ilustrados"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- MODAL DE RECUPERAÇÃO DE CONTA POR TELEFONE                             -->
+<!-- ====================================================================== -->
+<div class="modal-bg" id="m-recuperar-senha-tel">
+  <div class="modal" style="max-width:380px; padding:22px; border-radius:24px; text-align:center;">
+    <div style="font-size:42px; margin-bottom:8px;">🔐</div>
+    <h3 style="margin:0 0 8px; font-size:17px; font-weight:800; color:var(--text);">Recuperar Senha por Telefone</h3>
+    <p style="font-size:13px; color:var(--muted); line-height:1.5; margin:0 0 16px;">
+      Como sua conta foi criada com número de telefone, o link automático de redefinição pode ser enviado se você cadastrou um e-mail de recuperação ou solicitando ao administrador da sua família.
+    </p>
+
+    <div style="background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:12px; margin-bottom:16px; text-align:left; font-size:12px; color:var(--text);">
+      <div style="font-weight:700; margin-bottom:4px;">Como recuperar seu acesso:</div>
+      <ul style="margin:0; padding-left:18px; color:var(--muted); line-height:1.4;">
+        <li>Se o titular da sua família tiver acesso, ele pode redefinir ou autorizar.</li>
+        <li>Ou envie uma solicitação ao suporte oficial via WhatsApp para redefinição segura.</li>
+      </ul>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button type="button" class="btn btn-primary" onclick="solicitarResetSenhaWhatsApp()" style="margin:0; padding:12px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <span>💬</span> Solicitar Recuperação via WhatsApp
+      </button>
+      <button type="button" class="btn" onclick="closeM('m-recuperar-senha-tel')" style="margin:0; padding:10px; font-size:13px;">
+        Voltar ao Login
+      </button>
     </div>
   </div>
 </div>
