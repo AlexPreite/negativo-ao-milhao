@@ -275,6 +275,14 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: background 0.15s;
   }
   .btn-google:hover { background: #f9fafb; }
+  .email-chip {
+    background: var(--bg3); border: 1px solid var(--border2); border-radius: 12px;
+    padding: 3px 9px; font-size: 11px; font-weight: 700; color: var(--primary);
+    cursor: pointer; user-select: none; transition: all 0.15s ease;
+  }
+  .email-chip:hover, .email-chip:active {
+    background: var(--primary); color: #fff; transform: scale(0.96);
+  }
   .logo-circle { width: 80px; height: 80px; border-radius: 50%; background: var(--green-dim); border: 2px solid var(--green); display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 24px; }
   #onboarding h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
   #onboarding p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 32px; }
@@ -544,9 +552,33 @@
 
     <!-- FORMULÁRIO DE ACESSO -->
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
-      <div class="key-input-wrap" style="margin:0;">
-        <input type="text" id="login-tel-email" name="login-tel" placeholder="Telefone com DDD ou E-mail" style="text-align:left;padding:13px 14px;font-size:14px;"/>
+      <!-- SELETOR DE PAÍS + CAMPO TELEFONE OU E-MAIL COM MÁSCARA AUTOMÁTICA -->
+      <div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select id="login-ddi" style="width:105px;padding:13px 8px;font-size:13px;border-radius:var(--radius-sm);background:var(--bg3);color:var(--text);border:1px solid var(--border2);font-weight:700;cursor:pointer;-webkit-appearance:none;outline:none;">
+            <option value="+55" selected>🇧🇷 +55</option>
+            <option value="+1">🇺🇸 +1</option>
+            <option value="+351">🇵🇹 +351</option>
+            <option value="+34">🇪🇸 +34</option>
+            <option value="+44">🇬🇧 +44</option>
+          </select>
+          <div class="key-input-wrap" style="flex:1;margin:0;">
+            <input type="text" id="login-tel-email" name="login-tel" placeholder="(11) 98814-6347 ou e-mail" oninput="aoDigitarIdentificadorLogin(this)" style="text-align:left;padding:13px 14px;font-size:14px;width:100%;"/>
+          </div>
+        </div>
+
+        <!-- SUGESTÕES RÁPIDAS DE E-MAIL BRASILEIROS -->
+        <div id="login-email-chips" style="display:none;flex-wrap:wrap;gap:5px;margin-top:6px;text-align:left;">
+          <span style="font-size:11px;color:var(--muted);width:100%;display:block;margin-bottom:2px;">Toque para completar:</span>
+          <span class="email-chip" onclick="aplicarProvedorEmail('@gmail.com')">@gmail.com</span>
+          <span class="email-chip" onclick="aplicarProvedorEmail('@hotmail.com')">@hotmail.com</span>
+          <span class="email-chip" onclick="aplicarProvedorEmail('@outlook.com')">@outlook.com</span>
+          <span class="email-chip" onclick="aplicarProvedorEmail('@yahoo.com.br')">@yahoo.com.br</span>
+          <span class="email-chip" onclick="aplicarProvedorEmail('@uol.com.br')">@uol.com.br</span>
+          <span class="email-chip" onclick="aplicarProvedorEmail('@icloud.com')">@icloud.com</span>
+        </div>
       </div>
+
       <div class="key-input-wrap" style="margin:0;">
         <input type="password" id="login-senha" placeholder="Senha de acesso (mín. 6 dígitos)" style="text-align:left;padding:13px 14px;font-size:14px;"/>
       </div>

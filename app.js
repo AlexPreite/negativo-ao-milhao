@@ -6046,17 +6046,95 @@ function atualizarModalPerfilConta() {
 }
 
 /**
- * Criação de conta no app com suporte a e-mail ou telefone.
+ * Aplica máscara de telefone brasileiro em tempo real ou preserva digitação de e-mail.
+ * Padrões:
+ * - 11 dígitos: (11) 98814-6347
+ * - 10 dígitos: (11) 8814-6347
+ */
+function formatarTelefoneBR(valor) {
+  if (!valor) return '';
+  const d = String(valor).replace(/\D/g, '');
+  if (!d) return '';
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7, 11)}`;
+}
+
+/**
+ * Evento disparado em tempo real ao digitar no campo de identificador (telefone ou e-mail).
+ */
+function aoDigitarIdentificadorLogin(input) {
+  if (!input) return;
+  const val = input.value || '';
+  const chipsContainer = typeof document !== 'undefined' ? document.getElementById('login-email-chips') : null;
+
+  // Se contém '@' ou letras, é fluxo de e-mail
+  if (/[a-zA-Z@]/.test(val)) {
+    if (chipsContainer) {
+      chipsContainer.style.display = 'flex';
+    }
+    if (typeof detectarMembroPorIdentificador === 'function') {
+      detectarMembroPorIdentificador(val);
+    }
+    return;
+  }
+
+  // Se são números ou símbolos de telefone, aplica máscara de telefone e oculta chips de e-mail
+  if (chipsContainer) {
+    chipsContainer.style.display = 'none';
+  }
+  const formatado = formatarTelefoneBR(val);
+  input.value = formatado;
+  if (typeof detectarMembroPorIdentificador === 'function') {
+    detectarMembroPorIdentificador(val);
+  }
+}
+
+/**
+ * Aplica o provedor selecionado ao e-mail que o usuário começou a digitar.
+ */
+function aplicarProvedorEmail(provedor) {
+  if (typeof document === 'undefined') return;
+  const telInput = document.getElementById('login-tel-email') || document.getElementById('login-tel');
+  if (!telInput) return;
+
+  let val = (telInput.value || '').trim();
+  if (val.includes('@')) {
+    val = val.split('@')[0];
+  }
+  if (!val) {
+    val = 'usuario';
+  }
+  telInput.value = val + provedor;
+
+  const chipsContainer = document.getElementById('login-email-chips');
+  if (chipsContainer) {
+    chipsContainer.style.display = 'none';
+  }
+
+  if (typeof detectarMembroPorIdentificador === 'function') {
+    detectarMembroPorIdentificador(telInput.value);
+  }
+
+  const senhaInput = document.getElementById('login-senha');
+  if (senhaInput && typeof senhaInput.focus === 'function') {
+    senhaInput.focus();
+  }
+}
+
+/**
+ * Criação de conta no app com suporte a e-mail ou telefone brasileiro.
  */
 function fazerCadastro() {
-  const telInput = document.getElementById('login-tel');
+  const telInput = document.getElementById('login-tel-email') || document.getElementById('login-tel');
   const senhaInput = document.getElementById('login-senha');
   const msg = document.getElementById('login-msg');
   const identificador = telInput ? telInput.value.trim() : '';
   const senha = senhaInput ? senhaInput.value : '';
 
   if (!identificador || !senha) {
-    if (msg) msg.textContent = 'Preencha identificador (telefone ou e-mail) e senha.';
+    if (msg) msg.textContent = 'Preencha telefone ou e-mail e senha.';
     return;
   }
 
@@ -6064,7 +6142,7 @@ function fazerCadastro() {
   if (!identificador.includes('@')) {
     const d = identificador.replace(/\D/g, '');
     if (d.length < 10) {
-      if (msg) msg.textContent = 'Digite um telefone válido com DDD (ex: 11999999999).';
+      if (msg) msg.textContent = 'Digite um telefone válido com DDD (ex: (11) 98814-6347).';
       return;
     }
     emailFormatado = telefoneParaEmail(d);
@@ -6081,33 +6159,38 @@ function fazerCadastro() {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('dnm_sessao_ativa', 'true');
     }
+    S.onboardingDone = true;
     aplicarLoginGate(true);
     return;
   }
 
-  if (msg) msg.textContent = 'Criando conta...';
+  if (msg) msg.textContent = 'Criando conta da família...';
   firebase.auth().createUserWithEmailAndPassword(emailFormatado, senha)
     .then(cred => {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('dnm_sessao_ativa', 'true');
       }
-      if (msg) msg.textContent = 'Conta criada com sucesso!';
+      if (msg) msg.textContent = '';
       detectarMembroPorIdentificador(cred.user?.email || identificador);
+      // Abre o app direto sem exigir que digite tudo de novo!
+      S.onboardingDone = true;
+      aplicarLoginGate(true);
     })
     .catch(e => {
+      console.error('Erro no cadastro Firebase:', e);
       if (e.code === 'auth/email-already-in-use') {
-        if (msg) msg.textContent = 'Esse telefone/e-mail já tem conta — toque em Entrar.';
+        if (msg) msg.innerHTML = 'Esse telefone/e-mail já possui cadastro. Toque em <strong>Entrar na Conta</strong> acima.';
       } else {
-        if (msg) msg.textContent = 'Erro ao criar conta: ' + e.message;
+        if (msg) msg.textContent = 'Erro ao criar conta: ' + (e.message || e);
       }
     });
 }
 
 /**
- * Login com suporte a e-mail ou telefone.
+ * Login com suporte a e-mail ou telefone brasileiro.
  */
 function fazerLogin() {
-  const telInput = document.getElementById('login-tel');
+  const telInput = document.getElementById('login-tel-email') || document.getElementById('login-tel');
   const senhaInput = document.getElementById('login-senha');
   const msg = document.getElementById('login-msg');
   const identificador = telInput ? telInput.value.trim() : '';
@@ -6122,7 +6205,7 @@ function fazerLogin() {
   if (!identificador.includes('@')) {
     const d = identificador.replace(/\D/g, '');
     if (d.length < 10) {
-      if (msg) msg.textContent = 'Digite um telefone válido com DDD.';
+      if (msg) msg.textContent = 'Digite um telefone válido com DDD (ex: (11) 98814-6347).';
       return;
     }
     emailFormatado = telefoneParaEmail(d);
@@ -6134,6 +6217,7 @@ function fazerLogin() {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('dnm_sessao_ativa', 'true');
     }
+    S.onboardingDone = true;
     aplicarLoginGate(true);
     return;
   }
@@ -6146,20 +6230,27 @@ function fazerLogin() {
       }
       if (msg) msg.textContent = '';
       detectarMembroPorIdentificador(cred.user?.email || identificador);
+      S.onboardingDone = true;
+      aplicarLoginGate(true);
     })
     .catch(e => {
+      console.error('Erro no login Firebase:', e);
       if (e.code === 'auth/user-not-found') {
-        if (msg) msg.textContent = 'Essa conta ainda não existe — toque em "Criar minha conta".';
-      } else if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
-        if (msg) msg.textContent = 'Senha incorreta.';
+        if (msg) msg.innerHTML = 'Essa conta ainda não existe. Toque em <strong>Criar Conta da Família</strong> logo abaixo.';
+      } else if (e.code === 'auth/wrong-password') {
+        if (msg) msg.textContent = 'Senha incorreta. Verifique e tente novamente.';
+      } else if (e.code === 'auth/invalid-credential') {
+        if (msg) msg.innerHTML = 'Credenciais não encontradas ou incorretas. Se ainda não possui acesso, toque em <strong>Criar Conta da Família</strong> abaixo.';
+      } else if (e.code === 'auth/invalid-email') {
+        if (msg) msg.textContent = 'Formato de telefone ou e-mail inválido.';
       } else {
-        if (msg) msg.textContent = 'Erro ao entrar: ' + e.message;
+        if (msg) msg.textContent = 'Erro ao entrar: ' + (e.message || e);
       }
     });
 }
 
 /**
- * Autenticação via Google Popup com contingência para Redirect.
+ * Autenticação via Google com tratamento gracioso de auth/unauthorized-domain.
  */
 function fazerLoginGoogle() {
   const msg = document.getElementById('login-msg');
@@ -6176,12 +6267,30 @@ function fazerLoginGoogle() {
       }
       if (msg) msg.textContent = '';
       detectarMembroPorIdentificador(cred.user?.email || cred.user?.displayName || '');
+      S.onboardingDone = true;
+      aplicarLoginGate(true);
     })
     .catch(e => {
-      console.warn('Popup Google bloqueado, tentando redirecionamento:', e.message);
-      firebase.auth().signInWithRedirect(provider).catch(err => {
-        if (msg) msg.textContent = 'Erro ao entrar com Google: ' + err.message;
-      });
+      console.warn('Erro na autenticação Google:', e.code, e.message);
+      if (e.code === 'auth/unauthorized-domain') {
+        if (msg) {
+          msg.innerHTML = '⚠️ <strong>Domínio não autorizado pelo Google:</strong> Entre pelo seu <strong>Telefone ou E-mail</strong> acima (ou autorize <code>alexpreite.github.io</code> no Firebase Console).';
+        }
+        return;
+      }
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request') {
+        firebase.auth().signInWithRedirect(provider).catch(err => {
+          if (err.code === 'auth/unauthorized-domain') {
+            if (msg) {
+              msg.innerHTML = '⚠️ <strong>Domínio não autorizado pelo Google:</strong> Entre pelo seu <strong>Telefone ou E-mail</strong> acima (ou autorize <code>alexpreite.github.io</code> no Firebase Console).';
+            }
+          } else if (msg) {
+            msg.textContent = 'Erro ao entrar com Google: ' + (err.message || err);
+          }
+        });
+        return;
+      }
+      if (msg) msg.textContent = 'Erro ao entrar com Google: ' + (e.message || e);
     });
 }
 
@@ -18248,6 +18357,9 @@ if (typeof module !== 'undefined' && module.exports) {
     removerFotoPerfilAtual,
     aoSelecionarCapaFamilia,
     selecionarDiaCalendarioSplit,
+    formatarTelefoneBR,
+    aoDigitarIdentificadorLogin,
+    aplicarProvedorEmail,
     getState: () => S,
     S
   };
@@ -18279,5 +18391,8 @@ if (typeof window !== 'undefined') {
   window.removerFotoPerfilAtual = removerFotoPerfilAtual;
   window.aoSelecionarCapaFamilia = aoSelecionarCapaFamilia;
   window.selecionarDiaCalendarioSplit = selecionarDiaCalendarioSplit;
+  window.formatarTelefoneBR = formatarTelefoneBR;
+  window.aoDigitarIdentificadorLogin = aoDigitarIdentificadorLogin;
+  window.aplicarProvedorEmail = aplicarProvedorEmail;
 }
 
