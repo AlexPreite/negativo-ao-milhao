@@ -5973,10 +5973,370 @@ function selecionarMembroAparelho(membroId) {
  * Abre o modal de perfil e conta familiar.
  */
 function abrirModalPerfilConta() {
+  atualizarModalConfigPerfil();
   atualizarModalPerfilConta();
   if (typeof openM === 'function') {
-    openM('m-perfil-conta');
+    const fullEl = typeof document !== 'undefined' ? document.getElementById('m-config-perfil-full') : null;
+    if (fullEl) {
+      openM('m-config-perfil-full');
+    } else {
+      openM('m-perfil-conta');
+    }
   }
+}
+
+/**
+ * Abre a tela completa de configurações e perfil (Print 5).
+ */
+function abrirModalConfigPerfil() {
+  atualizarModalConfigPerfil();
+  if (typeof openM === 'function') {
+    openM('m-config-perfil-full');
+  }
+}
+
+/**
+ * Sincroniza dados com a tela de configurações do Print 5.
+ */
+function atualizarModalConfigPerfil() {
+  if (typeof document === 'undefined') return;
+  const membroAtual = (typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null) ||
+    (S.membrosPerfil || []).find(m => m.id === S.membroAtivoId) ||
+    { nome: 'Alexsander', papel: 'admin', cor: '#5581E3', iniciais: 'AL' };
+
+  const avatarEl = document.getElementById('cfg-perfil-avatar-preview');
+  const crownEl = document.getElementById('cfg-perfil-crown');
+  if (avatarEl) {
+    if (membroAtual.fotoUrl) {
+      avatarEl.style.backgroundImage = `url("${membroAtual.fotoUrl}")`;
+      avatarEl.style.backgroundSize = 'cover';
+      avatarEl.style.backgroundPosition = 'center';
+      avatarEl.textContent = '';
+    } else {
+      avatarEl.style.backgroundImage = 'none';
+      avatarEl.style.background = membroAtual.cor || '#5581E3';
+      avatarEl.textContent = membroAtual.iniciais || (membroAtual.nome ? membroAtual.nome.slice(0, 2).toUpperCase() : 'AL');
+    }
+  }
+
+  if (crownEl) {
+    crownEl.style.display = membroAtual.papel === 'admin' ? 'block' : 'none';
+  }
+
+  const nomeEl = document.getElementById('cfg-perfil-nome');
+  if (nomeEl) nomeEl.textContent = membroAtual.nome || 'Alexsander';
+
+  const contatoEl = document.getElementById('cfg-perfil-contato');
+  if (contatoEl) {
+    contatoEl.textContent = fbUser?.email || membroAtual.telefone || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_sessao_ativa') === 'true' ? 'Conectado na nuvem' : 'alexsander@exemplo.com');
+  }
+
+  const swDark = document.getElementById('cfg-switch-darkmode');
+  if (swDark) {
+    const isEscuro = (typeof document !== 'undefined' && document.body && document.body.classList.contains('tema-escuro')) ||
+                     (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_tema') === 'escuro');
+    swDark.checked = Boolean(isEscuro);
+  }
+
+  const swNotif = document.getElementById('cfg-switch-notificacoes');
+  if (swNotif) {
+    swNotif.checked = S.preferenciasNotificacao ? Boolean(S.preferenciasNotificacao.eventos) : true;
+  }
+}
+
+/**
+ * Paleta de 16 cores do print de referência do membro.
+ */
+const CORES_PALETA_MEMBRO = [
+  '#5581E3', '#3B82F6', '#06B6D4', '#14B8A6',
+  '#10B981', '#22C55E', '#84CC16', '#EAB308',
+  '#F59E0B', '#F97316', '#EF4444', '#E11D48',
+  '#EC4899', '#A855F7', '#8B5CF6', '#64748B'
+];
+
+let corSelecionadaGerenciar = '#5581E3';
+
+/**
+ * Abre o modal Gerenciar Conta (Prints 2 e 3).
+ */
+function abrirModalGerenciarConta() {
+  if (typeof document === 'undefined') return;
+  if (typeof closeM === 'function') closeM('m-config-perfil-full');
+
+  const membroAtual = (typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null) ||
+    (S.membrosPerfil || []).find(m => m.id === S.membroAtivoId) ||
+    { id: 'm_1', nome: 'Alexsander', papel: 'admin', cor: '#5581E3', iniciais: 'AL' };
+
+  corSelecionadaGerenciar = membroAtual.cor || '#5581E3';
+
+  // Preview Avatar 84px
+  atualizarPreviewAvatarGerenciar(membroAtual);
+
+  // ID da conta
+  const idEl = document.getElementById('gerenciar-conta-id-txt');
+  if (idEl) {
+    idEl.textContent = fbUser?.email || membroAtual.telefone || 'alexsander@exemplo.com';
+  }
+
+  // Nome
+  const nomeInp = document.getElementById('gerenciar-conta-nome');
+  if (nomeInp) nomeInp.value = membroAtual.nome || '';
+
+  // Papel
+  const papelSel = document.getElementById('gerenciar-conta-papel');
+  if (papelSel) papelSel.value = membroAtual.papel || 'admin';
+
+  // Aniversário
+  const anivInp = document.getElementById('gerenciar-conta-aniversario');
+  if (anivInp) anivInp.value = membroAtual.aniversario || '';
+
+  // Telefone
+  const telInp = document.getElementById('gerenciar-conta-telefone');
+  if (telInp) telInp.value = formatarTelefoneBR(membroAtual.telefone || '');
+
+  // Endereço
+  const endInp = document.getElementById('gerenciar-conta-endereco');
+  if (endInp) endInp.value = membroAtual.endereco || '';
+
+  // Paleta de 16 cores com checkmark
+  renderPaletaCoresGerenciarConta(corSelecionadaGerenciar);
+
+  if (typeof openM === 'function') openM('m-gerenciar-conta');
+}
+
+function atualizarPreviewAvatarGerenciar(membro) {
+  const avatarEl = document.getElementById('gerenciar-avatar-preview');
+  if (!avatarEl) return;
+  if (membro.fotoUrl) {
+    avatarEl.style.backgroundImage = `url("${membro.fotoUrl}")`;
+    avatarEl.style.backgroundSize = 'cover';
+    avatarEl.style.backgroundPosition = 'center';
+    avatarEl.textContent = '';
+  } else {
+    avatarEl.style.backgroundImage = 'none';
+    avatarEl.style.background = corSelecionadaGerenciar;
+    avatarEl.textContent = membro.iniciais || (membro.nome ? membro.nome.slice(0, 2).toUpperCase() : 'AL');
+  }
+}
+
+function renderPaletaCoresGerenciarConta(corAtiva) {
+  const container = document.getElementById('gerenciar-paleta-cores');
+  if (!container) return;
+
+  container.innerHTML = CORES_PALETA_MEMBRO.map(cor => {
+    const isAtiva = cor.toLowerCase() === (corAtiva || '').toLowerCase();
+    return `
+      <div class="cor-circulo-item ${isAtiva ? 'active' : ''}" style="background:${cor};" onclick="selecionarCorPerfilMembro('${cor}')" title="${cor}">
+        <span class="cor-check" style="${isAtiva ? 'display:block;' : 'display:none;'}">✓</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function selecionarCorPerfilMembro(cor) {
+  corSelecionadaGerenciar = cor;
+  renderPaletaCoresGerenciarConta(cor);
+
+  const membroAtual = (typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null) || { nome: 'Alexsander', iniciais: 'AL' };
+  const avatarEl = document.getElementById('gerenciar-avatar-preview');
+  if (avatarEl && !membroAtual.fotoUrl) {
+    avatarEl.style.background = cor;
+  }
+}
+
+function salvarDadosGerenciarConta() {
+  const nomeInp = document.getElementById('gerenciar-conta-nome');
+  const nome = nomeInp ? nomeInp.value.trim() : '';
+  if (!nome) {
+    if (typeof alert === 'function') alert('Por favor, informe seu nome.');
+    return;
+  }
+
+  const membroAtual = (typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null) ||
+    (S.membrosPerfil || []).find(m => m.id === S.membroAtivoId);
+
+  if (!membroAtual) return;
+
+  membroAtual.nome = nome;
+  membroAtual.iniciais = gerarIniciaisNome(nome);
+  membroAtual.cor = corSelecionadaGerenciar;
+
+  const papelSel = document.getElementById('gerenciar-conta-papel');
+  if (papelSel) membroAtual.papel = papelSel.value;
+
+  const anivInp = document.getElementById('gerenciar-conta-aniversario');
+  if (anivInp) membroAtual.aniversario = anivInp.value;
+
+  const telInp = document.getElementById('gerenciar-conta-telefone');
+  if (telInp) membroAtual.telefone = telInp.value;
+
+  const endInp = document.getElementById('gerenciar-conta-endereco');
+  if (endInp) membroAtual.endereco = endInp.value;
+
+  // Sincroniza lista legada de nomes familiares
+  S.membrosFamilia = (S.membrosPerfil || []).map(m => m.nome);
+
+  if (typeof save === 'function') save();
+  if (typeof renderMuralInicio === 'function') renderMuralInicio();
+  if (typeof atualizarModalConfigPerfil === 'function') atualizarModalConfigPerfil();
+
+  if (typeof closeM === 'function') closeM('m-gerenciar-conta');
+  if (typeof exibirToastNotificacao === 'function') {
+    exibirToastNotificacao('Perfil e conta atualizados com sucesso!', '👤');
+  }
+}
+
+function abrirModalOpcoesFotoPerfil() {
+  if (typeof openM === 'function') openM('m-opcoes-foto-perfil');
+}
+
+function aoSelecionarFotoGerenciarConta(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    const membro = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+    if (membro) {
+      membro.fotoUrl = dataUrl;
+      atualizarPreviewAvatarGerenciar(membro);
+      if (typeof save === 'function') save();
+      if (typeof renderMuralInicio === 'function') renderMuralInicio();
+      if (typeof atualizarModalConfigPerfil === 'function') atualizarModalConfigPerfil();
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function removerFotoPerfilGerenciar() {
+  const membro = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (membro) {
+    membro.fotoUrl = '';
+    atualizarPreviewAvatarGerenciar(membro);
+    if (typeof save === 'function') save();
+    if (typeof renderMuralInicio === 'function') renderMuralInicio();
+    if (typeof atualizarModalConfigPerfil === 'function') atualizarModalConfigPerfil();
+  }
+}
+
+function deixarGrupoFamiliar() {
+  const confirma = typeof confirm === 'function'
+    ? confirm('Tem certeza de que deseja deixar este círculo familiar? Você precisará de um novo convite para entrar novamente.')
+    : true;
+  if (confirma) {
+    fazerLogoffApp();
+  }
+}
+
+function aoAlternarSwitchNotificacoes(input) {
+  if (!S.preferenciasNotificacao) S.preferenciasNotificacao = {};
+  S.preferenciasNotificacao.eventos = Boolean(input?.checked);
+  S.preferenciasNotificacao.financas = Boolean(input?.checked);
+  S.preferenciasNotificacao.listas = Boolean(input?.checked);
+  if (typeof save === 'function') save();
+  if (typeof exibirToastNotificacao === 'function') {
+    exibirToastNotificacao(input?.checked ? 'Notificações ativadas! 🔔' : 'Notificações silenciadas 🔕', '🔔');
+  }
+}
+
+/**
+ * Grade com 10 avatares estilizados do Print 1.
+ */
+const AVATARES_ILUSTRADOS_LISTA = [
+  {
+    id: 'av_1',
+    nome: 'Alex',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#5581E3"/><circle cx="50" cy="42" r="20" fill="#FFDCB1"/><path d="M30 40 Q50 15 70 40 Q50 25 30 40" fill="#3E2723"/><circle cx="43" cy="40" r="3" fill="#263238"/><circle cx="57" cy="40" r="3" fill="#263238"/><path d="M44 48 Q50 54 56 48" stroke="#D84315" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="36" y="36" width="12" height="9" rx="2" fill="none" stroke="#263238" stroke-width="2"/><rect x="52" y="36" width="12" height="9" rx="2" fill="none" stroke="#263238" stroke-width="2"/><line x1="48" y1="40" x2="52" y2="40" stroke="#263238" stroke-width="2"/><path d="M22 88 C25 66 40 64 50 64 C60 64 75 66 78 88 Z" fill="#1E3A8A"/></svg>`
+  },
+  {
+    id: 'av_2',
+    nome: 'Gabi',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#EC4899"/><circle cx="50" cy="22" r="14" fill="#4A2E18"/><circle cx="50" cy="44" r="20" fill="#FFE0B2"/><path d="M30 38 Q50 16 70 38 C68 28 32 28 30 38" fill="#4A2E18"/><circle cx="43" cy="42" r="3" fill="#263238"/><circle cx="57" cy="42" r="3" fill="#263238"/><circle cx="39" cy="46" r="3" fill="#FF8A80" opacity="0.6"/><circle cx="61" cy="46" r="3" fill="#FF8A80" opacity="0.6"/><path d="M44 50 Q50 56 56 50" stroke="#C2185B" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M22 90 C25 68 40 66 50 66 C60 66 75 68 78 90 Z" fill="#7C3AED"/></svg>`
+  },
+  {
+    id: 'av_3',
+    nome: 'Lucas',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#10B981"/><circle cx="50" cy="44" r="20" fill="#FFCCA5"/><path d="M28 36 Q50 14 72 36 L76 38 Q78 30 70 24 Q50 18 30 24 Z" fill="#047857"/><rect x="26" y="32" width="48" height="6" rx="3" fill="#065F46"/><circle cx="43" cy="43" r="3" fill="#1E293B"/><circle cx="57" cy="43" r="3" fill="#1E293B"/><path d="M45 51 Q50 56 55 51" stroke="#E11D48" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M22 90 C25 68 40 66 50 66 C60 66 75 68 78 90 Z" fill="#0284C7"/></svg>`
+  },
+  {
+    id: 'av_4',
+    nome: 'Sofia',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#8B5CF6"/><circle cx="34" cy="42" r="14" fill="#9333EA"/><circle cx="66" cy="42" r="14" fill="#9333EA"/><circle cx="50" cy="44" r="20" fill="#FFDFC4"/><path d="M30 38 Q50 20 70 38" fill="#9333EA"/><circle cx="43" cy="43" r="3" fill="#1E293B"/><circle cx="57" cy="43" r="3" fill="#1E293B"/><path d="M44 51 Q50 56 56 51" stroke="#7E22CE" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M22 90 C25 68 40 66 50 66 C60 66 75 68 78 90 Z" fill="#F43F5E"/></svg>`
+  },
+  {
+    id: 'av_5',
+    nome: 'Theo',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#F59E0B"/><circle cx="50" cy="44" r="19" fill="#FFE0B2"/><path d="M31 38 Q50 16 69 38" fill="#D97706"/><circle cx="43" cy="43" r="2.5" fill="#1E293B"/><circle cx="57" cy="43" r="2.5" fill="#1E293B"/><circle cx="39" cy="47" r="1.5" fill="#B45309"/><circle cx="41" cy="48" r="1.5" fill="#B45309"/><circle cx="59" cy="47" r="1.5" fill="#B45309"/><circle cx="61" cy="48" r="1.5" fill="#B45309"/><path d="M44 51 Q50 57 56 51" stroke="#D97706" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M22 90 C25 68 40 66 50 66 C60 66 75 68 78 90 Z" fill="#2563EB"/></svg>`
+  },
+  {
+    id: 'av_6',
+    nome: 'Lara',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#F43F5E"/><circle cx="28" cy="30" r="8" fill="#FBBF24"/><circle cx="72" cy="30" r="8" fill="#FBBF24"/><circle cx="50" cy="44" r="19" fill="#FFE0B2"/><path d="M30 38 Q50 18 70 38" fill="#78350F"/><circle cx="43" cy="43" r="2.5" fill="#1E293B"/><circle cx="57" cy="43" r="2.5" fill="#1E293B"/><circle cx="40" cy="47" r="2.5" fill="#FDA4AF" opacity="0.8"/><circle cx="60" cy="47" r="2.5" fill="#FDA4AF" opacity="0.8"/><path d="M45 52 Q50 56 55 52" stroke="#E11D48" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M22 90 C25 68 40 66 50 66 C60 66 75 68 78 90 Z" fill="#10B981"/></svg>`
+  },
+  {
+    id: 'av_7',
+    nome: 'Vovô',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#64748B"/><circle cx="50" cy="42" r="20" fill="#FFDCB1"/><path d="M30 36 Q50 20 70 36" fill="#E2E8F0"/><circle cx="43" cy="40" r="2.5" fill="#1E293B"/><circle cx="57" cy="40" r="2.5" fill="#1E293B"/><circle cx="43" cy="40" r="6" fill="none" stroke="#475569" stroke-width="1.8"/><circle cx="57" cy="40" r="6" fill="none" stroke="#475569" stroke-width="1.8"/><line x1="49" y1="40" x2="51" y2="40" stroke="#475569" stroke-width="1.8"/><path d="M40 50 Q50 46 60 50 Q50 56 40 50" fill="#E2E8F0"/><path d="M22 88 C25 66 40 64 50 64 C60 64 75 66 78 88 Z" fill="#334155"/></svg>`
+  },
+  {
+    id: 'av_8',
+    nome: 'Vovó',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#A855F7"/><circle cx="50" cy="24" r="14" fill="#CBD5E1"/><circle cx="50" cy="44" r="20" fill="#FFDCB1"/><path d="M30 38 Q50 18 70 38" fill="#CBD5E1"/><circle cx="43" cy="42" r="2.5" fill="#1E293B"/><circle cx="57" cy="42" r="2.5" fill="#1E293B"/><circle cx="43" cy="42" r="5.5" fill="none" stroke="#6B21A8" stroke-width="1.5"/><circle cx="57" cy="42" r="5.5" fill="none" stroke="#6B21A8" stroke-width="1.5"/><line x1="48.5" y1="42" x2="51.5" y2="42" stroke="#6B21A8" stroke-width="1.5"/><path d="M45 52 Q50 56 55 52" stroke="#BE185D" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M22 90 C25 68 40 66 50 66 C60 66 75 68 78 90 Z" fill="#D946EF"/></svg>`
+  },
+  {
+    id: 'av_9',
+    nome: 'Toby',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#3B82F6"/><path d="M24 32 C18 48 24 64 30 64 C36 64 36 48 34 32 Z" fill="#B45309"/><path d="M76 32 C82 48 76 64 70 64 C64 64 64 48 66 32 Z" fill="#B45309"/><circle cx="50" cy="48" r="24" fill="#FDE68A"/><ellipse cx="50" cy="54" rx="14" ry="10" fill="#FEF3C7"/><circle cx="42" cy="44" r="3.5" fill="#1E293B"/><circle cx="58" cy="44" r="3.5" fill="#1E293B"/><ellipse cx="50" cy="51" rx="5" ry="3.5" fill="#1E293B"/><path d="M46 56 Q50 60 54 56" stroke="#B45309" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M28 88 C32 74 42 72 50 72 C58 72 68 74 72 88 Z" fill="#DC2626"/></svg>`
+  },
+  {
+    id: 'av_10',
+    nome: 'Mimi',
+    svg: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#F97316"/><polygon points="28,26 42,42 24,46" fill="#F97316" stroke="#EA580C" stroke-width="2"/><polygon points="72,26 58,42 76,46" fill="#F97316" stroke="#EA580C" stroke-width="2"/><polygon points="30,30 38,40 28,42" fill="#FDA4AF"/><polygon points="70,30 62,40 72,42" fill="#FDA4AF"/><circle cx="50" cy="50" r="23" fill="#FFF7ED"/><circle cx="42" cy="46" r="3.5" fill="#059669"/><circle cx="58" cy="46" r="3.5" fill="#059669"/><polygon points="50,51 47,54 53,54" fill="#FDA4AF"/><path d="M47 55 Q50 58 53 55" stroke="#EA580C" stroke-width="1.8" fill="none"/><line x1="32" y1="50" x2="44" y2="52" stroke="#9A3412" stroke-width="1.5"/><line x1="32" y1="54" x2="44" y2="54" stroke="#9A3412" stroke-width="1.5"/><line x1="68" y1="50" x2="56" y2="52" stroke="#9A3412" stroke-width="1.5"/><line x1="68" y1="54" x2="56" y2="54" stroke="#9A3412" stroke-width="1.5"/><path d="M28 90 C32 76 42 74 50 74 C58 74 68 76 72 90 Z" fill="#4338CA"/></svg>`
+  }
+];
+
+function abrirModalEscolherAvatar() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('grade-avatares-ilustrados');
+  if (container) {
+    container.innerHTML = AVATARES_ILUSTRADOS_LISTA.map((av, idx) => `
+      <div class="avatar-picker-item" onclick="selecionarAvatarIlustrado(${idx})" title="${av.nome}">
+        <div style="width:58px; height:58px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+          ${av.svg}
+        </div>
+        <span style="font-size:12px; font-weight:700; color:var(--text);">${av.nome}</span>
+      </div>
+    `).join('');
+  }
+  if (typeof openM === 'function') openM('m-escolher-avatar');
+}
+
+function selecionarAvatarIlustrado(indice) {
+  const av = AVATARES_ILUSTRADOS_LISTA[indice];
+  if (!av) return;
+
+  const dataUri = 'data:image/svg+xml;utf8,' + encodeURIComponent(av.svg);
+  const membro = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (membro) {
+    membro.fotoUrl = dataUri;
+    atualizarPreviewAvatarGerenciar(membro);
+    if (typeof save === 'function') save();
+    if (typeof renderMuralInicio === 'function') renderMuralInicio();
+    if (typeof atualizarModalConfigPerfil === 'function') atualizarModalConfigPerfil();
+  }
+
+  if (typeof closeM === 'function') closeM('m-escolher-avatar');
+  if (typeof exibirToastNotificacao === 'function') {
+    exibirToastNotificacao(`Avatar do ${av.nome} selecionado! ✨`, '🎨');
+  }
+}
+
+function gerarIniciaisNome(nome) {
+  if (!nome || typeof nome !== 'string') return 'AL';
+  const partes = nome.trim().split(/\s+/);
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
 }
 
 /**
@@ -10485,18 +10845,123 @@ function renderHeaderCirculo() {
   }
 }
 
-function renderMuralInicio() {
+/**
+ * Retorna o próximo evento futuro do calendário familiar para o Slide 2 do carrossel.
+ * Ordena cronologicamente e calcula contagem regressiva em dias.
+ * Quando o evento vence (passa do dia de hoje), avança automaticamente para o próximo.
+ */
+function obterProximoEventoFuturoCarrossel() {
+  if (!S || !Array.isArray(S.eventosCalendario) || S.eventosCalendario.length === 0) return null;
+  const hoje = new Date();
+  const hojeIso = hoje.toISOString().slice(0, 10);
+
+  // Filtra eventos cuja data de início seja hoje ou futura
+  const futuros = S.eventosCalendario.filter(e => {
+    const dt = e.dataInicio || e.data;
+    return dt && dt >= hojeIso;
+  });
+
+  if (futuros.length === 0) return null;
+
+  // Ordena cronologicamente por data e hora
+  futuros.sort((a, b) => {
+    const dtA = (a.dataInicio || a.data || '') + 'T' + (a.horaInicio || '00:00');
+    const dtB = (b.dataInicio || b.data || '') + 'T' + (b.horaInicio || '00:00');
+    return dtA.localeCompare(dtB);
+  });
+
+  const prox = futuros[0];
+  const dtEv = prox.dataInicio || prox.data;
+
+  // Cálculo da diferença de dias
+  const dataHojeObj = new Date(hojeIso + 'T00:00:00');
+  const dataEvObj = new Date(dtEv + 'T00:00:00');
+  const diffTime = dataEvObj.getTime() - dataHojeObj.getTime();
+  const diffDias = Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+
+  let contagem = 'É hoje!';
+  if (diffDias === 1) contagem = 'Em 1 dia';
+  else if (diffDias > 1) contagem = `Em ${diffDias} dias`;
+
+  const partes = dtEv.split('-');
+  const dataFmt = `${partes[2]}/${partes[1]}`;
+
+  return {
+    evento: prox,
+    titulo: prox.titulo,
+    hora: prox.horaInicio || '09:00',
+    dataFmt,
+    diffDias,
+    contagem,
+    textoExibicao: `${prox.titulo} - ${dataFmt} (${contagem})`
+  };
+}
+
+/**
+ * Sincroniza os indicadores de bolinhas do carrossel com o scroll por toque (Touch Swipe).
+ */
+function aoRolarCarrosselSuperior(event) {
+  if (!event || !event.target) return;
+  const track = event.target;
+  const slideWidth = track.clientWidth || 1;
+  const idx = Math.min(2, Math.max(0, Math.round(track.scrollLeft / slideWidth)));
+
+  for (let i = 0; i <= 2; i++) {
+    const dot = document.getElementById(`cdot-${i}`);
+    if (dot) {
+      if (i === idx) dot.classList.add('active');
+      else dot.classList.remove('active');
+    }
+  }
+}
+
+/**
+ * Rola suavemente o carrossel para o índice informado ao tocar em uma bolinha.
+ */
+function rolarCarrosselParaSlide(index) {
+  if (typeof document === 'undefined') return;
+  const track = document.getElementById('carousel-track');
+  if (!track) return;
+  const slideWidth = track.clientWidth || 300;
+  track.scrollTo({ left: index * slideWidth, behavior: 'smooth' });
+}
+
+/**
+ * Renderiza o carrossel superior (Slide 1: foto & atividade, Slide 2: próximo evento dinâmico).
+ */
+function renderCarrosselSuperior() {
   if (typeof document === 'undefined') return;
 
-  // 1. Banner com Foto Familiar no Carrossel Superior
+  // Slide 1: Foto familiar de capa
   const bannerEl = document.getElementById('carousel-family-banner');
   if (bannerEl) {
     if (S.fotoCapaFamiliaUrl) {
-      bannerEl.style.backgroundImage = `linear-gradient(180deg, rgba(30,41,59,0.2) 0%, rgba(15,23,42,0.85) 100%), url("${S.fotoCapaFamiliaUrl}")`;
+      bannerEl.style.backgroundImage = `linear-gradient(180deg, rgba(30,41,59,0.2) 0%, rgba(15,23,42,0.88) 100%), url("${S.fotoCapaFamiliaUrl}")`;
     } else {
-      bannerEl.style.backgroundImage = `linear-gradient(180deg, rgba(30,41,59,0.3) 0%, rgba(15,23,42,0.85) 100%), url('https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=800&q=80')`;
+      bannerEl.style.backgroundImage = `linear-gradient(180deg, rgba(30,41,59,0.3) 0%, rgba(15,23,42,0.88) 100%), url('https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=800&q=80')`;
     }
   }
+
+  // Slide 2: Próximo Evento Futuro Dinâmico
+  const prox = obterProximoEventoFuturoCarrossel();
+  const titEvEl = document.getElementById('carousel-evento-titulo');
+  const subEvEl = document.getElementById('carousel-evento-sub');
+  if (titEvEl && subEvEl) {
+    if (prox) {
+      titEvEl.textContent = prox.textoExibicao;
+      subEvEl.textContent = `⏰ ${prox.hora} • Toque para ver no Calendário`;
+    } else {
+      titEvEl.textContent = 'Nada agendado hoje! 😌 Planeje um novo evento';
+      subEvEl.textContent = 'Toque para abrir a agenda da família';
+    }
+  }
+}
+
+function renderMuralInicio() {
+  if (typeof document === 'undefined') return;
+
+  // 1. Atualiza os slides do Carrossel Superior Deslizante
+  renderCarrosselSuperior();
 
   // 2. Grade de Módulos em 2 Colunas Idêntica ao Print de Referência
   const grid = document.getElementById('grid-mural-inicio') || document.getElementById('grid-modulos-inicio');
@@ -11691,8 +12156,14 @@ async function sendMsg() {
     chatMsgsEl.scrollTop = 99999;
   }
 
-  // Se não houver apiKey configurada, responde imediatamente com o motor local omnisciente (offline-ready)
-  if (!apiKey && (!S.apiKey || !S.apiKey.trim())) {
+  // Verifica se é uma ação autônoma do Agente Norte ou se está sem chave externa de API
+  const msgLower = msg.toLowerCase();
+  const ehAcaoNorte = /(?:marca(?:r)?|agenda(?:r)?|compromisso|adiciona(?:r)?\s+(?:no\s+)?calend[aá]rio|colo(?:ca|que)\s+(?:no\s+)?calend[aá]rio)/i.test(msgLower) ||
+                      /(?:colo(?:ca|que|car)|adiciona(?:r)?|bota(?:r)?|p[oõ]e(?:r)?)\s+.+?\s+na\s+lista/i.test(msgLower) ||
+                      msgLower.includes('o que pagar primeiro') || msgLower.includes('ordem de ataque') ||
+                      msgLower.includes('sobrar mais dinheiro') || msgLower.includes('fazer sobrar');
+
+  if (ehAcaoNorte || (!apiKey && (!S.apiKey || !S.apiKey.trim()))) {
     const respostaLocal = typeof responderPerguntaNorteLocal === 'function'
       ? responderPerguntaNorteLocal(msg, mId)
       : 'Agente Norte ativo em modo local offline.';
@@ -16749,12 +17220,315 @@ function gerarResumoSemanalNorte(membroId) {
 }
 
 /**
+ * Cria evento no calendário via linguagem natural (IA Agente Norte).
+ * Ex: "Marca dentista amanhã às 15h"
+ */
+function criarEventoCalendarioIA(texto, membroId) {
+  try {
+    const raw = String(texto || '').trim();
+    if (!raw) return { ok: false, erro: 'Texto vazio', mensagem: 'Por favor, informe o compromisso e a data/horário.' };
+
+    const membro = (typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null) ||
+      (S.membrosPerfil || []).find(m => m.id === membroId) ||
+      { id: membroId || 'm_1', nome: 'Alex', cor: '#5581E3' };
+
+    const hoje = new Date();
+    let dataEvento = new Date(hoje);
+    let horaEvento = '09:00';
+
+    // 1. Extração de Data
+    const txtLower = raw.toLowerCase();
+    if (txtLower.includes('depois de amanhã') || txtLower.includes('depois de amanha')) {
+      dataEvento.setDate(hoje.getDate() + 2);
+    } else if (txtLower.includes('amanhã') || txtLower.includes('amanha')) {
+      dataEvento.setDate(hoje.getDate() + 1);
+    } else if (txtLower.includes('hoje')) {
+      // mantém dataEvento = hoje
+    } else {
+      const matchData = raw.match(/(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?/);
+      if (matchData) {
+        const dia = parseInt(matchData[1], 10);
+        const mes = parseInt(matchData[2], 10) - 1;
+        let ano = matchData[3] ? parseInt(matchData[3], 10) : hoje.getFullYear();
+        if (ano < 100) ano += 2000;
+        dataEvento = new Date(ano, mes, dia);
+      } else {
+        const diasSemana = ['domingo', 'segunda', 'terça', 'terca', 'quarta', 'quinta', 'sexta', 'sábado', 'sabado'];
+        const idxDia = diasSemana.findIndex(d => txtLower.includes(d));
+        if (idxDia !== -1) {
+          const targetDay = (idxDia === 3) ? 2 : (idxDia === 8 ? 6 : idxDia);
+          let diff = targetDay - hoje.getDay();
+          if (diff <= 0) diff += 7;
+          dataEvento.setDate(hoje.getDate() + diff);
+        } else {
+          dataEvento.setDate(hoje.getDate() + 1);
+        }
+      }
+    }
+
+    const dataIni = dataEvento.toISOString().slice(0, 10);
+
+    // 2. Extração de Horário
+    const matchHora = raw.match(/(?:[àa]s\s*|para\s+[àa]s\s*)?(\d{1,2})(?:h|:)(\d{2})?/i) ||
+                      raw.match(/[àa]s\s+(\d{1,2})/i);
+    if (matchHora) {
+      const h = parseInt(matchHora[1], 10);
+      const m = matchHora[2] ? parseInt(matchHora[2], 10) : 0;
+      if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+        horaEvento = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      }
+    }
+
+    // 3. Extração do Título do Compromisso
+    let titulo = raw
+      .replace(/\b(?:marcar|marca|agendar|agenda|compromisso|adicionar\s+(?:no\s+)?calend[aá]rio|adiciona\s+(?:no\s+)?calend[aá]rio|colocar\s+(?:no\s+)?calend[aá]rio|coloque\s+(?:no\s+)?calend[aá]rio|coloca\s+(?:no\s+)?calend[aá]rio|anotar\s+a[íi]|anota\s+a[íi])\b/gi, '')
+      .replace(/(?:depois\s+de\s+amanh[aã]|amanh[aã]|hoje)/gi, '')
+      .replace(/(?:dia\s+)?\d{1,2}[/.-]\d{1,2}(?:[/.-](\d{2,4}))?/gi, '')
+      .replace(/(?:[àa]s\s*)?\d{1,2}(?:h|:)\d{0,2}/gi, '')
+      .replace(/[àa]s\s+\d{1,2}/gi, '')
+      .replace(/\b(?:para|o|a|os|as|no|na|em|de|do|da|um|uma|por\s+favor)\b/gi, '')
+      .trim();
+
+    titulo = titulo.replace(/^[,\-–.\s]+|[,\-–.\s]+$/g, '').trim();
+    if (!titulo) titulo = 'Compromisso';
+    titulo = titulo.charAt(0).toUpperCase() + titulo.slice(1);
+
+    // 4. Criação do evento
+    const novoEvento = criarEventoCalendario({
+      titulo,
+      dataInicio: dataIni,
+      horaInicio: horaEvento,
+      dataFim: dataIni,
+      horaFim: horaEvento,
+      criadoPor: membro.id,
+      cor: membro.cor || '#5581E3'
+    });
+
+    if (typeof save === 'function') save();
+    if (typeof renderMuralInicio === 'function') renderMuralInicio();
+
+    const partesData = dataIni.split('-');
+    const dataFmt = `${partesData[2]}/${partesData[1]}/${partesData[0]}`;
+
+    const resposta = `📅 **Evento Agendado com Sucesso!**\n• **Compromisso:** ${titulo}\n• **Data:** ${dataFmt}\n• **Horário:** ${horaEvento}\n• **Responsável:** ${membro.nome}\n\nO compromisso já foi adicionado ao Calendário Familiar de todos os membros! 🚀`;
+
+    return {
+      ok: true,
+      evento: novoEvento,
+      mensagem: resposta
+    };
+  } catch (err) {
+    console.error('Erro em criarEventoCalendarioIA:', err);
+    return { ok: false, erro: err.message, mensagem: 'Não foi possível agendar o compromisso localmente. Tente novamente informando o nome e o horário.' };
+  }
+}
+
+/**
+ * Adiciona itens em listas de compras ou tarefas via linguagem natural (IA Agente Norte).
+ * Ex: "Coloca café e leite na lista"
+ */
+function adicionarItensListaIA(texto, membroId) {
+  try {
+    const raw = String(texto || '').trim();
+    if (!raw) return { ok: false, erro: 'Texto vazio', mensagem: 'Por favor, especifique os itens a adicionar.' };
+
+    const membro = (typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null) ||
+      (S.membrosPerfil || []).find(m => m.id === membroId) ||
+      { id: membroId || 'm_1', nome: 'Alex', cor: '#5581E3' };
+
+    if (!Array.isArray(S.listas)) S.listas = [];
+
+    const isTarefa = /tarefa/i.test(raw);
+    const tipoAlvo = isTarefa ? 'tarefas' : 'compras';
+
+    let lista = S.listas.find(l => l.tipo === tipoAlvo);
+    if (!lista) {
+      const cId = S.circuloAtivoId || 'circ_1';
+      lista = {
+        id: isTarefa ? 'lst_tarefas_padrao' : 'lst_mercado_padrao',
+        circuloId: cId,
+        titulo: isTarefa ? '✅ Tarefas da Casa' : '🛒 Mercado da Família',
+        tipo: tipoAlvo,
+        icone: isTarefa ? '✅' : '🛒',
+        cor: isTarefa ? '#5581E3' : '#10B981',
+        criadoPor: membro.id,
+        criadoEm: new Date().toISOString(),
+        itens: []
+      };
+      S.listas.push(lista);
+    }
+    if (!Array.isArray(lista.itens)) lista.itens = [];
+
+    let itensStr = raw
+      .replace(/\b(?:colocar|coloque|coloca|adicionar|adiciona|botar|bota|p[oô]r|p[oõ]e)\b/gi, '')
+      .replace(/(?:na\s+lista(?:\s+de\s+(?:compras|mercado|tarefas))?|por\s+favor)/gi, '')
+      .trim();
+
+    const itensNomes = itensStr
+      .split(/,|\be\b|\+|\n/gi)
+      .map(s => s.trim().replace(/^[,\-–.\s]+|[,\-–.\s]+$/g, ''))
+      .filter(s => s.length > 0 && !/^(para|o|a|os|as|um|uma)$/i.test(s));
+
+    if (itensNomes.length === 0) {
+      return { ok: false, erro: 'Nenhum item detectado', mensagem: 'Não consegui identificar os itens. Exemplo: "Coloca café e leite na lista".' };
+    }
+
+    const agoraIso = new Date().toISOString();
+    const itensAdicionados = [];
+
+    itensNomes.forEach(nomeItem => {
+      const nomeLimpo = nomeItem.charAt(0).toUpperCase() + nomeItem.slice(1);
+      if (isTarefa) {
+        const novaTarefa = {
+          id: 'item_tar_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
+          titulo: nomeLimpo,
+          responsavelId: membro.id,
+          responsavelNome: membro.nome,
+          responsavelCor: membro.cor || '#5581E3',
+          prazo: agoraIso.slice(0, 10),
+          prioridade: 'media',
+          concluida: false,
+          criadoPorNome: membro.nome,
+          criadoEm: agoraIso
+        };
+        lista.itens.push(novaTarefa);
+        itensAdicionados.push(nomeLimpo);
+      } else {
+        const novoItem = {
+          id: 'item_cmp_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
+          nome: nomeLimpo,
+          qtd: 1,
+          unidade: 'un',
+          categoria: 'geral',
+          precoEstimado: 0,
+          comprado: false,
+          criadoPorNome: membro.nome,
+          criadoPorCor: membro.cor || '#10B981',
+          criadoEm: agoraIso
+        };
+        lista.itens.push(novoItem);
+        itensAdicionados.push(nomeLimpo);
+      }
+    });
+
+    if (typeof save === 'function') save();
+    if (typeof renderMuralInicio === 'function') renderMuralInicio();
+
+    const icone = isTarefa ? '✅' : '🛒';
+    const nomeTipo = isTarefa ? 'Tarefas' : 'Compras';
+    let msg = `${icone} **${itensAdicionados.length} ${isTarefa ? 'tarefa(s)' : 'item(ns)'} adicionado(s) à Lista de ${nomeTipo}!**\n`;
+    itensAdicionados.forEach(it => {
+      msg += `• ${it}\n`;
+    });
+    msg += `\nJá atualizei a lista "${lista.titulo}" para toda a família conferir!`;
+
+    return {
+      ok: true,
+      listaId: lista.id,
+      itens: itensAdicionados,
+      mensagem: msg.trim()
+    };
+  } catch (err) {
+    console.error('Erro em adicionarItensListaIA:', err);
+    return { ok: false, erro: err.message, mensagem: 'Erro ao adicionar itens na lista.' };
+  }
+}
+
+/**
+ * Gera diagnóstico financeiro e orientações para fazer sobrar mais dinheiro no mês.
+ */
+function gerarOrientacoesFazerSobrarDinheiro(membroId) {
+  try {
+    const totais = typeof calcTotais === 'function' ? calcTotais() : { receitasTotal: 0, gastosTotal: 0, saldoCaixaReal: 0 };
+    const rec = totais.receitasTotal || 0;
+    const gas = totais.gastosTotal || 0;
+    const saldo = totais.saldoCaixaReal ?? (rec - gas);
+
+    let infoBeneficios = '';
+    const cotas = typeof obterCotasBeneficios === 'function' ? obterCotasBeneficios() : [];
+    if (cotas.length > 0) {
+      infoBeneficios = '\n🥗 **Cotas de VA/VR Disponíveis:**\n';
+      cotas.forEach(b => {
+        infoBeneficios += `• ${b.nome}: ${fmt(b.saldoAtual)} (${fmt(b.cotaDiaria)}/dia restantes)\n`;
+      });
+    }
+
+    let diagnostico = '';
+    if (saldo > 0) {
+      diagnostico = `Atualmente seu saldo mensal projetado é positivo em **${fmt(saldo)}**. É um ótimo momento para fortalecer a reserva de emergência da família!`;
+    } else {
+      diagnostico = `Atenção: seus gastos (${fmt(gas)}) estão superando ou no limite das receitas (${fmt(rec)}), deixando um saldo de **${fmt(saldo)}**.`;
+    }
+
+    let resposta = `💡 **Diagnóstico Financeiro & Como Fazer Sobrar Dinheiro:**\n\n${diagnostico}\n• **Receitas Totais:** ${fmt(rec)}\n• **Gastos Totais:** ${fmt(gas)}\n• **Saldo em Caixa:** ${fmt(saldo)}${infoBeneficios}\n🎯 **3 Estratégias Práticas para Fazer Sobrar Dinheiro:**\n1. **Use o VA/VR como Escudo:** Faça mercado e refeições do dia a dia rigorosamente dentro da cota diária de VA/VR, evitando que despesas com alimentação invadam o saldo em reais da conta corrente.\n2. **Ordem de Ataque em Assinaturas:** Abra o módulo de Contas Fixas & Assinaturas e elimine serviços de streaming ou taxas recorrentes pouco usadas.\n3. **Corte Imediato de Supérfluos no Cartão:** Congele novas compras parceladas até que as faturas atuais reduzam seu peso na renda da casa.`;
+
+    return resposta;
+  } catch (err) {
+    console.error('Erro em gerarOrientacoesFazerSobrarDinheiro:', err);
+    return 'Não foi possível calcular o panorama financeiro no momento.';
+  }
+}
+
+/**
+ * Apresenta a ordem de ataque financeira estruturada (o que pagar primeiro).
+ */
+function gerarOrdemAtaqueContasEDividas(membroId) {
+  try {
+    const dividas = Array.isArray(S.dividas) ? S.dividas : [];
+    const gastosAbertos = Array.isArray(S.gastos) ? S.gastos.filter(g => !g.pago) : [];
+
+    let resposta = `⚔️ **Ordem de Ataque Financeira da Família:**\nPara proteger o patrimônio da casa e zerar juros, ataque as despesas exatamente nesta sequência:\n\n`;
+
+    resposta += `🔴 **1º ATAQUE URGENTE — Juros Predatórios:**\nCheque especial, rotativo de cartão de crédito e empréstimos caros. Devem ser liquidados ou substituídos por linhas mais baratas imediatamente, pois duplicam o valor devido em questão de meses.\n\n`;
+
+    resposta += `🟠 **2º ATAQUE VITAL — Sobrevivência Familiar:**\nContas de consumo essenciais (Luz, Água, Gás, Moradia e Alimentação básica). Manter o teto e a casa funcionando é inegociável.\n\n`;
+
+    resposta += `🟡 **3º ATAQUE ESTRATÉGICO — Acordos e Financiamentos:**\nParcelas de renegociações em andamento (para não quebrar descontos obtidos) e bens com garantia real (financiamento imobiliário ou do veículo usado para trabalho).\n\n`;
+
+    resposta += `🟢 **4º ATAQUE CONSCIENTE — Parcelamentos Sem Juros & Supérfluos:**\nCompras parceladas no cartão em dia, assinaturas e gastos de lazer que podem ser postergados se o caixa estiver apertado.\n\n`;
+
+    if (dividas.length > 0) {
+      resposta += `📊 **Dívidas Cadastradas na sua Família:** ${dividas.length} dívida(s) ativa(s). Acesse a aba Dívidas para conferir a simulação Bola de Neve vs Avalanche!`;
+    } else if (gastosAbertos.length > 0) {
+      resposta += `📊 **Contas Abertas do Mês:** ${gastosAbertos.length} despesa(s) aguardando pagamento. Priorize água, luz e moradia antes de gastos secundários.`;
+    } else {
+      resposta += `🎉 Parabéns! Todas as contas do período estão em dia e a família não possui pendências críticas!`;
+    }
+
+    return resposta;
+  } catch (err) {
+    console.error('Erro em gerarOrdemAtaqueContasEDividas:', err);
+    return 'Não foi possível gerar a ordem de ataque financeira no momento.';
+  }
+}
+
+/**
  * Motor determinístico local de respostas rápidas para o Agente Norte (offline-ready).
  */
 function responderPerguntaNorteLocal(pergunta, membroId) {
   try {
     const ctx = construirContextoAgenteNorte(membroId);
     const p = String(pergunta || '').toLowerCase().trim();
+
+    // Ação 1: Agendamento de eventos no Calendário
+    if (/(?:marca(?:r)?|agenda(?:r)?|compromisso|adiciona(?:r)?\s+(?:no\s+)?calend[aá]rio|colo(?:ca|que)\s+(?:no\s+)?calend[aá]rio)/i.test(p)) {
+      return criarEventoCalendarioIA(pergunta, membroId).mensagem;
+    }
+
+    // Ação 2: Adicionar itens na lista de compras ou tarefas
+    if (/(?:colo(?:ca|que|car)|adiciona(?:r)?|bota(?:r)?|p[oõ]e(?:r)?)\s+.+?\s+na\s+lista/i.test(p)) {
+      return adicionarItensListaIA(pergunta, membroId).mensagem;
+    }
+
+    // Ação 3: Como fazer sobrar mais dinheiro / orientações de economia
+    if (p.includes('sobrar') || p.includes('economizar') || p.includes('poupar') || p.includes('fazer sobrar') || p.includes('cortar gastos') || p.includes('vida financeira')) {
+      return gerarOrientacoesFazerSobrarDinheiro(membroId);
+    }
+
+    // Ação 4: O que pagar primeiro / ordem de ataque de contas e dívidas
+    if (p.includes('o que pagar primeiro') || p.includes('ordem de ataque') || p.includes('quais contas pagar') || p.includes('priorizar') || p.includes('prioridade')) {
+      return gerarOrdemAtaqueContasEDividas(membroId);
+    }
 
     // 1. Resumo da Semana
     if (p.includes('resumo') || p.includes('semana') || p.includes('panorama') || p.includes('geral')) {
@@ -18360,6 +19134,33 @@ if (typeof module !== 'undefined' && module.exports) {
     formatarTelefoneBR,
     aoDigitarIdentificadorLogin,
     aplicarProvedorEmail,
+    // Super-App Familiar v2.0 - IA Agente Norte Proativo & Ações Autônomas
+    criarEventoCalendarioIA,
+    adicionarItensListaIA,
+    gerarOrientacoesFazerSobrarDinheiro,
+    gerarOrdemAtaqueContasEDividas,
+    gerarIniciaisNome,
+    // Super-App Familiar v2.0 - Carrossel Superior Dinâmico Touch Swipe
+    obterProximoEventoFuturoCarrossel,
+    renderCarrosselSuperior,
+    aoRolarCarrosselSuperior,
+    rolarCarrosselParaSlide,
+    // Super-App Familiar v2.0 - Configurações & Gerenciar Conta (Prints 1, 2, 3 e 5)
+    abrirModalConfigPerfil,
+    atualizarModalConfigPerfil,
+    abrirModalGerenciarConta,
+    renderPaletaCoresGerenciarConta,
+    selecionarCorPerfilMembro,
+    salvarDadosGerenciarConta,
+    abrirModalOpcoesFotoPerfil,
+    aoSelecionarFotoGerenciarConta,
+    removerFotoPerfilGerenciar,
+    deixarGrupoFamiliar,
+    aoAlternarSwitchNotificacoes,
+    abrirModalEscolherAvatar,
+    selecionarAvatarIlustrado,
+    AVATARES_ILUSTRADOS_LISTA,
+    CORES_PALETA_MEMBRO,
     getState: () => S,
     S
   };
@@ -18394,5 +19195,29 @@ if (typeof window !== 'undefined') {
   window.formatarTelefoneBR = formatarTelefoneBR;
   window.aoDigitarIdentificadorLogin = aoDigitarIdentificadorLogin;
   window.aplicarProvedorEmail = aplicarProvedorEmail;
+  window.criarEventoCalendarioIA = criarEventoCalendarioIA;
+  window.adicionarItensListaIA = adicionarItensListaIA;
+  window.gerarOrientacoesFazerSobrarDinheiro = gerarOrientacoesFazerSobrarDinheiro;
+  window.gerarOrdemAtaqueContasEDividas = gerarOrdemAtaqueContasEDividas;
+  window.gerarIniciaisNome = gerarIniciaisNome;
+  window.obterProximoEventoFuturoCarrossel = obterProximoEventoFuturoCarrossel;
+  window.renderCarrosselSuperior = renderCarrosselSuperior;
+  window.aoRolarCarrosselSuperior = aoRolarCarrosselSuperior;
+  window.rolarCarrosselParaSlide = rolarCarrosselParaSlide;
+  window.abrirModalConfigPerfil = abrirModalConfigPerfil;
+  window.atualizarModalConfigPerfil = atualizarModalConfigPerfil;
+  window.abrirModalGerenciarConta = abrirModalGerenciarConta;
+  window.renderPaletaCoresGerenciarConta = renderPaletaCoresGerenciarConta;
+  window.selecionarCorPerfilMembro = selecionarCorPerfilMembro;
+  window.salvarDadosGerenciarConta = salvarDadosGerenciarConta;
+  window.abrirModalOpcoesFotoPerfil = abrirModalOpcoesFotoPerfil;
+  window.aoSelecionarFotoGerenciarConta = aoSelecionarFotoGerenciarConta;
+  window.removerFotoPerfilGerenciar = removerFotoPerfilGerenciar;
+  window.deixarGrupoFamiliar = deixarGrupoFamiliar;
+  window.aoAlternarSwitchNotificacoes = aoAlternarSwitchNotificacoes;
+  window.abrirModalEscolherAvatar = abrirModalEscolherAvatar;
+  window.selecionarAvatarIlustrado = selecionarAvatarIlustrado;
+  window.AVATARES_ILUSTRADOS_LISTA = AVATARES_ILUSTRADOS_LISTA;
+  window.CORES_PALETA_MEMBRO = CORES_PALETA_MEMBRO;
 }
 

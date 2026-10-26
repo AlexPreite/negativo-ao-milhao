@@ -401,8 +401,163 @@
     border-radius: 50%; background: rgba(0,0,0,0.45); color: #fff; border: 1px solid rgba(255,255,255,0.3);
     display: flex; align-items: center; justify-content: center; font-size: 15px;
     cursor: pointer; backdrop-filter: blur(4px); transition: background 0.15s;
+    z-index: 5;
   }
   .btn-trocar-capa:hover { background: rgba(0,0,0,0.7); }
+
+  /* CARROSSEL TOUCH SWIPE COM CSS SCROLL SNAP */
+  .carousel-wrapper {
+    position: relative;
+    border-radius: 24px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  }
+  .carousel-track {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+  .carousel-track::-webkit-scrollbar {
+    display: none;
+  }
+  .carousel-slide {
+    flex: 0 0 100%;
+    min-width: 100%;
+    scroll-snap-align: start;
+    min-height: 155px;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-end;
+    box-sizing: border-box;
+    background-size: cover;
+    background-position: center;
+  }
+  .slide-foto-familia {
+    background-color: #3b4252;
+    background-image: linear-gradient(180deg, rgba(30,41,59,0.3) 0%, rgba(15,23,42,0.88) 100%), url('https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=800&q=80');
+  }
+  .slide-proximo-evento {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  }
+  .slide-convite-circulo {
+    background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+  }
+
+  /* TOGGLE SWITCHES (Estilo iOS) */
+  .switch-toggle {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    margin: 0;
+    cursor: pointer;
+  }
+  .switch-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .switch-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: var(--border2);
+    transition: .25s;
+    border-radius: 24px;
+  }
+  .switch-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .25s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  .switch-toggle input:checked + .switch-slider {
+    background-color: var(--green);
+  }
+  .switch-toggle input:checked + .switch-slider:before {
+    transform: translateX(20px);
+  }
+
+  /* PALETA DE 16 CORES (Círculos com Checkmark) */
+  .gerenciar-paleta-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+    margin: 10px 0 16px;
+  }
+  @media (max-width: 400px) {
+    .gerenciar-paleta-grid {
+      grid-template-columns: repeat(6, 1fr);
+    }
+  }
+  .cor-circulo-item {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, box-shadow 0.15s;
+    border: 2px solid transparent;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cor-circulo-item:active {
+    transform: scale(0.9);
+  }
+  .cor-circulo-item.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 2px var(--blue);
+  }
+  .cor-circulo-item .cor-check {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 1;
+    display: none;
+  }
+  .cor-circulo-item.active .cor-check {
+    display: block;
+  }
+
+  /* GRADE DE AVATARES ILUSTRADOS */
+  .avatar-grid-picker {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 10px 0;
+  }
+  .avatar-picker-item {
+    background: var(--bg2);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .avatar-picker-item:hover, .avatar-picker-item:active {
+    border-color: var(--blue);
+    background: var(--bg3);
+    transform: translateY(-2px);
+  }
 
   /* GRADE DO MURAL (Cards 2 Colunas do Print) */
   .mural-grid-print {
@@ -690,21 +845,45 @@
 
     <!-- INÍCIO: MURAL DA FAMÍLIA (Etapa 1 - Seção 6) -->
     <div id="sec-inicio" class="section">
-      <!-- BANNER DE FOTO FAMILIAR & ATIVIDADE (Carrossel do Print) -->
-      <div class="carousel-family-banner" id="carousel-family-banner" onclick="go('atividade')">
-        <div class="carousel-banner-overlay">
-          <span class="carousel-badge-tag">ATIVIDADE</span>
-          <h3 class="carousel-banner-title">Há notícias desde a última vez! Verifique a atividade da família</h3>
-          <div class="carousel-dots-row">
-            <span class="c-dot active"></span>
-            <span class="c-dot"></span>
-            <span class="c-dot"></span>
-            <span class="c-dot"></span>
-            <span class="c-dot"></span>
+      <!-- CARROSSEL SUPERIOR DESLIZANTE TOUCH SWIPE COM CSS SCROLL SNAP (3 Slides) -->
+      <div class="carousel-wrapper" style="position:relative; margin-bottom:16px;">
+        <div class="carousel-track" id="carousel-track" onscroll="aoRolarCarrosselSuperior(event)">
+          <!-- SLIDE 1: FOTO FAMILIAR & ATIVIDADE -->
+          <div class="carousel-slide carousel-family-banner slide-foto-familia" id="carousel-family-banner" onclick="go('atividade')">
+            <div class="carousel-banner-overlay">
+              <span class="carousel-badge-tag">ATIVIDADE</span>
+              <h3 class="carousel-banner-title" id="carousel-banner-title">Há notícias desde a última vez! Verifique a atividade da família</h3>
+              <p style="font-size:11.5px; opacity:0.85; margin:0;">Toque para ver a linha do tempo</p>
+            </div>
+            <button type="button" class="btn-trocar-capa" onclick="event.stopPropagation();document.getElementById('capa-familia-input').click();" title="Trocar foto de capa da família">📷</button>
+            <input type="file" id="capa-familia-input" accept="image/*" style="display:none;" onchange="aoSelecionarCapaFamilia(event)"/>
+          </div>
+
+          <!-- SLIDE 2: PRÓXIMO EVENTO FUTURO DINÂMICO -->
+          <div class="carousel-slide slide-proximo-evento" id="carousel-slide-2" onclick="go('calendario')">
+            <div class="carousel-banner-overlay" id="carousel-evento-conteudo">
+              <span class="carousel-badge-tag" style="background:rgba(255,255,255,0.25);">PRÓXIMO COMPROMISSO</span>
+              <h3 class="carousel-banner-title" id="carousel-evento-titulo">Nada agendado hoje! 😌 Planeje um novo evento</h3>
+              <p style="font-size:11.5px; opacity:0.9; margin:0;" id="carousel-evento-sub">Toque para abrir a agenda</p>
+            </div>
+          </div>
+
+          <!-- SLIDE 3: CONVITE DO CÍRCULO FAMILIAR -->
+          <div class="carousel-slide slide-convite-circulo" id="carousel-slide-3" onclick="abrirModalCirculo()">
+            <div class="carousel-banner-overlay">
+              <span class="carousel-badge-tag" style="background:rgba(255,255,255,0.25);">CÍRCULO FAMILIAR</span>
+              <h3 class="carousel-banner-title">Vamos expandir seu círculo, convidar novos membros! 💌</h3>
+              <p style="font-size:11.5px; opacity:0.9; margin:0;">Toque para compartilhar o código familiar</p>
+            </div>
           </div>
         </div>
-        <button type="button" class="btn-trocar-capa" onclick="event.stopPropagation();document.getElementById('capa-familia-input').click();" title="Trocar foto de capa da família">📷</button>
-        <input type="file" id="capa-familia-input" accept="image/*" style="display:none;" onchange="aoSelecionarCapaFamilia(event)"/>
+
+        <!-- INDICADOR DE BOLINHAS SINCRONIZADO COM TOUCH SWIPE -->
+        <div class="carousel-dots-row" id="carousel-dots-sync" style="position:absolute; bottom:12px; left:16px; z-index:4;">
+          <span class="c-dot active" id="cdot-0" onclick="rolarCarrosselParaSlide(0)"></span>
+          <span class="c-dot" id="cdot-1" onclick="rolarCarrosselParaSlide(1)"></span>
+          <span class="c-dot" id="cdot-2" onclick="rolarCarrosselParaSlide(2)"></span>
+        </div>
       </div>
 
       <!-- GRADE DE MÓDULOS DO MURAL (Padrão 2 Colunas do Print) -->
@@ -3551,6 +3730,257 @@
       <button type="button" class="btn btn-r" style="margin:0; padding:12px; font-weight:800; font-size:14px;" onclick="fazerLogoffApp()">
         🚪 Sair da Conta (Logoff)
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- MODAL COMPLETO DE CONFIGURAÇÕES & PERFIL (Print 5)                      -->
+<!-- ====================================================================== -->
+<div class="modal-bg" id="m-config-perfil-full">
+  <div class="modal" style="max-height:92vh; padding:0; overflow:hidden; border-radius:24px; display:flex; flex-direction:column; max-width:440px;">
+    <!-- TOP BAR DO PRINT 5: HOME, TÍTULO E SAIR -->
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border2); background:var(--bg2);">
+      <button type="button" class="icon-btn-circle" onclick="closeM('m-config-perfil-full'); go('inicio');" title="Voltar para o Mural" style="width:36px; height:36px; background:var(--bg3); border:none; border-radius:50%; font-size:18px; cursor:pointer;">
+        🏠
+      </button>
+      <h3 style="margin:0; font-size:17px; font-weight:800; color:var(--text);">Configurações</h3>
+      <button type="button" class="icon-btn-circle" onclick="fazerLogoffApp()" title="Sair da Conta (Logoff)" style="width:36px; height:36px; background:var(--bg3); border:none; border-radius:50%; font-size:18px; cursor:pointer;">
+        🚪
+      </button>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; padding:20px;">
+      <!-- CARD DE PERFIL DO PRINT 5 -->
+      <div class="card" style="padding:18px; border-radius:20px; display:flex; flex-direction:column; align-items:center; text-align:center; background:var(--bg2); margin-bottom:18px; position:relative; box-shadow:0 4px 16px rgba(0,0,0,0.06);">
+        <!-- AVATAR 72px COM COROA -->
+        <div style="position:relative; margin-bottom:10px;">
+          <div id="cfg-perfil-avatar-preview" style="width:72px; height:72px; border-radius:50%; background:#5581E3; color:#fff; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; border:3px solid #fff; box-shadow:0 4px 12px rgba(0,0,0,0.12); background-size:cover; background-position:center;">
+            AL
+          </div>
+          <span id="cfg-perfil-crown" style="position:absolute; top:-6px; right:-6px; font-size:20px; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">👑</span>
+        </div>
+
+        <!-- NOME, CONTATO E BADGE PREMIUM -->
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+          <h2 id="cfg-perfil-nome" style="margin:0; font-size:19px; font-weight:800; color:var(--text);">Alexsander</h2>
+          <span class="badge" style="background:linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:12px; letter-spacing:0.05em;">PREMIUM</span>
+        </div>
+        <p id="cfg-perfil-contato" style="font-size:12.5px; color:var(--muted); margin:0 0 14px;">alexsander@exemplo.com</p>
+
+        <!-- BOTÃO DESTACADO: GERENCIAR CONTA -->
+        <button type="button" class="btn" id="btn-abrir-gerenciar-conta" onclick="abrirModalGerenciarConta()" style="width:auto; margin:0; padding:8px 22px; font-size:13px; font-weight:700; border-radius:20px; background:var(--bg3); border:1px solid var(--border2); color:var(--text);">
+          Gerenciar conta
+        </button>
+      </div>
+
+      <!-- LISTA DE OPÇÕES COM SETINHAS > (Estilo iOS / Print 5) -->
+      <div class="card" style="padding:4px 0; border-radius:20px; background:var(--bg2); margin-bottom:16px;">
+        <!-- Gerenciar grupos -->
+        <div class="settings-nav-row" onclick="closeM('m-config-perfil-full'); abrirModalCirculo();" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px;">🏰</span>
+            <span style="font-size:14px; font-weight:600; color:var(--text);">Gerenciar grupos</span>
+          </div>
+          <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
+        </div>
+
+        <!-- Assinatura Premium -->
+        <div class="settings-nav-row" onclick="exibirToastNotificacao('Plano Familiar Premium Ativo! ✨', '⭐')" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px;">⭐</span>
+            <span style="font-size:14px; font-weight:600; color:var(--text);">Assinatura Premium</span>
+          </div>
+          <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
+        </div>
+
+        <!-- Notificações com Toggle Switch -->
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px;">🔔</span>
+            <span style="font-size:14px; font-weight:600; color:var(--text);">Notificações</span>
+          </div>
+          <label class="switch-toggle" style="position:relative; display:inline-block; width:44px; height:24px; margin:0;">
+            <input type="checkbox" id="cfg-switch-notificacoes" checked onchange="aoAlternarSwitchNotificacoes(this)">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+
+        <!-- Modo Escuro com Toggle Switch -->
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px;">🌙</span>
+            <span style="font-size:14px; font-weight:600; color:var(--text);">Modo Escuro</span>
+          </div>
+          <label class="switch-toggle" style="position:relative; display:inline-block; width:44px; height:24px; margin:0;">
+            <input type="checkbox" id="cfg-switch-darkmode" onchange="alternarTema()">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+
+        <!-- Personalizar Tela Inicial -->
+        <div class="settings-nav-row" onclick="closeM('m-config-perfil-full'); go('config');" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px;">🎨</span>
+            <span style="font-size:14px; font-weight:600; color:var(--text);">Personalizar Tela Inicial</span>
+          </div>
+          <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
+        </div>
+
+        <!-- Sair da Conta -->
+        <div class="settings-nav-row" onclick="fazerLogoffApp()" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px; color:var(--red);">🚪</span>
+            <span style="font-size:14px; font-weight:700; color:var(--red);">Sair da Conta</span>
+          </div>
+          <span style="font-size:16px; color:var(--red); font-weight:700;">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- MODAL GERENCIAR CONTA (Prints 2 e 3 com Paleta de 16 Cores)            -->
+<!-- ====================================================================== -->
+<div class="modal-bg" id="m-gerenciar-conta">
+  <div class="modal" style="max-height:92vh; padding:0; overflow:hidden; border-radius:24px; display:flex; flex-direction:column; max-width:440px;">
+    <!-- BANNER CORAL/ROSADO DO TOPO COM X E SALVAR ✔ -->
+    <div style="background:linear-gradient(135deg, #FF6B6B 0%, #E11D48 100%); padding:16px 20px 48px; color:#fff; position:relative;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="icon-btn-circle" onclick="closeM('m-gerenciar-conta'); openM('m-config-perfil-full');" style="background:rgba(255,255,255,0.25); border:none; color:#fff; font-size:16px; width:34px; height:34px; border-radius:50%; cursor:pointer;">
+          ✕
+        </button>
+        <h3 style="margin:0; font-size:17px; font-weight:800; color:#fff;">Gerenciar conta</h3>
+        <button type="button" class="icon-btn-circle" id="btn-salvar-gerenciar-conta" onclick="salvarDadosGerenciarConta()" style="background:rgba(255,255,255,0.25); border:none; color:#fff; font-size:18px; width:34px; height:34px; border-radius:50%; cursor:pointer; font-weight:800;">
+          ✔
+        </button>
+      </div>
+    </div>
+
+    <!-- AVATAR 84px COM BADGE DE CÂMERA SOBREPOSTO -->
+    <div style="display:flex; justify-content:center; margin-top:-42px; margin-bottom:12px; position:relative; z-index:2;">
+      <div style="position:relative; cursor:pointer;" onclick="abrirModalOpcoesFotoPerfil()" title="Alterar foto ou avatar">
+        <div id="gerenciar-avatar-preview" style="width:84px; height:84px; border-radius:50%; background:#5581E3; color:#fff; display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:800; border:4px solid #fff; box-shadow:0 6px 18px rgba(0,0,0,0.15); background-size:cover; background-position:center;">
+          AL
+        </div>
+        <div style="position:absolute; bottom:2px; right:2px; width:28px; height:28px; border-radius:50%; background:#ffffff; box-shadow:0 2px 6px rgba(0,0,0,0.25); display:flex; align-items:center; justify-content:center; font-size:14px; border:2px solid #fff;">
+          📷
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTEÚDO SCROLLÁVEL DO GERENCIAR CONTA -->
+    <div style="flex:1; overflow-y:auto; padding:0 20px 24px;">
+      <!-- ID DA CONTA -->
+      <div style="margin-bottom:16px;">
+        <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:6px;">
+          ID DA CONTA
+        </label>
+        <div style="background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:10px 14px; font-size:13px; color:var(--text); font-weight:600;" id="gerenciar-conta-id-txt">
+          alexsander@exemplo.com
+        </div>
+      </div>
+
+      <!-- SUA INFORMAÇÃO -->
+      <div style="margin-bottom:16px;">
+        <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:8px;">
+          SUA INFORMAÇÃO
+        </label>
+        
+        <!-- NOME -->
+        <div style="margin-bottom:12px;">
+          <input type="text" id="gerenciar-conta-nome" placeholder="Seu nome completo" style="width:100%; padding:12px 14px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:14px; font-weight:600;" />
+        </div>
+
+        <!-- PALETA DE 16 CORES CIRCULARES COM CHECKMARK ✓ -->
+        <div style="margin-bottom:14px;">
+          <span style="font-size:11px; color:var(--muted); font-weight:700; display:block; margin-bottom:6px;">
+            Cor do seu perfil na família:
+          </span>
+          <div class="gerenciar-paleta-grid" id="gerenciar-paleta-cores"></div>
+        </div>
+
+        <!-- PAPEL NA FAMÍLIA -->
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px; color:var(--muted); font-weight:700; display:block; margin-bottom:4px;">Papel na família:</label>
+          <select id="gerenciar-conta-papel" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px; font-weight:600;">
+            <option value="admin">👑 Titular / Administrador</option>
+            <option value="conjuge">💜 Cônjuge / Parceiro(a)</option>
+            <option value="filho">🧒 Filho(a) / Jovem</option>
+            <option value="crianca">🍼 Criança (Acesso protegido)</option>
+            <option value="parente">🏡 Outro membro da casa</option>
+          </select>
+        </div>
+
+        <!-- DATA DE ANIVERSÁRIO -->
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px; color:var(--muted); font-weight:700; display:block; margin-bottom:4px;">Data de aniversário:</label>
+          <input type="date" id="gerenciar-conta-aniversario" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px;" />
+        </div>
+
+        <!-- TELEFONE -->
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px; color:var(--muted); font-weight:700; display:block; margin-bottom:4px;">Telefone / WhatsApp:</label>
+          <input type="tel" id="gerenciar-conta-telefone" placeholder="(11) 98814-6347" oninput="this.value = formatarTelefoneBR(this.value)" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px;" />
+        </div>
+
+        <!-- ENDEREÇO -->
+        <div style="margin-bottom:16px;">
+          <label style="font-size:11px; color:var(--muted); font-weight:700; display:block; margin-bottom:4px;">Endereço:</label>
+          <input type="text" id="gerenciar-conta-endereco" placeholder="Rua, número, bairro ou condomínio" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px;" />
+        </div>
+
+        <!-- BOTÃO VERMELHO: DEIXAR O GRUPO -->
+        <button type="button" class="btn btn-r" id="btn-deixar-grupo" onclick="deixarGrupoFamiliar()" style="margin:8px 0 0; padding:12px; font-weight:800; font-size:13px; border-radius:var(--radius-sm);">
+          Deixar o grupo
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- MODAL DE OPÇÕES DE FOTO DE PERFIL                                      -->
+<!-- ====================================================================== -->
+<div class="modal-bg" id="m-opcoes-foto-perfil">
+  <div class="modal" style="max-width:340px; padding:20px; border-radius:24px; text-align:center;">
+    <h4 style="margin:0 0 14px; font-size:16px; font-weight:800;">Foto de Perfil</h4>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button type="button" class="btn" style="margin:0; padding:12px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="closeM('m-opcoes-foto-perfil'); document.getElementById('gerenciar-foto-input').click();">
+        <span>📷</span> Tirar foto / Galeria
+      </button>
+      <button type="button" class="btn btn-primary" style="margin:0; padding:12px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="closeM('m-opcoes-foto-perfil'); abrirModalEscolherAvatar();">
+        <span>🎨</span> Escolher um avatar
+      </button>
+      <button type="button" class="btn btn-r" id="btn-remover-foto-gerenciar" style="margin:0; padding:10px; font-size:12px; font-weight:700;" onclick="closeM('m-opcoes-foto-perfil'); removerFotoPerfilGerenciar();">
+        Remover foto atual
+      </button>
+      <button type="button" class="btn" style="margin:0; padding:8px; font-size:12px; background:transparent; border:none; color:var(--muted);" onclick="closeM('m-opcoes-foto-perfil')">
+        Cancelar
+      </button>
+    </div>
+    <input type="file" id="gerenciar-foto-input" accept="image/*" style="display:none;" onchange="aoSelecionarFotoGerenciarConta(event)"/>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- MODAL ESCOLHA UM AVATAR (Print 1 - 10 Avatares Ilustrados)             -->
+<!-- ====================================================================== -->
+<div class="modal-bg" id="m-escolher-avatar">
+  <div class="modal" style="max-height:85vh; padding:0; overflow:hidden; border-radius:24px; display:flex; flex-direction:column; max-width:400px;">
+    <!-- HEADER -->
+    <div style="display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border2); background:var(--bg2);">
+      <button type="button" class="icon-btn-circle" onclick="closeM('m-escolher-avatar'); openM('m-gerenciar-conta');" style="background:var(--bg3); border:none; font-size:16px; width:34px; height:34px; border-radius:50%; cursor:pointer;">
+        ←
+      </button>
+      <h3 style="margin:0; font-size:17px; font-weight:800; color:var(--text);">Escolha um avatar</h3>
+    </div>
+
+    <!-- GRADE DOS 10 AVATARES -->
+    <div style="flex:1; overflow-y:auto; padding:16px 20px;">
+      <p style="font-size:12px; color:var(--muted); margin:0 0 12px; text-align:center;">Toque no avatar que melhor representa você no círculo:</p>
+      <div class="avatar-grid-picker" id="grade-avatares-ilustrados"></div>
     </div>
   </div>
 </div>
