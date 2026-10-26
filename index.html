@@ -244,11 +244,37 @@
   .settings-item:last-child { border-bottom: none; }
   .settings-val { color: var(--muted); font-size: 13px; }
 
-  /* ONBOARDING */
+  /* ONBOARDING & LOGIN MOBILE */
   #onboarding { position: fixed; inset: 0; background: var(--bg); z-index: 300; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; text-align: center; }
-  #tela-login { position: fixed; inset: 0; background: var(--bg); z-index: 310; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; text-align: center; }
-  #tela-login h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
-  #tela-login p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 28px; }
+  #tela-login {
+    position: fixed; inset: 0; background: var(--bg); z-index: 310;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px 16px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .login-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 24px;
+    padding: 28px 22px; width: 100%; max-width: 400px; box-shadow: 0 10px 32px rgba(0,0,0,0.07);
+    display: flex; flex-direction: column; gap: 14px; text-align: center;
+  }
+  .login-card h1 { font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 2px; }
+  .login-card p.sub { font-size: 13px; color: var(--muted); line-height: 1.4; margin-bottom: 4px; }
+  .login-membro-chip {
+    flex: 1; padding: 10px 8px; border-radius: 14px; border: 1px solid var(--border2);
+    background: var(--bg3); color: var(--text); font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all 0.15s ease; display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .login-membro-chip:hover { border-color: var(--primary); }
+  .login-membro-chip.sel {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+    box-shadow: 0 4px 14px rgba(85,129,227,0.35); transform: translateY(-1px);
+  }
+  .btn-google {
+    background: #ffffff; color: #1f2937; border: 1px solid rgba(0,0,0,0.14);
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    font-weight: 600; padding: 12px; border-radius: var(--radius-sm); cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: background 0.15s;
+  }
+  .btn-google:hover { background: #f9fafb; }
   .logo-circle { width: 80px; height: 80px; border-radius: 50%; background: var(--green-dim); border: 2px solid var(--green); display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 24px; }
   #onboarding h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
   #onboarding p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 32px; }
@@ -276,40 +302,134 @@
 
   /* CALENDÁRIO FAMILIAR (Etapa 3) */
   /* CALENDÁRIO COMPARTILHADO PRO v2.1 */
-  .cal-grid-dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-  .cal-header-dia { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); padding: 4px 0; text-transform: uppercase; }
+  /* CALENDÁRIO COMPARTILHADO PRO ESTILO IPHONE (iOS Calendar) */
+  .cal-grid-dias {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
+    width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: hidden;
+  }
+  .cal-header-dia {
+    text-align: center; font-size: 11px; font-weight: 700; color: var(--muted);
+    padding: 6px 0; text-transform: uppercase;
+  }
   .cal-col-semana { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--muted); background: var(--bg3); border-radius: 6px; }
   .cal-celula-dia {
-    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 5px; min-height: 85px; cursor: pointer; display: flex; flex-direction: column;
-    position: relative; transition: border-color 0.15s, background 0.15s;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 3px 1px; min-height: 48px; max-height: 54px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    position: relative; transition: all 0.15s ease; box-sizing: border-box;
   }
-  .cal-celula-dia:active { background: var(--bg3); }
-  .cal-celula-dia.outro-mes { opacity: 0.55; }
-  .cal-celula-dia.hoje { border: 2px solid var(--primary); background: var(--blue-dim); }
-  .cal-celula-dia.selecionado { border: 2px solid var(--text); }
-  .cal-dia-num { font-size: 12px; font-weight: 700; line-height: 1; margin-bottom: 2px; }
-  .cal-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
-  .cal-event-pill {
-    font-size: 9.5px; font-weight: 600; padding: 2px 4px; border-radius: 4px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
-    line-height: 1.25; display: block; box-shadow: 0 1px 2px rgba(0,0,0,0.15);
-    transition: transform 0.1s ease;
+  .cal-celula-dia:active { background: var(--bg3); transform: scale(0.97); }
+  .cal-celula-dia.outro-mes { opacity: 0.35; }
+  .cal-celula-dia.hoje .cal-dia-num-badge {
+    background: var(--primary); color: #ffffff !important; font-weight: 800;
   }
-  .cal-event-pill:hover { transform: scale(1.02); }
+  .cal-celula-dia.selecionado {
+    border: 2px solid var(--primary); background: rgba(85, 129, 227, 0.08);
+  }
+  .cal-dia-num-badge {
+    width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: 700;
+    line-height: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--text); margin-bottom: 2px;
+  }
+  .cal-dots-wrap {
+    display: flex; align-items: center; justify-content: center; gap: 3px;
+    min-height: 7px; max-width: 100%; overflow: hidden;
+  }
+  .cal-dot {
+    width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+  }
   .cal-item-card {
-    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 10px 12px; margin-bottom: 8px; display: flex; gap: 10px; align-items: flex-start;
-    cursor: pointer; transition: background 0.15s;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 16px;
+    padding: 12px 14px; margin-bottom: 8px; display: flex; gap: 12px; align-items: center;
+    cursor: pointer; transition: background 0.15s, transform 0.1s; min-height: 44px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
   }
-  .cal-item-card:active { background: var(--bg3); }
-  .cal-hora-col { font-size: 11px; font-weight: 700; color: var(--muted); width: 44px; flex-shrink: 0; padding-top: 2px; }
+  .cal-item-card:active { background: var(--bg3); transform: scale(0.98); }
+  .cal-hora-col { font-size: 11.5px; font-weight: 800; color: var(--primary); width: 48px; flex-shrink: 0; }
   .cal-map-preview:hover { opacity: 0.95; }
   .cal-quick-bottom-bar {
     position: sticky; bottom: 0; z-index: 10; background: var(--bg2);
     border-top: 1px solid var(--border2); padding: 8px 12px; display: flex;
     justify-content: space-around; align-items: center; border-radius: var(--radius-sm);
     margin-top: 12px; box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  }
+
+  /* MURAL INICIAL & CARROSSEL FAMILIAR (Padrão 2 Colunas do Print) */
+  .carousel-family-banner {
+    position: relative; border-radius: 24px; overflow: hidden;
+    min-height: 150px; margin-bottom: 16px; cursor: pointer;
+    background-size: cover; background-position: center;
+    background-color: #3b4252;
+    background-image: linear-gradient(180deg, rgba(30,41,59,0.3) 0%, rgba(15,23,42,0.85) 100%), url('https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=800&q=80');
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    display: flex; align-items: flex-end;
+  }
+  .carousel-banner-overlay {
+    width: 100%; padding: 18px 16px 14px;
+    color: #ffffff;
+  }
+  .carousel-badge-tag {
+    display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+    padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.25);
+    backdrop-filter: blur(4px); color: #ffffff; margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .carousel-banner-title {
+    font-size: 15px; font-weight: 800; line-height: 1.35; margin: 0 0 10px;
+    color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+  .carousel-dots-row {
+    display: flex; align-items: center; gap: 5px;
+  }
+  .carousel-dots-row .c-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.4);
+    transition: all 0.2s;
+  }
+  .carousel-dots-row .c-dot.active {
+    width: 16px; border-radius: 4px; background: #ffffff;
+  }
+  .btn-trocar-capa {
+    position: absolute; top: 12px; right: 12px; width: 34px; height: 34px;
+    border-radius: 50%; background: rgba(0,0,0,0.45); color: #fff; border: 1px solid rgba(255,255,255,0.3);
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    cursor: pointer; backdrop-filter: blur(4px); transition: background 0.15s;
+  }
+  .btn-trocar-capa:hover { background: rgba(0,0,0,0.7); }
+
+  /* GRADE DO MURAL (Cards 2 Colunas do Print) */
+  .mural-grid-print {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;
+  }
+  .mural-card-ref {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 20px;
+    padding: 14px; min-height: 104px; position: relative; cursor: pointer;
+    display: flex; flex-direction: column; justify-content: flex-start;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.03); transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent; box-sizing: border-box;
+  }
+  .mural-card-ref:active {
+    transform: scale(0.97); background: var(--bg3);
+  }
+  .mural-card-title {
+    font-size: 15px; font-weight: 800; color: var(--text); margin: 0 0 3px;
+    line-height: 1.25;
+  }
+  .mural-card-sub {
+    font-size: 11px; color: var(--muted); margin: 0; line-height: 1.3;
+    max-width: 75%;
+  }
+  .mural-card-icon-bubble {
+    position: absolute; right: 12px; bottom: 12px;
+    width: 36px; height: 36px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+
+  /* AVATAR COM FOTO */
+  .avatar-foto-wrap {
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
   }
 
   /* CARTEIRAS DE BENEFÍCIOS (VA / VR) (Etapa 4) */
@@ -395,16 +515,78 @@
 </head>
 <body>
 
-<!-- LOGIN -->
+<!-- LOGIN GATE OBRIGATÓRIO (Estilo App Mobile) -->
 <div id="tela-login">
-  <div class="logo-circle">🔐</div>
-  <h1>Do Negativo<br>ao Milhão</h1>
-  <p>Entre com telefone e senha.<br>Cada pessoa da família cria seu próprio login.</p>
-  <div class="key-input-wrap"><input type="tel" id="login-tel" placeholder="Telefone com DDD (só números)" inputmode="numeric" maxlength="11"/></div>
-  <div class="key-input-wrap"><input type="password" id="login-senha" placeholder="Senha (mín. 6 caracteres)"/></div>
-  <button class="btn btn-primary" onclick="fazerLogin()">Entrar</button>
-  <button class="btn" style="margin-top:8px;" onclick="fazerCadastro()">Criar minha conta</button>
-  <p id="login-msg" style="color:var(--red);font-size:13px;margin-top:14px;min-height:16px;"></p>
+  <div class="login-card">
+    <div class="logo-circle" style="width:68px;height:68px;font-size:30px;margin:0 auto 4px;">🔐</div>
+    <div>
+      <h1>Do Negativo ao Milhão</h1>
+      <p class="sub">Organizador Familiar & Finanças Compartilhadas</p>
+    </div>
+
+    <!-- SELETOR RÁPIDO: QUEM É VOCÊ NA FAMÍLIA? -->
+    <div style="text-align:left;margin-top:2px;">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:block;">
+        👤 Quem é você na família?
+      </label>
+      <div style="display:flex;gap:8px;">
+        <div class="login-membro-chip sel" id="chip-login-alex" onclick="selecionarMembroLogin('m_1', 'Alex')">
+          👑 Alex
+        </div>
+        <div class="login-membro-chip" id="chip-login-gabi" onclick="selecionarMembroLogin('m_2', 'Gabi')">
+          💜 Gabi
+        </div>
+        <div class="login-membro-chip" id="chip-login-outro" onclick="selecionarMembroLogin('outro', 'Outro')">
+          + Outro
+        </div>
+      </div>
+    </div>
+
+    <!-- FORMULÁRIO DE ACESSO -->
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+      <div class="key-input-wrap" style="margin:0;">
+        <input type="text" id="login-tel-email" name="login-tel" placeholder="Telefone com DDD ou E-mail" style="text-align:left;padding:13px 14px;font-size:14px;"/>
+      </div>
+      <div class="key-input-wrap" style="margin:0;">
+        <input type="password" id="login-senha" placeholder="Senha de acesso (mín. 6 dígitos)" style="text-align:left;padding:13px 14px;font-size:14px;"/>
+      </div>
+      
+      <button type="button" class="btn btn-primary" style="margin:0;padding:13px;font-weight:700;font-size:14px;" onclick="fazerLogin()">
+        Entrar na Conta
+      </button>
+
+      <button type="button" class="btn-google" onclick="fazerLoginGoogle()" title="Entrar com sua conta Google">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+        <span>Continuar com Google</span>
+      </button>
+
+      <button type="button" class="btn" style="margin:0;padding:11px;font-size:13px;" onclick="fazerCadastro()">
+        Criar Conta da Família
+      </button>
+    </div>
+
+    <!-- SINCRONIZAÇÃO COMPARTILHADA ALEX & GABI -->
+    <details style="text-align:left;background:var(--bg3);border-radius:12px;padding:8px 12px;font-size:12px;border:1px solid var(--border);">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text);outline:none;">
+        ☁️ Círculo Compartilhado (Alex & Gabi)
+      </summary>
+      <p style="color:var(--muted);margin:6px 0 8px;line-height:1.35;font-size:11.5px;">
+        Ao entrar, este aparelho conecta automaticamente na base compartilhada da família:
+      </p>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="login-codigo-familia" value="familia-alex-gabi" style="flex:1;padding:8px;font-size:12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);font-weight:700;"/>
+        <button type="button" class="btn" style="width:auto;margin:0;padding:8px 10px;font-size:11px;" onclick="salvarCodigoFamiliaLogin()">OK</button>
+      </div>
+    </details>
+
+    <div style="margin-top:2px;">
+      <span class="skip-btn" style="font-size:12px;cursor:pointer;color:var(--muted);" onclick="entrarModoLocal()">
+        Entrar no modo demonstração local →
+      </span>
+    </div>
+
+    <p id="login-msg" style="color:var(--red);font-size:13px;margin:2px 0 0;min-height:16px;font-weight:600;"></p>
+  </div>
 </div>
 
 <!-- ONBOARDING -->
@@ -436,10 +618,13 @@
         <span>🔔</span>
         <span class="notif-badge-pill" id="notif-badge-count" style="display:none;">0</span>
       </button>
-      <div class="member-avatar-btn" id="header-avatar-btn" onclick="go('familia')" title="Membro Ativo" style="background:#5581E3;">
+      <div class="member-avatar-btn" id="header-avatar-btn" onclick="abrirModalPerfilConta()" title="Minha Conta & Membro Ativo" style="background:#5581E3;">
         <span id="header-avatar-txt">AL</span>
         <span class="member-crown-badge" id="header-avatar-crown">👑</span>
       </div>
+      <button type="button" class="icon-btn-circle" id="btn-header-logoff" onclick="fazerLogoffApp()" title="Sair da Conta (Logoff)">
+        <span style="font-size:15px;">🚪</span>
+      </button>
     </div>
   </div>
 
@@ -473,24 +658,25 @@
 
     <!-- INÍCIO: MURAL DA FAMÍLIA (Etapa 1 - Seção 6) -->
     <div id="sec-inicio" class="section">
-      <!-- CARROSSEL DE DICAS -->
-      <div class="carousel-wrap" id="carousel-wrap">
-        <div class="carousel-slide-box" id="carousel-box">
-          <div style="font-size:32px;" id="carousel-icon">👨‍👩‍👧‍👦</div>
-          <div style="flex:1;">
-            <p style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px;" id="carousel-title">Bem-vindo ao Mural Familiar</p>
-            <p style="font-size:12px;color:var(--muted);line-height:1.35;" id="carousel-desc">Tudo organizado em um só lugar: orçamento, rotina, compras e muito mais.</p>
+      <!-- BANNER DE FOTO FAMILIAR & ATIVIDADE (Carrossel do Print) -->
+      <div class="carousel-family-banner" id="carousel-family-banner" onclick="go('atividade')">
+        <div class="carousel-banner-overlay">
+          <span class="carousel-badge-tag">ATIVIDADE</span>
+          <h3 class="carousel-banner-title">Há notícias desde a última vez! Verifique a atividade da família</h3>
+          <div class="carousel-dots-row">
+            <span class="c-dot active"></span>
+            <span class="c-dot"></span>
+            <span class="c-dot"></span>
+            <span class="c-dot"></span>
+            <span class="c-dot"></span>
           </div>
         </div>
-        <div class="carousel-dots">
-          <span class="carousel-dot active" onclick="setCarouselSlide(0)"></span>
-          <span class="carousel-dot" onclick="setCarouselSlide(1)"></span>
-          <span class="carousel-dot" onclick="setCarouselSlide(2)"></span>
-        </div>
+        <button type="button" class="btn-trocar-capa" onclick="event.stopPropagation();document.getElementById('capa-familia-input').click();" title="Trocar foto de capa da família">📷</button>
+        <input type="file" id="capa-familia-input" accept="image/*" style="display:none;" onchange="aoSelecionarCapaFamilia(event)"/>
       </div>
 
-      <!-- GRADE DE MÓDULOS DO MURAL -->
-      <div class="mural-grid" id="grid-mural-inicio"></div>
+      <!-- GRADE DE MÓDULOS DO MURAL (Padrão 2 Colunas do Print) -->
+      <div class="mural-grid-print" id="grid-mural-inicio"></div>
     </div>
 
     <!-- LISTAS DE COMPRAS & TAREFAS (Etapa 2) -->
@@ -743,6 +929,25 @@
         <div id="seletor-membro-ativo-pills" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
       </div>
 
+      <!-- MINHA CONEXÃO FAMILIAR & LOGOFF (Ponto 2.2) -->
+      <div class="card" style="margin-bottom:14px;border:1px solid rgba(85,129,227,0.25);background:var(--bg2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-weight:700;font-size:13px;color:var(--primary);">☁️ Minha Conexão Familiar</span>
+          <span class="badge" style="background:rgba(16,185,129,0.15);color:var(--green);font-weight:700;" id="fam-sync-badge">Tempo Real Ativo</span>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.4;">
+          Base sincronizada da família: <strong id="fam-codigo-conectado" style="color:var(--text);">familia-alex-gabi</strong>
+        </p>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn" style="flex:1;margin:0;padding:10px;font-size:12px;font-weight:600;" onclick="syncDrive()">
+            🔄 Sincronizar Agora
+          </button>
+          <button type="button" class="btn btn-r" style="flex:1;margin:0;padding:10px;font-size:12px;font-weight:700;" onclick="fazerLogoffApp()">
+            🚪 Sair da Conta
+          </button>
+        </div>
+      </div>
+
       <p class="sec-title">Membros do Círculo</p>
       <div id="lista-membros-familia" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
@@ -909,15 +1114,6 @@
         <span style="font-size:11px; background:rgba(85,129,227,0.15); color:var(--blue); font-weight:700; padding:4px 8px; border-radius:12px;">Omnisciente</span>
       </div>
 
-      <!-- BOTÃO DE ACESSO AO ESCRITÓRIO 3D DA SQUAD -->
-      <a href="office-3d.html" target="_blank" class="btn" style="display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, rgba(139,92,246,0.18), rgba(59,130,246,0.18));border:1px solid #8B5CF6;color:var(--text);font-weight:700;padding:10px 14px;border-radius:var(--radius-sm);text-decoration:none;margin-bottom:12px;">
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:18px;">🏢</span>
-          <span>Ver Escritório 3D ao Vivo</span>
-        </span>
-        <span style="font-size:10px;background:#8B5CF6;color:#fff;padding:2px 7px;border-radius:8px;font-weight:800;">OpenClaw 3D →</span>
-      </a>
-
       <!-- CHIPS RÁPIDOS DA ETAPA 8 -->
       <div class="qs-wrap" id="norte-chips-rapidos" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
         <button type="button" class="qs" onclick="ask('Resumo da Semana da Família')">📊 Resumo da Semana da Família</button>
@@ -1067,6 +1263,22 @@
     <p class="modal-title" id="m-membro-titulo">👤 Membro da Família</p>
     <input type="hidden" id="mb-edit-id" value=""/>
     
+    <!-- FOTO DE PERFIL DO MEMBRO -->
+    <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px; padding:10px; background:var(--bg3); border-radius:16px;">
+      <div id="mb-foto-preview" style="width:56px; height:56px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; border:2px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.1); background-size:cover; background-position:center; flex-shrink:0;">
+        👤
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:12px; font-weight:700; color:var(--text); display:block; margin-bottom:4px;">Foto de Perfil</label>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="btn" style="width:auto; margin:0; padding:6px 12px; font-size:12px;" onclick="document.getElementById('mb-foto-input').click()">📷 Escolher Foto</button>
+          <button type="button" class="btn btn-r" id="mb-btn-remover-foto" style="width:auto; margin:0; padding:6px 10px; font-size:11px; display:none;" onclick="removerFotoMembroModal()">Remover</button>
+        </div>
+        <input type="file" id="mb-foto-input" accept="image/*" style="display:none;" onchange="aoSelecionarFotoMembroModal(event)"/>
+        <input type="hidden" id="mb-foto-url" value=""/>
+      </div>
+    </div>
+
     <div class="input-row">
       <label>Nome do Membro</label>
       <input type="text" id="mb-nome" placeholder="Ex: Alex, Gabi, Sofia..."/>
@@ -3244,6 +3456,70 @@
     <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">Detector automático de despesas recorrentes e serviços no cartão.</p>
     <div id="resumo-assinaturas-fixas-modal"></div>
     <div id="lista-assinaturas-fixas-modal" style="flex:1; overflow-y:auto; padding-right:2px;"></div>
+<!-- MODAL PERFIL DA CONTA E LOGOFF RÁPIDO (Ponto 2.1) -->
+<div class="modal-bg" id="m-perfil-conta">
+  <div class="modal" style="max-height:85vh; padding:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:22px;">👤</span>
+        <strong style="font-size:17px;">Minha Conta & Família</strong>
+      </div>
+      <span class="modal-close" style="float:none; margin:0;" onclick="closeM('m-perfil-conta')">×</span>
+    </div>
+
+    <!-- CARD DO MEMBRO ATIVO NESTE APARELHO -->
+    <div class="card" style="padding:14px; margin-bottom:12px; display:flex; align-items:center; gap:14px; background:var(--bg3); border-radius:20px;">
+      <div id="perfil-avatar-preview" style="width:58px; height:58px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; border:2px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.1); background-size:cover; background-position:center; flex-shrink:0;">
+        AL
+      </div>
+      <div style="flex:1;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <h4 id="perfil-nome-usuario" style="margin:0; font-size:16px; font-weight:800;">Alex</h4>
+          <span class="badge b-titular" id="perfil-papel-badge">Admin</span>
+        </div>
+        <p style="font-size:11.5px; color:var(--muted); margin:2px 0 6px;" id="perfil-email-tel">Conectado na nuvem</p>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="btn" style="width:auto; margin:0; padding:4px 10px; font-size:11px;" onclick="document.getElementById('perfil-foto-input').click()">📷 Alterar Foto</button>
+          <button type="button" class="btn btn-r" id="btn-remover-foto-perfil" style="width:auto; margin:0; padding:4px 8px; font-size:11px; display:none;" onclick="removerFotoPerfilAtual()">Remover</button>
+          <input type="file" id="perfil-foto-input" accept="image/*" style="display:none;" onchange="aoSelecionarFotoPerfilConta(event)"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- BASE FAMILIAR COMPARTILHADA (Alex & Gabi) -->
+    <div class="card" style="padding:12px; margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Círculo Compartilhado</span>
+        <span class="badge" style="background:rgba(16,185,129,0.15); color:var(--green); font-weight:700;">Nuvem Ativa</span>
+      </div>
+      <p style="font-size:13px; font-weight:700; margin:0 0 2px;" id="perfil-circulo-nome">familia-alex-gabi</p>
+      <p style="font-size:11px; color:var(--muted); margin:0;">Alex e Gabi visualizam a mesma base compartilhada.</p>
+    </div>
+
+    <!-- SELETOR RÁPIDO DE USUÁRIO NESTE APARELHO -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:6px;">
+        Alternar quem está usando este aparelho:
+      </label>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn" id="btn-perfil-muda-alex" style="flex:1; margin:0; padding:10px; font-weight:700; font-size:13px;" onclick="selecionarMembroAparelho('m_1'); closeM('m-perfil-conta');">
+          👑 Alex
+        </button>
+        <button type="button" class="btn" id="btn-perfil-muda-gabi" style="flex:1; margin:0; padding:10px; font-weight:700; font-size:13px;" onclick="selecionarMembroAparelho('m_2'); closeM('m-perfil-conta');">
+          💜 Gabi
+        </button>
+      </div>
+    </div>
+
+    <!-- BOTÕES DE AÇÃO -->
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <button type="button" class="btn btn-primary" style="margin:0; padding:12px; font-weight:700;" onclick="syncDrive(); closeM('m-perfil-conta');">
+        🔄 Sincronizar com a Nuvem Agora
+      </button>
+      <button type="button" class="btn btn-r" style="margin:0; padding:12px; font-weight:800; font-size:14px;" onclick="fazerLogoffApp()">
+        🚪 Sair da Conta (Logoff)
+      </button>
+    </div>
   </div>
 </div>
 

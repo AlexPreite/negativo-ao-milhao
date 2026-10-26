@@ -27,7 +27,7 @@ function sincronizarTiposDividaMap() {
 }
 
 const PALETA_FAMILIAR = ['#5581E3', '#EC4899', '#10B981', '#F59E0B', '#8B5CF6', '#3B82F6', '#EF4444', '#14B8A6'];
-const MODELOS_GEMINI_FALLBACK = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+const MODELOS_GEMINI_FALLBACK = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
 const MODULOS_INICIO_CATALOGO = [
   { id: 'orcamento', nome: 'Orçamento', desc: 'Saldo em Caixa Real e visão financeira', icone: '🐷', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'resumo' },
@@ -44,8 +44,7 @@ const MODULOS_INICIO_CATALOGO = [
   { id: 'contatos', nome: 'Contatos Úteis', desc: 'Telefones de emergência e médicos', icone: '📞', cor: '#64748B', bgIcon: 'rgba(100,116,139,0.14)', categoria: 'essencial', telaAlvo: 'explorar' },
   { id: 'beneficios', nome: 'Vales VA / VR', desc: 'Carteiras de alimentação e refeição', icone: '🥗', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'gastos' },
   { id: 'scanner_cupom', nome: 'Scanner de Cupom', desc: 'Leitura inteligente de notas fiscais com IA', icone: '📷', cor: '#3B82F6', bgIcon: 'rgba(59,130,246,0.14)', categoria: 'avancado', telaAlvo: 'gastos' },
-  { id: 'metas_fam', nome: 'Metas & Sonhos', desc: 'Objetivos e poupança da família', icone: '🎯', cor: '#EC4899', bgIcon: 'rgba(236,72,153,0.14)', categoria: 'avancado', telaAlvo: 'explorar' },
-  { id: 'escritorio_3d', nome: 'Escritório 3D da Squad', desc: 'Ver a equipe de agentes interagindo em 3D', icone: '🏢', cor: '#8B5CF6', bgIcon: 'rgba(139,92,246,0.14)', categoria: 'avancado', telaAlvo: 'escritorio_3d' }
+  { id: 'metas_fam', nome: 'Metas & Sonhos', desc: 'Objetivos e poupança da família', icone: '🎯', cor: '#EC4899', bgIcon: 'rgba(236,72,153,0.14)', categoria: 'avancado', telaAlvo: 'explorar' }
 ];
 
 let S = {
@@ -55,9 +54,10 @@ let S = {
     { id: 'circ_1', nome: 'Nossa Família', codigoConvite: 'FAM-INICIO', expiraEm: '', criadoEm: new Date().toISOString() }
   ],
   circuloAtivoId: 'circ_1',
+  fotoCapaFamiliaUrl: '',
   membrosPerfil: [
-    { id: 'm_1', circuloId: 'circ_1', nome: 'Alex', papel: 'admin', cor: '#5581E3', iniciais: 'AL', aniversario: '' },
-    { id: 'm_2', circuloId: 'circ_1', nome: 'Gabi', papel: 'membro', cor: '#EC4899', iniciais: 'GA', aniversario: '' }
+    { id: 'm_1', circuloId: 'circ_1', nome: 'Alex', papel: 'admin', cor: '#5581E3', iniciais: 'AL', aniversario: '', fotoUrl: '' },
+    { id: 'm_2', circuloId: 'circ_1', nome: 'Gabi', papel: 'membro', cor: '#EC4899', iniciais: 'GA', aniversario: '', fotoUrl: '' }
   ],
   membroAtivoId: 'm_1',
   modulosInicio: ['orcamento', 'listas', 'calendario', 'familia', 'atividade', 'aniversarios', 'documentos', 'refeicoes'],
@@ -1346,12 +1346,14 @@ function salvarMembroCirculo(dados) {
   if (dados.id) {
     const idx = S.membrosPerfil.findIndex(m => m.id === dados.id);
     if (idx >= 0) {
+      const fotoUrlAtual = dados.fotoUrl !== undefined ? dados.fotoUrl : (S.membrosPerfil[idx].fotoUrl || '');
       S.membrosPerfil[idx] = {
         ...S.membrosPerfil[idx],
         nome: nomeLimpo,
         papel,
         cor,
         iniciais,
+        fotoUrl: fotoUrlAtual,
         aniversario: dados.aniversario || S.membrosPerfil[idx].aniversario || ''
       };
       membroSalvo = S.membrosPerfil[idx];
@@ -1366,6 +1368,7 @@ function salvarMembroCirculo(dados) {
       papel,
       cor,
       iniciais,
+      fotoUrl: dados.fotoUrl || '',
       aniversario: dados.aniversario || ''
     };
     S.membrosPerfil.push(membroSalvo);
@@ -4096,11 +4099,11 @@ function setVisaoCalendario(visao) {
     ['mes', 'semana', 'dia', 'agenda'].forEach(v => {
       const btn = document.getElementById(`btn-cal-visao-${v}`);
       const sec = document.getElementById(`cal-visao-${v}`);
-      if (btn) {
+      if (btn && btn.classList) {
         if (v === visao) btn.classList.add('sel');
         else btn.classList.remove('sel');
       }
-      if (sec) {
+      if (sec && sec.style) {
         sec.style.display = (v === visao) ? 'block' : 'none';
       }
     });
@@ -5218,9 +5221,17 @@ function obterNumeroSemanaISO(data) {
 }
 
 /**
- * Renderizador mestre da interface do Calendário Compartilhado Pro v2.1 (Print 5).
- * Respeita primeiroDiaSemana (0=Dom, 1=Seg), mostrarNumeroSemana (#Sem),
- * células altas, dias de borda e pílulas horizontais completas com link para detalhes.
+ * Seleciona um dia na grade do calendário iOS Split View e atualiza os compromissos exibidos abaixo.
+ */
+function selecionarDiaCalendarioSplit(diaISO) {
+  diaSelecionadoCalendario = diaISO;
+  renderCalendario();
+}
+
+/**
+ * Renderizador mestre da interface do Calendário Compartilhado Pro (Padrão iPhone iOS / FamilyWall).
+ * Células compactas de 48px, número circular Apple, pontinhos coloridos de eventos
+ * e Split View interativa exibindo os compromissos do dia selecionado.
  */
 function renderCalendario() {
   if (typeof document === 'undefined') return;
@@ -5291,12 +5302,16 @@ function renderCalendario() {
   // Data atual em formato YYYY-MM-DD
   const hojeISO = new Date().toISOString().slice(0, 10);
 
-  // --- 1. VISÃO MÊS (Print 5) ---
+  // --- 1. VISÃO MÊS (Padrão iPhone iOS Calendar / Split View) ---
   const secMes = document.getElementById('cal-visao-mes');
   if (secMes && visaoCalendarioAtual === 'mes') {
     const dia1Obj = new Date(anoRef, mesRef, 1);
     const totalDiasMes = new Date(anoRef, mesRef + 1, 0).getDate();
     const totalDiasMesAnt = new Date(anoRef, mesRef, 0).getDate();
+
+    if (!diaSelecionadoCalendario) {
+      diaSelecionadoCalendario = hojeISO;
+    }
 
     // Cálculo do deslocamento inicial respeitando primeiroDiaSemana
     let primeiroDiaSemanaOffset = dia1Obj.getDay(); // 0=Dom..6=Sáb
@@ -5323,59 +5338,42 @@ function renderCalendario() {
     });
 
     let htmlGrade = `
-      <div class="cal-grid-dias" style="display:grid;grid-template-columns:${mostrarSemana ? '32px ' : ''}repeat(7, 1fr);gap:4px;margin-bottom:6px;">
+      <div class="cal-grid-dias" style="display:grid;grid-template-columns:${mostrarSemana ? '32px ' : ''}repeat(7, 1fr);gap:3px;margin-bottom:6px;">
         ${mostrarSemana ? '<div class="cal-header-dia" style="font-size:10px;color:var(--muted);text-align:center;">#Sem</div>' : ''}
-        ${diasSemanaNomes.map(d => `<div class="cal-header-dia" style="text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:4px 0;">${d}</div>`).join('')}
+        ${diasSemanaNomes.map(d => `<div class="cal-header-dia">${d}</div>`).join('')}
       </div>
-      <div class="cal-grid-dias" style="display:grid;grid-template-columns:${mostrarSemana ? '32px ' : ''}repeat(7, 1fr);gap:4px;">
+      <div class="cal-grid-dias" style="display:grid;grid-template-columns:${mostrarSemana ? '32px ' : ''}repeat(7, 1fr);gap:3px;">
     `;
 
-    // Função auxiliar para renderizar uma célula de dia completa
+    // Função auxiliar para renderizar célula de dia compacta estilo iOS
     function renderCelulaDia(diaISO, numDia, isOutroMes, numSemana = null) {
       const isHoje = diaISO === hojeISO;
       const isSel = diaISO === diaSelecionadoCalendario;
       const itensDoDia = mapaEventosDia[diaISO] || [];
 
-      // Pílulas coloridas horizontais (até 3 visíveis na célula alta)
-      const pillsHtml = itensDoDia.slice(0, 3).map(it => {
-        const isEvProprio = it.tipo === 'evento' && it.origemId;
-        const cliqueAcao = isEvProprio
-          ? `event.stopPropagation();abrirDetalheEventoCalendario('${it.origemId}')`
-          : `event.stopPropagation();abrirDiaCalendario('${diaISO}')`;
-
-        return `
-          <div class="cal-event-pill" style="background:${it.cor};color:#ffffff;padding:2px 4px;border-radius:4px;font-size:9.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;cursor:pointer;line-height:1.2;box-shadow:0 1px 2px rgba(0,0,0,0.15);" onclick="${cliqueAcao}" title="${escapeHtml(it.titulo)}">
-            ${it.icone ? it.icone + ' ' : ''}${escapeHtml(it.titulo)}
-          </div>
-        `;
-      }).join('');
-
-      const maisQtd = itensDoDia.length > 3
-        ? `<div style="font-size:9px;color:var(--muted);font-weight:800;margin-top:2px;text-align:right;">+${itensDoDia.length - 3} mais</div>`
-        : '';
+      // Pontinhos coloridos estilo iOS (até 4 pontinhos por dia)
+      const dotsHtml = itensDoDia.slice(0, 4).map(it => `
+        <span class="cal-dot" style="background:${it.cor || 'var(--primary)'};"></span>
+      `).join('');
 
       const badgeSemanaHtml = (mostrarSemana && numSemana !== null)
-        ? `<div class="cal-col-semana" style="display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--muted);background:var(--bg3);border-radius:6px;padding:2px 0;">W${numSemana}</div>`
+        ? `<div class="cal-col-semana">W${numSemana}</div>`
         : '';
 
       return `
         ${badgeSemanaHtml}
-        <div class="cal-celula-dia ${isOutroMes ? 'outro-mes' : ''} ${isHoje ? 'hoje' : ''} ${isSel ? 'selecionado' : ''}" style="min-height:85px;padding:4px;border-radius:8px;background:var(--bg2);border:1px solid ${isHoje ? 'var(--primary)' : 'var(--border)'};display:flex;flex-direction:column;cursor:pointer;position:relative;${isOutroMes ? 'opacity:0.55;' : ''}" onclick="abrirDiaCalendario('${diaISO}')">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-            <span class="cal-dia-num" style="font-size:12px;font-weight:${isHoje ? '800' : '600'};color:${isHoje ? 'var(--primary)' : 'var(--text)'};">${numDia}</span>
-            ${itensDoDia.length > 0 ? `<span style="width:5px;height:5px;border-radius:50%;background:${itensDoDia[0].cor};"></span>` : ''}
+        <div class="cal-celula-dia ${isOutroMes ? 'outro-mes' : ''} ${isHoje ? 'hoje' : ''} ${isSel ? 'selecionado' : ''}" onclick="selecionarDiaCalendarioSplit('${diaISO}')" title="${diaISO}: ${itensDoDia.length} eventos">
+          <div class="cal-dia-num-badge">${numDia}</div>
+          <div class="cal-dots-wrap">
+            ${dotsHtml}
           </div>
-          <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:1px;">
-            ${pillsHtml}
-          </div>
-          ${maisQtd}
         </div>
       `;
     }
 
     let contadorColunaSemana = 0;
 
-    // 1. Dias do mês anterior para completar o início da grade (Bordas com eventos visíveis)
+    // 1. Dias do mês anterior
     for (let i = primeiroDiaSemanaOffset - 1; i >= 0; i--) {
       const numDia = totalDiasMesAnt - i;
       const mesAntRef = mesRef === 0 ? 11 : mesRef - 1;
@@ -5400,7 +5398,7 @@ function renderCalendario() {
       contadorColunaSemana++;
     }
 
-    // 3. Dias do próximo mês para fechar as colunas restantes da grade
+    // 3. Dias do próximo mês
     for (let d = 1; d <= celulasFinais; d++) {
       const mesProxRef = mesRef === 11 ? 0 : mesRef + 1;
       const anoProxRef = mesRef === 11 ? anoRef + 1 : anoRef;
@@ -5414,7 +5412,72 @@ function renderCalendario() {
     }
 
     htmlGrade += '</div>';
-    secMes.innerHTML = htmlGrade;
+
+    // --- SEÇÃO SPLIT VIEW DO DIA SELECIONADO (iOS Split View) ---
+    const itensDiaSel = mapaEventosDia[diaSelecionadoCalendario] || obterEventosConsolidadosPeriodo(diaSelecionadoCalendario, diaSelecionadoCalendario);
+    const [selAno, selMes, selDia] = diaSelecionadoCalendario.split('-').map(Number);
+    const dtSelObj = new Date(selAno, selMes - 1, selDia);
+    const diasSemanaLongos = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+    const nomeDiaSem = diasSemanaLongos[dtSelObj.getDay()] || '';
+    const nomeMesExtenso = mesesNomes[selMes - 1] || '';
+    const isSelHoje = diaSelecionadoCalendario === hojeISO;
+    const labelDataHeader = isSelHoje
+      ? `Hoje, ${selDia} de ${nomeMesExtenso}`
+      : `${nomeDiaSem}, ${selDia} de ${nomeMesExtenso}`;
+
+    let htmlSplit = `
+      <div id="cal-split-dia-selecionado" class="card" style="margin-top:14px;padding:14px;border-radius:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div>
+            <h4 style="font-size:15px;font-weight:800;margin:0 0 2px;color:var(--text);">${labelDataHeader}</h4>
+            <p style="font-size:11.5px;color:var(--muted);margin:0;">${itensDiaSel.length} ${itensDiaSel.length === 1 ? 'compromisso' : 'compromissos'}</p>
+          </div>
+          <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:6px 12px;font-size:12px;font-weight:700;" onclick="abrirModalEventoCalendario(null, '${diaSelecionadoCalendario}')">
+            + Evento
+          </button>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px;">
+    `;
+
+    if (itensDiaSel.length === 0) {
+      htmlSplit += `
+        <div style="text-align:center;padding:20px 12px;color:var(--muted);">
+          <p style="font-size:20px;margin-bottom:4px;">🏖️</p>
+          <p style="font-size:12.5px;font-weight:600;margin:0 0 2px;color:var(--text);">Nenhum compromisso marcado</p>
+          <p style="font-size:11px;margin:0;">Toque em "+ Evento" para agendar uma atividade.</p>
+        </div>
+      `;
+    } else {
+      htmlSplit += itensDiaSel.map(it => {
+        const cliqueAcao = (it.tipo === 'evento' && it.origemId)
+          ? `abrirDetalheEventoCalendario('${it.origemId}')`
+          : `abrirDiaCalendario('${diaSelecionadoCalendario}')`;
+
+        return `
+          <div class="cal-item-card" onclick="${cliqueAcao}">
+            <div class="cal-hora-col">${it.hora || 'Dia todo'}</div>
+            <div style="width:4px;height:24px;border-radius:2px;background:${it.cor || 'var(--primary)'};flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <p style="font-size:13px;font-weight:700;margin:0 0 2px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                ${it.icone ? it.icone + ' ' : ''}${escapeHtml(it.titulo)}
+              </p>
+              <p style="font-size:11px;color:var(--muted);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                ${escapeHtml(it.subinfo || it.descricao || (it.tipo === 'evento' ? 'Evento Familiar' : it.tipo))}
+              </p>
+            </div>
+            <span style="font-size:14px;color:var(--muted);padding-left:4px;">›</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    htmlSplit += `
+        </div>
+      </div>
+    `;
+
+    secMes.innerHTML = htmlGrade + htmlSplit;
   }
 
   // --- 2. VISÃO SEMANA ---
@@ -5607,10 +5670,12 @@ function loadState(overrideState){
 
   try {
     if (typeof localStorage !== 'undefined') {
-      familiaId = localStorage.getItem('dnm_familia_id') || '';
+      familiaId = localStorage.getItem('dnm_familia_id') || 'familia-alex-gabi';
+      const meuMembro = localStorage.getItem('dnm_meu_membro_id');
+      if (meuMembro) S.membroAtivoId = meuMembro;
     }
   } catch(e){
-    console.error('Erro ao ler dnm_familia_id:', e);
+    console.error('Erro ao ler dnm_familia_id e dnm_meu_membro_id:', e);
   }
   if(S.apiKey) apiKey=S.apiKey;
   if(!S.apiKey){
@@ -5693,170 +5758,681 @@ const firebaseConfig = {
 let fbUser = null;
 let fbDb = null;
 let saveTimer = null;
-let familiaId = '';
+let familiaId = 'familia-alex-gabi';
+let unsubscribeSnapshot = null;
 
-function initFirebase(){
-  if (typeof firebase === 'undefined') return;
+/**
+ * Permite injetar uma instância ou mock do Firestore durante testes automatizados.
+ * 
+ * @param {object|null} db - Instância do Firestore ou mock de testes
+ */
+function setFbDbParaTestes(db) {
+  fbDb = db;
+}
+
+/**
+ * Controla o Login Gate obrigatório no carregamento e mudanças de autenticação.
+ * Decisão de design: Atende à prioridade 1 ("O App não pediu login para entrar").
+ * Se deslogado: esconde a área autenticada (#app) e o onboarding (#onboarding), exibindo estritamente #tela-login.
+ * Se autenticado: esconde #tela-login e exibe #app (ou #onboarding se chave da IA ainda não configurada).
+ * 
+ * @param {boolean} estaLogado - Flag booleana indicando se o usuário possui sessão ativa
+ */
+function aplicarLoginGate(estaLogado) {
+  if (typeof document === 'undefined') return;
+  const telaLogin = document.getElementById('tela-login');
+  const appEl = document.getElementById('app');
+  const onbEl = document.getElementById('onboarding');
+
+  if (estaLogado) {
+    if (telaLogin) telaLogin.style.display = 'none';
+    if (S.onboardingDone) {
+      if (appEl) appEl.style.display = 'flex';
+      if (onbEl) onbEl.style.display = 'none';
+      if (typeof render === 'function') render();
+    } else {
+      if (appEl) appEl.style.display = 'none';
+      if (onbEl) onbEl.style.display = 'flex';
+    }
+  } else {
+    if (appEl) appEl.style.display = 'none';
+    if (onbEl) onbEl.style.display = 'none';
+    if (telaLogin) telaLogin.style.display = 'flex';
+  }
+  updateContaStatus();
+  updateFamiliaStatus();
+}
+
+/**
+ * Inicializa a conexão com o Firebase Authentication e Firestore.
+ * Conecta Alex e Gabi na base unificada 'usuarios/familia-alex-gabi' em tempo real.
+ */
+function initFirebase() {
+  if (typeof firebase === 'undefined') {
+    // Se a biblioteca do Firebase não estiver carregada (ex: offline), verifica sessão local
+    const sessaoAtiva = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_sessao_ativa') === 'true') ||
+                        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('dnm_sessao_ativa') === 'true');
+    aplicarLoginGate(sessaoAtiva);
+    return;
+  }
+
   try {
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps || !firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
     fbDb = firebase.firestore();
+
+    // Habilita persistência offline se suportada pelo navegador
+    try {
+      if (typeof fbDb.enablePersistence === 'function') {
+        fbDb.enablePersistence({ synchronizeTabs: true }).catch(errPersist => {
+          console.warn('Persistência offline do Firestore não pôde ser ativada:', errPersist.message);
+        });
+      }
+    } catch (ePersist) {
+      console.warn('Aviso ao inicializar persistência offline Firestore:', ePersist.message);
+    }
+
     firebase.auth().onAuthStateChanged(async user => {
       fbUser = user;
-      if(user){
-        document.getElementById('tela-login').style.display='none';
-        await loadFromCloud();
-        updateKeyStatus(); updateContaStatus(); updateFamiliaStatus();
-        if(S.onboardingDone){
-          document.getElementById('onboarding').style.display='none';
-          document.getElementById('app').style.display='flex';
-          render();
-        } else {
-          document.getElementById('app').style.display='none';
-          document.getElementById('onboarding').style.display='flex';
+      if (user) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('dnm_sessao_ativa', 'true');
         }
+        detectarMembroPorIdentificador(user.email || user.displayName || '');
+        await loadFromCloud();
+        escutarSincronizacaoTempoReal();
+        aplicarLoginGate(true);
       } else {
-        document.getElementById('app').style.display='none';
-        document.getElementById('onboarding').style.display='none';
-        document.getElementById('tela-login').style.display='flex';
+        const sessaoLocal = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_sessao_ativa') === 'true') ||
+                            (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('dnm_sessao_ativa') === 'true');
+        if (!sessaoLocal) {
+          if (unsubscribeSnapshot) {
+            try { unsubscribeSnapshot(); } catch (eUnsub) { console.error('Erro ao cancelar listener do snapshot:', eUnsub); }
+            unsubscribeSnapshot = null;
+          }
+          aplicarLoginGate(false);
+        }
       }
     });
-  } catch(e) { console.error('Erro ao iniciar Firebase. Confira o firebaseConfig.', e); }
+  } catch(e) {
+    console.error('Erro ao iniciar Firebase. Confira o firebaseConfig.', e);
+  }
 }
 
-// Firebase não tem "telefone + senha" nativo — por baixo dos panos convertemos
-// o telefone num e-mail interno (nunca exibido) e usamos o login de e-mail/senha,
-// que já guarda a senha de forma segura (com hash), nunca em texto puro.
-function telefoneParaEmail(tel){
-  const d=(tel||'').replace(/\D/g,'');
-  return d+'@negativoaomilhao.app';
+/**
+ * Escuta atualizações no Firestore em tempo real via onSnapshot.
+ * Decisão de design: Atende à prioridade 4 ("E quando a Gabi logar ela tem que ter acesso e visualizar a mesma coisa que eu").
+ * Permite que Alex e Gabi vejam inclusões de gastos, compras e metas mutuamente sem recarregar a tela.
+ * Preserva o membro ativo do dispositivo local (dnm_meu_membro_id) para manter a visão personalizada de cada um.
+ */
+function escutarSincronizacaoTempoReal() {
+  if (!fbDb) return;
+  const id = docId();
+  if (!id) return;
+
+  if (unsubscribeSnapshot) {
+    try { unsubscribeSnapshot(); } catch (eUnsub) { console.error('Erro ao cancelar snapshot anterior:', eUnsub); }
+    unsubscribeSnapshot = null;
+  }
+
+  try {
+    unsubscribeSnapshot = fbDb.collection('usuarios').doc(id).onSnapshot(doc => {
+      if (doc && doc.exists) {
+        const dadosNuvem = doc.data();
+        if (dadosNuvem) {
+          // Preserva o membro do aparelho local (Alex = m_1, Gabi = m_2)
+          const meuMembroId = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
+          const chaveLocal = apiKey || S.apiKey;
+
+          Object.assign(S, dadosNuvem);
+          S.membroAtivoId = meuMembroId;
+          if (chaveLocal && !S.apiKey) S.apiKey = chaveLocal;
+
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('dnm_data', JSON.stringify(S));
+            }
+          } catch(e) {
+            console.error('Erro ao persistir dados do snapshot Firestore no localStorage:', e);
+          }
+
+          if (typeof render === 'function') {
+            const appEl = typeof document !== 'undefined' ? document.getElementById('app') : null;
+            if (appEl && appEl.style.display !== 'none') {
+              render();
+            }
+          }
+          updateContaStatus();
+          updateFamiliaStatus();
+        }
+      }
+    }, erro => {
+      console.warn('Aviso no listener em tempo real do Firestore:', erro);
+    });
+  } catch (e) {
+    console.error('Erro ao configurar listener em tempo real do Firestore:', e);
+  }
 }
 
-function fazerCadastro(){
-  const tel=document.getElementById('login-tel').value.trim();
-  const senha=document.getElementById('login-senha').value;
-  const msg=document.getElementById('login-msg');
-  const d=tel.replace(/\D/g,'');
-  if(d.length<10){ msg.textContent='Digite um telefone válido, com DDD.'; return; }
-  if(senha.length<6){ msg.textContent='A senha precisa ter pelo menos 6 caracteres.'; return; }
-  msg.textContent='Criando conta...';
-  firebase.auth().createUserWithEmailAndPassword(telefoneParaEmail(d), senha)
-    .catch(e=>{
-      msg.textContent = e.code==='auth/email-already-in-use' ? 'Esse telefone já tem conta — toque em Entrar.' : 'Erro ao criar conta: '+e.message;
+// Converte telefone num identificador seguro de e-mail interno para o Firebase Auth
+function telefoneParaEmail(tel) {
+  const d = (tel || '').replace(/\D/g, '');
+  return d + '@negativoaomilhao.app';
+}
+
+/**
+ * Detecta se o usuário que está logando é Alex ou Gabi e sincroniza o perfil do aparelho.
+ */
+function detectarMembroPorIdentificador(texto) {
+  const t = (texto || '').toLowerCase();
+  if (t.includes('gabi') || t.includes('gabriela')) {
+    selecionarMembroLogin('m_2', 'Gabi');
+  } else if (t.includes('alex') || t.includes('alexsander')) {
+    selecionarMembroLogin('m_1', 'Alex');
+  }
+}
+
+/**
+ * Seleciona quem está acessando o app na tela de login.
+ * 
+ * @param {string} membroId - ID do membro ('m_1' para Alex, 'm_2' para Gabi)
+ * @param {string} nome - Nome de exibição
+ */
+function selecionarMembroLogin(membroId, nome) {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('dnm_meu_membro_id', membroId);
+  }
+  S.membroAtivoId = membroId;
+
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('.login-membro-chip').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.membro === membroId);
+    });
+    const telInput = document.getElementById('login-tel');
+    if (telInput && (!telInput.value || telInput.value === 'alex' || telInput.value === 'gabi')) {
+      telInput.placeholder = `Telefone ou e-mail de ${nome}`;
+    }
+  }
+}
+
+/**
+ * Altera o membro titular vinculado ao aparelho atual (Alex ou Gabi).
+ */
+function selecionarMembroAparelho(membroId) {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('dnm_meu_membro_id', membroId);
+  }
+  S.membroAtivoId = membroId;
+  save();
+  render();
+  atualizarModalPerfilConta();
+}
+
+/**
+ * Abre o modal de perfil e conta familiar.
+ */
+function abrirModalPerfilConta() {
+  atualizarModalPerfilConta();
+  if (typeof openM === 'function') {
+    openM('m-perfil-conta');
+  }
+}
+
+/**
+ * Atualiza os dados exibidos no modal de perfil e conta.
+ */
+function atualizarModalPerfilConta() {
+  if (typeof document === 'undefined') return;
+  const membroAtual = (typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null) ||
+    (S.membrosPerfil || []).find(m => m.id === S.membroAtivoId) ||
+    { nome: 'Alex', papel: 'admin', cor: '#5581E3', iniciais: 'AL' };
+
+  const avatarEl = document.getElementById('perfil-avatar-preview');
+  const btnRemoverFoto = document.getElementById('btn-remover-foto-perfil');
+  if (avatarEl) {
+    if (membroAtual.fotoUrl) {
+      avatarEl.style.backgroundImage = `url("${membroAtual.fotoUrl}")`;
+      avatarEl.style.backgroundSize = 'cover';
+      avatarEl.style.backgroundPosition = 'center';
+      avatarEl.textContent = '';
+      if (btnRemoverFoto) btnRemoverFoto.style.display = 'inline-block';
+    } else {
+      avatarEl.style.backgroundImage = 'none';
+      avatarEl.style.background = membroAtual.cor || '#5581E3';
+      avatarEl.textContent = membroAtual.iniciais || membroAtual.nome.slice(0, 2).toUpperCase();
+      if (btnRemoverFoto) btnRemoverFoto.style.display = 'none';
+    }
+  }
+
+  const nomeEl = document.getElementById('perfil-nome-exibicao') || document.getElementById('perfil-nome-usuario');
+  if (nomeEl) nomeEl.textContent = membroAtual.nome;
+
+  const papelEl = document.getElementById('perfil-papel-exibicao') || document.getElementById('perfil-papel-badge');
+  if (papelEl) {
+    papelEl.textContent = membroAtual.papel === 'admin' ? '👑 Admin' : '💜 Família';
+  }
+
+  const emailEl = document.getElementById('perfil-email-exibicao') || document.getElementById('perfil-email-tel');
+  if (emailEl) {
+    emailEl.textContent = fbUser?.email || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_sessao_ativa') === 'true' ? 'Conectado na nuvem' : 'Desconectado');
+  }
+
+  const circuloNomeEl = document.getElementById('perfil-circulo-nome');
+  if (circuloNomeEl) {
+    circuloNomeEl.textContent = typeof docId === 'function' ? docId() : 'familia-alex-gabi';
+  }
+
+  const statusCloudEl = document.getElementById('perfil-status-nuvem');
+  if (statusCloudEl) {
+    const cod = typeof docId === 'function' ? docId() : 'familia-alex-gabi';
+    statusCloudEl.innerHTML = fbUser
+      ? `🟢 Conectado à Nuvem (Família: <strong>${escapeHtml(cod)}</strong>)`
+      : `🟠 Modo Local (Família: <strong>${escapeHtml(cod)}</strong>)`;
+  }
+
+  const seletorMembrosEl = document.getElementById('perfil-seletor-membros');
+  if (seletorMembrosEl && Array.isArray(S.membrosPerfil)) {
+    seletorMembrosEl.innerHTML = S.membrosPerfil.map(m => {
+      const isAtivo = m.id === S.membroAtivoId;
+      return `
+        <button type="button" class="login-membro-chip ${isAtivo ? 'active' : ''}" style="margin: 0; padding: 6px 14px;" onclick="selecionarMembroAparelho('${m.id}')">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${m.cor || '#5581E3'};margin-right:6px;"></span>
+          ${escapeHtml(m.nome)} ${isAtivo ? '✓' : ''}
+        </button>
+      `;
+    }).join('');
+  }
+}
+
+/**
+ * Criação de conta no app com suporte a e-mail ou telefone.
+ */
+function fazerCadastro() {
+  const telInput = document.getElementById('login-tel');
+  const senhaInput = document.getElementById('login-senha');
+  const msg = document.getElementById('login-msg');
+  const identificador = telInput ? telInput.value.trim() : '';
+  const senha = senhaInput ? senhaInput.value : '';
+
+  if (!identificador || !senha) {
+    if (msg) msg.textContent = 'Preencha identificador (telefone ou e-mail) e senha.';
+    return;
+  }
+
+  let emailFormatado = identificador;
+  if (!identificador.includes('@')) {
+    const d = identificador.replace(/\D/g, '');
+    if (d.length < 10) {
+      if (msg) msg.textContent = 'Digite um telefone válido com DDD (ex: 11999999999).';
+      return;
+    }
+    emailFormatado = telefoneParaEmail(d);
+  }
+
+  if (senha.length < 6) {
+    if (msg) msg.textContent = 'A senha precisa ter pelo menos 6 caracteres.';
+    return;
+  }
+
+  detectarMembroPorIdentificador(identificador);
+
+  if (typeof firebase === 'undefined' || !firebase.auth) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('dnm_sessao_ativa', 'true');
+    }
+    aplicarLoginGate(true);
+    return;
+  }
+
+  if (msg) msg.textContent = 'Criando conta...';
+  firebase.auth().createUserWithEmailAndPassword(emailFormatado, senha)
+    .then(cred => {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('dnm_sessao_ativa', 'true');
+      }
+      if (msg) msg.textContent = 'Conta criada com sucesso!';
+      detectarMembroPorIdentificador(cred.user?.email || identificador);
+    })
+    .catch(e => {
+      if (e.code === 'auth/email-already-in-use') {
+        if (msg) msg.textContent = 'Esse telefone/e-mail já tem conta — toque em Entrar.';
+      } else {
+        if (msg) msg.textContent = 'Erro ao criar conta: ' + e.message;
+      }
     });
 }
 
-function fazerLogin(){
-  const tel=document.getElementById('login-tel').value.trim();
-  const senha=document.getElementById('login-senha').value;
-  const msg=document.getElementById('login-msg');
-  const d=tel.replace(/\D/g,'');
-  if(d.length<10||!senha){ msg.textContent='Preencha telefone e senha.'; return; }
-  msg.textContent='Entrando...';
-  firebase.auth().signInWithEmailAndPassword(telefoneParaEmail(d), senha)
-    .catch(e=>{
-      if(e.code==='auth/user-not-found') msg.textContent='Esse telefone ainda não tem conta — toque em "Criar minha conta".';
-      else if(e.code==='auth/wrong-password'||e.code==='auth/invalid-credential') msg.textContent='Senha incorreta.';
-      else msg.textContent='Erro ao entrar: '+e.message;
+/**
+ * Login com suporte a e-mail ou telefone.
+ */
+function fazerLogin() {
+  const telInput = document.getElementById('login-tel');
+  const senhaInput = document.getElementById('login-senha');
+  const msg = document.getElementById('login-msg');
+  const identificador = telInput ? telInput.value.trim() : '';
+  const senha = senhaInput ? senhaInput.value : '';
+
+  if (!identificador || !senha) {
+    if (msg) msg.textContent = 'Preencha telefone ou e-mail e senha.';
+    return;
+  }
+
+  let emailFormatado = identificador;
+  if (!identificador.includes('@')) {
+    const d = identificador.replace(/\D/g, '');
+    if (d.length < 10) {
+      if (msg) msg.textContent = 'Digite um telefone válido com DDD.';
+      return;
+    }
+    emailFormatado = telefoneParaEmail(d);
+  }
+
+  detectarMembroPorIdentificador(identificador);
+
+  if (typeof firebase === 'undefined' || !firebase.auth) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('dnm_sessao_ativa', 'true');
+    }
+    aplicarLoginGate(true);
+    return;
+  }
+
+  if (msg) msg.textContent = 'Entrando...';
+  firebase.auth().signInWithEmailAndPassword(emailFormatado, senha)
+    .then(cred => {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('dnm_sessao_ativa', 'true');
+      }
+      if (msg) msg.textContent = '';
+      detectarMembroPorIdentificador(cred.user?.email || identificador);
+    })
+    .catch(e => {
+      if (e.code === 'auth/user-not-found') {
+        if (msg) msg.textContent = 'Essa conta ainda não existe — toque em "Criar minha conta".';
+      } else if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+        if (msg) msg.textContent = 'Senha incorreta.';
+      } else {
+        if (msg) msg.textContent = 'Erro ao entrar: ' + e.message;
+      }
     });
 }
 
-function sair(){
-  if(!confirm('Sair da conta neste aparelho?')) return;
-  firebase.auth().signOut();
+/**
+ * Autenticação via Google Popup com contingência para Redirect.
+ */
+function fazerLoginGoogle() {
+  const msg = document.getElementById('login-msg');
+  if (typeof firebase === 'undefined' || !firebase.auth) {
+    if (msg) msg.textContent = 'Firebase Auth indisponível no momento.';
+    return;
+  }
+  if (msg) msg.textContent = 'Conectando com o Google...';
+  const provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider)
+    .then(cred => {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('dnm_sessao_ativa', 'true');
+      }
+      if (msg) msg.textContent = '';
+      detectarMembroPorIdentificador(cred.user?.email || cred.user?.displayName || '');
+    })
+    .catch(e => {
+      console.warn('Popup Google bloqueado, tentando redirecionamento:', e.message);
+      firebase.auth().signInWithRedirect(provider).catch(err => {
+        if (msg) msg.textContent = 'Erro ao entrar com Google: ' + err.message;
+      });
+    });
 }
 
-function updateContaStatus(){
-  const el=document.getElementById('conta-status');
-  if(el) el.textContent = fbUser ? '✅ Conectado' : '❌ Desconectado';
+/**
+ * Permite usar o app em modo local/demonstração sem autenticação na nuvem.
+ */
+function entrarModoLocal() {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('dnm_sessao_ativa', 'true');
+  }
+  aplicarLoginGate(true);
 }
 
-function docId(){ return familiaId || (fbUser ? fbUser.uid : null); }
+/**
+ * Realiza o logoff seguro do usuário no aparelho e volta à tela de login.
+ * Decisão de design: Atende à prioridade 2 ("E também não tem aonde fazer logoff").
+ */
+function fazerLogoffApp() {
+  if (typeof confirm === 'function') {
+    if (!confirm('Deseja realmente sair da conta neste aparelho?')) return;
+  }
 
-async function loadFromCloud(){
-  if(!fbUser || !fbDb) return;
-  const id=docId(); if(!id) return;
+  if (unsubscribeSnapshot) {
+    try { unsubscribeSnapshot(); } catch (eUnsub) { console.error('Erro ao encerrar snapshot:', eUnsub); }
+    unsubscribeSnapshot = null;
+  }
+
+  if (typeof firebase !== 'undefined' && firebase.auth) {
+    try {
+      firebase.auth().signOut().catch(e => console.error('Erro no signOut do Firebase:', e));
+    } catch (e) {
+      console.error('Erro ao invocar signOut:', e);
+    }
+  }
+
+  fbUser = null;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('dnm_sessao_ativa');
+  }
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('dnm_sessao_ativa');
+  }
+
+  if (typeof closeM === 'function') {
+    closeM('m-perfil-conta');
+  }
+
+  if (typeof document !== 'undefined') {
+    const senhaEl = document.getElementById('login-senha');
+    if (senhaEl) senhaEl.value = '';
+    const msgEl = document.getElementById('login-msg');
+    if (msgEl) msgEl.textContent = 'Você saiu da conta.';
+  }
+
+  aplicarLoginGate(false);
+}
+
+// Retrocompatibilidade para chamadas legadas
+function sair() {
+  fazerLogoffApp();
+}
+
+function updateContaStatus() {
+  const el = document.getElementById('conta-status');
+  if (el) el.textContent = fbUser ? '✅ Conectado' : '❌ Desconectado';
+}
+
+/**
+ * Retorna o ID do documento compartilhado no Firestore.
+ * Padrão familiar: 'familia-alex-gabi' para sincronia mútua entre Alex e Gabi.
+ */
+function docId() {
+  return familiaId || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_familia_id')) || 'familia-alex-gabi';
+}
+
+async function loadFromCloud() {
+  if (!fbDb) return;
+  const id = docId();
+  if (!id) return;
   try {
     const doc = await fbDb.collection('usuarios').doc(id).get();
-    if(doc.exists){
-      S = {...S, ...doc.data()};
-      if(S.apiKey) apiKey=S.apiKey;
-      try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){ console.error('Erro ao gravar dnm_data no localStorage em loadFromCloud:', e); }
-    }
-  } catch(e) { console.error('Erro ao carregar dados da nuvem:', e); }
-}
+    if (doc.exists) {
+      const dadosNuvem = doc.data();
+      const meuMembroId = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
+      const chaveLocal = apiKey || S.apiKey;
 
-async function syncDrive(){
-  if(!fbUser || !fbDb) { alert('Faça login primeiro'); return; }
-  const id=docId();
-  if(!id){ alert('Defina um código de família em Configurações antes de sincronizar.'); return; }
-  try {
-    await fbDb.collection('usuarios').doc(id).set(S);
-    alert('✅ Dados sincronizados!');
-  } catch(e) { alert('Erro ao sincronizar: '+e.message); }
-}
+      Object.assign(S, dadosNuvem);
+      S.membroAtivoId = meuMembroId; // Preserva membro local
+      if (chaveLocal && !S.apiKey) S.apiKey = chaveLocal;
 
-function salvarFamiliaId(){
-  const v=document.getElementById('familia-id').value.trim();
-  if(!v){ alert('Digite um código.'); return; }
-  if(!fbUser || !fbDb){ alert('Faça login primeiro.'); return; }
-  familiaId=v; localStorage.setItem('dnm_familia_id',v);
-  updateFamiliaStatus();
-  fbDb.collection('usuarios').doc(familiaId).get().then(doc=>{
-    if(doc.exists){
-      // Já existe dado nesse código — este aparelho ADOTA os dados, nunca sobrescreve.
-      S = {...S, ...doc.data()};
-      if(S.apiKey) apiKey=S.apiKey;
-      try{localStorage.setItem('dnm_data',JSON.stringify(S));}catch(e){ console.error('Erro ao gravar dnm_data no localStorage em salvarFamiliaId:', e); }
-      updateKeyStatus(); render();
-      alert('Código vinculado! Os dados da família já foram carregados aqui.');
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('dnm_data', JSON.stringify(S));
+        }
+      } catch (e) {
+        console.error('Erro ao gravar dnm_data no localStorage em loadFromCloud:', e);
+      }
     } else {
-      // Ninguém criou esse código ainda — este aparelho vira a base.
+      // Primeira inicialização do documento compartilhado
+      const dataToSync = { ...S };
+      delete dataToSync.apiKey;
+      await fbDb.collection('usuarios').doc(id).set(dataToSync);
+    }
+  } catch(e) {
+    console.error('Erro ao carregar dados da nuvem:', e);
+  }
+}
+
+async function syncDrive() {
+  if (!fbDb) { alert('Conecte-se à internet primeiro.'); return; }
+  const id = docId();
+  if (!id) { alert('Defina um código de família antes de sincronizar.'); return; }
+  try {
+    const dataToSync = { ...S };
+    delete dataToSync.apiKey;
+    await fbDb.collection('usuarios').doc(id).set(dataToSync, { merge: true });
+    alert('✅ Dados sincronizados com sucesso na nuvem familiar!');
+  } catch(e) {
+    alert('Erro ao sincronizar: ' + e.message);
+  }
+}
+
+function salvarFamiliaId() {
+  const v = document.getElementById('familia-id').value.trim();
+  if (!v) { alert('Digite um código de família.'); return; }
+  familiaId = v;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('dnm_familia_id', v);
+  }
+  updateFamiliaStatus();
+
+  if (!fbDb) {
+    alert('Código salvo localmente!');
+    return;
+  }
+
+  fbDb.collection('usuarios').doc(familiaId).get().then(doc => {
+    if (doc.exists) {
+      const dadosNuvem = doc.data();
+      const meuMembroId = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
+      Object.assign(S, dadosNuvem);
+      S.membroAtivoId = meuMembroId;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('dnm_data', JSON.stringify(S));
+        }
+      } catch (e) {
+        console.error('Erro ao gravar dnm_data no localStorage em salvarFamiliaId:', e);
+      }
+      render();
+      alert('Código vinculado! Os dados da família foram carregados com sucesso.');
+    } else {
       const dataToSync = { ...S };
       delete dataToSync.apiKey;
       fbDb.collection('usuarios').doc(familiaId).set(dataToSync)
-        .then(()=>alert('Código salvo! Este foi o primeiro aparelho com esse código — os dados daqui viraram a base da família.'))
-        .catch(e=>alert('Erro ao gravar na nuvem: '+e.message+'\n\nProvavelmente as regras do Firestore estão bloqueando. Veja a mensagem que te mandei sobre isso.'));
+        .then(() => alert('Código salvo! Este aparelho é a base da família.'))
+        .catch(e => alert('Erro ao gravar na nuvem: ' + e.message));
     }
-  }).catch(e=>{
-    alert('Erro ao acessar a nuvem: '+e.message+'\n\nProvavelmente as regras do Firestore estão bloqueando o acesso a este código.');
+    escutarSincronizacaoTempoReal();
+  }).catch(e => {
+    alert('Erro ao acessar a nuvem: ' + e.message);
     console.error(e);
   });
 }
-function updateFamiliaStatus(){
-  const el=document.getElementById('familia-status');
-  if(el) el.textContent = familiaId || 'Não definido';
+
+function salvarCodigoFamiliaLogin() {
+  const el = document.getElementById('login-codigo-familia');
+  const cod = (el ? el.value.trim() : '') || 'familia-alex-gabi';
+  familiaId = cod;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('dnm_familia_id', cod);
+  }
+  const msg = document.getElementById('login-msg');
+  if (msg) msg.textContent = `Código vinculado: ${cod}`;
+  updateFamiliaStatus();
 }
 
-// Salva local sempre; se logado, sincroniza na nuvem com debounce (evita gravar a cada tecla)
-function save(){
+function updateFamiliaStatus() {
+  const el = document.getElementById('familia-status');
+  if (el) el.textContent = familiaId || 'familia-alex-gabi';
+  const elModal = document.getElementById('perfil-status-nuvem');
+  if (elModal) {
+    const cod = docId();
+    elModal.innerHTML = fbUser
+      ? `🟢 Conectado à Nuvem (Família: <strong>${escapeHtml(cod)}</strong>)`
+      : `🟠 Modo Local (Família: <strong>${escapeHtml(cod)}</strong>)`;
+  }
+}
+
+// Salva local sempre; se logado, sincroniza na nuvem com debounce de 1500ms
+function save() {
   S.apiKey = apiKey;
-  try{
-    if(typeof localStorage !== 'undefined') localStorage.setItem('dnm_data',JSON.stringify(S));
-  }catch(e){
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('dnm_data', JSON.stringify(S));
+    }
+  } catch(e) {
     console.error('Erro ao salvar no localStorage em save():', e);
   }
-  const id=docId();
-  if(fbUser && fbDb && id){
+
+  const id = docId();
+  if (fbDb && id) {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       const dataToSync = { ...S };
       delete dataToSync.apiKey; // Segurança: nunca envia chave pessoal de IA para base compartilhada
-      fbDb.collection('usuarios').doc(id).set(dataToSync).catch(e=>console.error('Erro ao sincronizar (confira as regras do Firestore):',e));
+      if (typeof fbDb.collection === 'function') {
+        const docRef = fbDb.collection('usuarios').doc(id);
+        if (docRef && typeof docRef.set === 'function') {
+          docRef.set(dataToSync, { merge: true })
+            .catch(e => console.error('Erro ao sincronizar Firestore:', e));
+        }
+      }
     }, 1500);
   }
 }
 
 // ONBOARDING / AUTENTICAÇÃO
-if(typeof localStorage !== 'undefined') loadState();
-if(typeof document !== 'undefined') {
-  if(document.readyState === 'loading') {
+if (typeof localStorage !== 'undefined') loadState();
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
 }
 
-function init(){ initFirebase(); }
+function init() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      familiaId = localStorage.getItem('dnm_familia_id') || 'familia-alex-gabi';
+      localStorage.setItem('dnm_familia_id', familiaId);
+
+      const meuMembro = localStorage.getItem('dnm_meu_membro_id');
+      if (meuMembro) S.membroAtivoId = meuMembro;
+    }
+  } catch (e) {
+    console.error('Erro ao ler dados de inicialização da família:', e);
+  }
+
+  const sessaoAtiva = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_sessao_ativa') === 'true') ||
+                      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('dnm_sessao_ativa') === 'true');
+
+  if (!sessaoAtiva && !fbUser) {
+    aplicarLoginGate(false);
+  } else {
+    aplicarLoginGate(true);
+  }
+
+  initFirebase();
+}
 
 function salvarKey(){
   const k=document.getElementById('key-input').value.trim();
@@ -5904,10 +6480,6 @@ const SECS = ['inicio', 'calendario', 'listas', 'explorar', 'familia', 'atividad
 const ROTAS_FINANCEIRAS = ['resumo', 'receitas', 'gastos', 'dividas', 'metas'];
 
 function go(id) {
-  if (id === 'escritorio_3d') {
-    if (typeof window !== 'undefined') window.open('office-3d.html', '_blank');
-    return;
-  }
   if (!id) id = 'inicio';
   if (id === 'norte') id = 'agente';
 
@@ -6031,6 +6603,11 @@ function abrirModalMembro(membroId) {
   const anivInput = document.getElementById('mb-aniversario') || document.getElementById('membro-edit-aniv');
   const btnExcluir = document.getElementById('mb-btn-excluir') || document.getElementById('membro-btn-excluir');
   const corInput = document.getElementById('mb-cor') || document.getElementById('membro-edit-cor');
+  const fotoPreview = document.getElementById('mb-foto-preview');
+  const fotoInputUrl = document.getElementById('mb-foto-url');
+  const btnRemoverFoto = document.getElementById('mb-btn-remover-foto');
+  const fileInput = document.getElementById('mb-foto-input');
+  if (fileInput) fileInput.value = '';
 
   let membroCor = '#5581E3';
   if (membroId) {
@@ -6043,6 +6620,20 @@ function abrirModalMembro(membroId) {
       if (corInput) corInput.value = membro.cor || '#5581E3';
       membroCor = membro.cor || '#5581E3';
       if (btnExcluir) btnExcluir.style.display = 'block';
+
+      if (fotoInputUrl) fotoInputUrl.value = membro.fotoUrl || '';
+      if (fotoPreview) {
+        if (membro.fotoUrl) {
+          fotoPreview.style.backgroundImage = `url('${membro.fotoUrl}')`;
+          fotoPreview.textContent = '';
+          if (btnRemoverFoto) btnRemoverFoto.style.display = 'inline-block';
+        } else {
+          fotoPreview.style.backgroundImage = 'none';
+          fotoPreview.style.background = membro.cor || '#5581E3';
+          fotoPreview.textContent = membro.iniciais || '👤';
+          if (btnRemoverFoto) btnRemoverFoto.style.display = 'none';
+        }
+      }
     }
   } else {
     if (mIdInput) mIdInput.value = '';
@@ -6052,6 +6643,13 @@ function abrirModalMembro(membroId) {
     if (corInput) corInput.value = PALETA_FAMILIAR[0] || '#5581E3';
     membroCor = PALETA_FAMILIAR[0] || '#5581E3';
     if (btnExcluir) btnExcluir.style.display = 'none';
+    if (fotoInputUrl) fotoInputUrl.value = '';
+    if (fotoPreview) {
+      fotoPreview.style.backgroundImage = 'none';
+      fotoPreview.style.background = membroCor;
+      fotoPreview.textContent = '👤';
+    }
+    if (btnRemoverFoto) btnRemoverFoto.style.display = 'none';
   }
 
   const paletaEl = document.getElementById('mb-cores-paleta');
@@ -6070,20 +6668,104 @@ function salvarModalMembro() {
   const papelSelect = document.getElementById('mb-papel') || document.getElementById('membro-edit-papel');
   const anivInput = document.getElementById('mb-aniversario') || document.getElementById('membro-edit-aniv');
   const corInput = document.getElementById('mb-cor') || document.getElementById('membro-edit-cor');
+  const fotoInputUrl = document.getElementById('mb-foto-url');
 
   const id = mIdInput ? mIdInput.value.trim() : '';
   const nome = nomeInput ? nomeInput.value.trim() : '';
   const papel = papelSelect ? papelSelect.value : 'membro';
   const aniversario = anivInput ? anivInput.value.trim() : '';
   const cor = corInput ? corInput.value.trim() : '';
+  const fotoUrl = fotoInputUrl ? fotoInputUrl.value.trim() : '';
 
   if (!nome) {
     if (typeof alert === 'function') alert('Informe o nome do membro.');
     return;
   }
 
-  salvarMembroCirculo({ id, nome, papel, aniversario, cor });
+  salvarMembroCirculo({ id, nome, papel, aniversario, cor, fotoUrl });
   closeM('m-membro');
+}
+
+/**
+ * Upload e pré-visualização de foto de perfil no modal de edição de membro.
+ */
+function aoSelecionarFotoMembroModal(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    const preview = document.getElementById('mb-foto-preview');
+    const inputUrl = document.getElementById('mb-foto-url');
+    const btnRemover = document.getElementById('mb-btn-remover-foto');
+    if (preview) {
+      preview.style.backgroundImage = `url('${dataUrl}')`;
+      preview.textContent = '';
+    }
+    if (inputUrl) inputUrl.value = dataUrl;
+    if (btnRemover) btnRemover.style.display = 'inline-block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removerFotoMembroModal() {
+  const preview = document.getElementById('mb-foto-preview');
+  const inputUrl = document.getElementById('mb-foto-url');
+  const btnRemover = document.getElementById('mb-btn-remover-foto');
+  const fileInput = document.getElementById('mb-foto-input');
+  if (preview) {
+    preview.style.backgroundImage = 'none';
+    preview.textContent = '👤';
+  }
+  if (inputUrl) inputUrl.value = '';
+  if (btnRemover) btnRemover.style.display = 'none';
+  if (fileInput) fileInput.value = '';
+}
+
+/**
+ * Upload de foto de perfil direto pelo modal de Perfil & Conta.
+ */
+function aoSelecionarFotoPerfilConta(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    const membro = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+    if (membro) {
+      membro.fotoUrl = dataUrl;
+      save();
+      render();
+      atualizarModalPerfilConta();
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function removerFotoPerfilAtual() {
+  const membro = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
+  if (membro) {
+    membro.fotoUrl = '';
+    save();
+    render();
+    atualizarModalPerfilConta();
+  }
+}
+
+/**
+ * Upload e configuração da foto de capa familiar no carrossel do mural.
+ */
+function aoSelecionarCapaFamilia(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    S.fotoCapaFamiliaUrl = dataUrl;
+    save();
+    renderMuralInicio();
+  };
+  reader.readAsDataURL(file);
 }
 
 function salvarMembroModal() {
@@ -9658,406 +10340,173 @@ function renderHeaderCirculo() {
   if (typeof document === 'undefined') return;
 
   // Círculo ativo
-  const circulo = obterCirculoAtivo();
+  const circulo = typeof obterCirculoAtivo === 'function' ? obterCirculoAtivo() : null;
   const topNome = document.getElementById('top-circulo-nome');
   if (topNome && circulo) {
     topNome.textContent = circulo.nome;
   }
 
   // Membro ativo
-  const membroAtivo = obterMembroAtivo();
+  const membroAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
   const avatarBtn = document.getElementById('header-avatar-btn');
   const avatarTxt = document.getElementById('header-avatar-txt');
   const avatarCrown = document.getElementById('header-avatar-crown');
 
   if (avatarTxt && membroAtivo) {
-    avatarTxt.textContent = membroAtivo.iniciais || 'FM';
+    avatarTxt.textContent = membroAtivo.fotoUrl ? '' : (membroAtivo.iniciais || 'FM');
   }
   if (avatarBtn && membroAtivo) {
-    avatarBtn.style.background = membroAtivo.cor || '#5581E3';
+    if (membroAtivo.fotoUrl) {
+      avatarBtn.style.backgroundImage = `url("${membroAtivo.fotoUrl}")`;
+      avatarBtn.style.backgroundSize = 'cover';
+      avatarBtn.style.backgroundPosition = 'center';
+      avatarBtn.style.backgroundColor = 'transparent';
+    } else {
+      avatarBtn.style.backgroundImage = 'none';
+      avatarBtn.style.background = membroAtivo.cor || '#5581E3';
+    }
   }
   if (avatarCrown && membroAtivo) {
     avatarCrown.style.display = membroAtivo.papel === 'admin' ? 'block' : 'none';
   }
 
   // Badges
-  atualizarBadgesHeader();
+  if (typeof atualizarBadgesHeader === 'function') {
+    atualizarBadgesHeader();
+  }
 }
 
 function renderMuralInicio() {
   if (typeof document === 'undefined') return;
+
+  // 1. Banner com Foto Familiar no Carrossel Superior
+  const bannerEl = document.getElementById('carousel-family-banner');
+  if (bannerEl) {
+    if (S.fotoCapaFamiliaUrl) {
+      bannerEl.style.backgroundImage = `linear-gradient(180deg, rgba(30,41,59,0.2) 0%, rgba(15,23,42,0.85) 100%), url("${S.fotoCapaFamiliaUrl}")`;
+    } else {
+      bannerEl.style.backgroundImage = `linear-gradient(180deg, rgba(30,41,59,0.3) 0%, rgba(15,23,42,0.85) 100%), url('https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=800&q=80')`;
+    }
+  }
+
+  // 2. Grade de Módulos em 2 Colunas Idêntica ao Print de Referência
   const grid = document.getElementById('grid-mural-inicio') || document.getElementById('grid-modulos-inicio');
   if (!grid) return;
 
-  const membroAtivo = obterMembroAtivo();
+  const membroAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
   const isCrianca = membroAtivo && membroAtivo.papel === 'crianca';
 
-  // Filtra módulos: se for perfil criança, blinda e oculta orçamento, benefícios e metas familiares
-  const modulosVisiveis = (S.modulosInicio || []).filter(modId => {
-    if (isCrianca && (modId === 'orcamento' || modId === 'beneficios' || modId === 'metas_fam' || modId === 'metas')) return false;
-    return true;
+  // Métricas rápidas para exibição nos cards
+  const totaisFin = typeof calcTotais === 'function' ? calcTotais() : { saldoCaixaReal: 0, saldoReal: 0 };
+  const saldoOrc = typeof fmt === 'function' ? fmt(totaisFin.saldoCaixaReal ?? totaisFin.saldoReal ?? 0) : 'R$ 0,00';
+
+  const listas = S.listas || [];
+  let totalPendenciasListas = 0;
+  listas.forEach(l => {
+    if (typeof calcularResumoLista === 'function') {
+      const res = calcularResumoLista(l);
+      totalPendenciasListas += (res.itensPendentes || res.pendentes || 0);
+    }
   });
 
-  if (modulosVisiveis.length === 0) {
-    grid.innerHTML = `
-      <div style="grid-column: 1 / -1; text-align:center; padding:32px 16px; background:var(--card-bg); border-radius:var(--radius); border:1px dashed var(--border2);">
-        <p style="font-size:28px; margin-bottom:8px;">🎨</p>
-        <p style="font-weight:700; font-size:15px; margin-bottom:4px;">Seu Mural está vazio</p>
-        <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">Adicione recursos para organizar a rotina e o dia a dia da família.</p>
-        <button class="btn btn-primary" onclick="go('explorar')" style="max-width:220px; margin:0 auto;">Explorar Recursos</button>
+  const hoje = new Date();
+  const dtIni = hoje.toISOString().slice(0, 10);
+  const dtFimObj = new Date(hoje);
+  dtFimObj.setDate(hoje.getDate() + 7);
+  const dtFim = dtFimObj.toISOString().slice(0, 10);
+  const eventosSemana = typeof obterEventosConsolidadosPeriodo === 'function'
+    ? obterEventosConsolidadosPeriodo(dtIni, dtFim)
+    : [];
+
+  const alertasDocs = typeof obterAlertasDocumentosVencendo === 'function'
+    ? obterAlertasDocumentosVencendo(30)
+    : [];
+
+  // Definição dos 8 cards exatos em 2 colunas do print
+  const cardsPrint = [
+    {
+      id: 'listas',
+      titulo: 'Listas',
+      sub: totalPendenciasListas > 0 ? `${totalPendenciasListas} itens ativos` : 'Compras e tarefas',
+      icone: '📝',
+      bgIcon: '#FEF3C7',
+      corIcon: '#D97706',
+      acao: "go('listas')"
+    },
+    {
+      id: 'calendario',
+      titulo: 'Calendário',
+      sub: eventosSemana.length > 0 ? `${eventosSemana.length} compromissos` : 'Compromissos',
+      icone: '📅',
+      bgIcon: '#EDE9FE',
+      corIcon: '#7C3AED',
+      acao: "go('calendario')"
+    },
+    {
+      id: 'orcamento',
+      titulo: isCrianca ? 'Cofrinho' : 'Orçamento',
+      sub: isCrianca ? 'Mesada & poupança' : `Saldo: ${saldoOrc}`,
+      icone: '💰',
+      bgIcon: '#D1FAE5',
+      corIcon: '#059669',
+      acao: isCrianca ? "alert('Área financeira restrita aos adultos.')" : "go('resumo')"
+    },
+    {
+      id: 'documentos',
+      titulo: 'Documentos',
+      sub: alertasDocs.length > 0 ? `⚠️ ${alertasDocs.length} vencendo` : 'Pastas e notas',
+      icone: '📁',
+      bgIcon: '#DBEAFE',
+      corIcon: '#2563EB',
+      acao: "abrirModalDocumentosFamilia()"
+    },
+    {
+      id: 'aniversarios',
+      titulo: 'Aniversários',
+      sub: 'Datas especiais',
+      icone: '⭐',
+      bgIcon: '#FFEDD5',
+      corIcon: '#EA580C',
+      acao: "abrirModalAniversarios()"
+    },
+    {
+      id: 'refeicoes',
+      titulo: 'Refeições',
+      sub: 'Cardápio semanal',
+      icone: '🍽️',
+      bgIcon: '#E0F2FE',
+      corIcon: '#0284C7',
+      acao: "abrirModalRefeicoesFamilia('cardapio')"
+    },
+    {
+      id: 'horario',
+      titulo: 'Horário',
+      sub: 'Grade e rotina',
+      icone: '⏰',
+      bgIcon: '#FCE7F3',
+      corIcon: '#DB2777',
+      acao: "abrirModalGradeHoraria()"
+    },
+    {
+      id: 'receitas_cul',
+      titulo: 'Caixa de receitas',
+      sub: 'Pratos favoritos',
+      icone: '🍳',
+      bgIcon: '#FEF3C7',
+      corIcon: '#B45309',
+      acao: "abrirModalRefeicoesFamilia('receitas')"
+    }
+  ];
+
+  grid.innerHTML = cardsPrint.map(c => `
+    <div class="mural-card-ref" onclick="${c.acao}">
+      <h4 class="mural-card-title">${escapeHtml(c.titulo)}</h4>
+      <p class="mural-card-sub">${escapeHtml(c.sub)}</p>
+      <div class="mural-card-icon-bubble" style="background:${c.bgIcon}; color:${c.corIcon};">
+        ${c.icone}
       </div>
-    `;
-    return;
-  }
-
-  grid.innerHTML = modulosVisiveis.map(modId => {
-    const modDef = MODULOS_INICIO_CATALOGO.find(m => m.id === modId) || {
-      id: modId,
-      nome: modId,
-      desc: 'Módulo do Círculo Familiar',
-      icone: '📦',
-      cor: '#5581E3',
-      bgIcon: 'rgba(85,129,227,0.14)',
-      telaAlvo: 'explorar'
-    };
-
-    // Card Especial de Benefícios VA / VR (Etapa 4)
-    if (modDef.id === 'beneficios') {
-      const totais = calcTotais();
-      const carteiras = S.carteirasBeneficio || [];
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalCarteirasBeneficio()">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:rgba(16,185,129,0.14);">
-              🥗
-            </div>
-            <span style="font-size:11px; font-weight:700; color:var(--green);">${carteiras.length} ${carteiras.length === 1 ? 'carteira' : 'carteiras'}</span>
-          </div>
-          <p class="modulo-card-title">Vales VA / VR</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">Saldo: ${fmt(totais.totalBeneficiosDisponivel)}</p>
-          <div style="font-size:11px; color:var(--muted);">
-            <span>Alimentação e Refeição</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Orçamento Financeiro
-    if (modDef.id === 'orcamento') {
-      const totais = calcTotais();
-      const corSaldo = (totais.saldoCaixaReal ?? totais.saldoReal) < 0 ? 'var(--red)' : 'var(--green)';
-      return `
-        <div class="modulo-card card" style="grid-column: 1 / -1; cursor:pointer;" onclick="go('resumo')">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:12px;">
-              <div class="modulo-icon-bubble" style="background:${modDef.bgIcon}; font-size:22px;">
-                ${modDef.icone}
-              </div>
-              <div>
-                <p style="font-weight:700; font-size:16px; margin:0;">${escapeHtml(modDef.nome)}</p>
-                <p style="font-size:12px; color:var(--muted); margin:0;">Visão financeira consolidada</p>
-              </div>
-            </div>
-            <span style="font-size:12px; color:var(--blue); font-weight:700;">Ver Detalhes →</span>
-          </div>
-
-          <div style="background:var(--bg3); border-radius:var(--radius-sm); padding:12px; display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:8px;">
-            <div>
-              <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Saldo em Caixa Real</p>
-              <p style="font-size:18px; font-weight:800; color:${corSaldo}; margin:0;">${fmt(totais.saldoCaixaReal ?? totais.saldoReal)}</p>
-            </div>
-            <div>
-              <p style="font-size:11px; color:var(--muted); margin:0 0 2px;">Receitas do Mês</p>
-              <p style="font-size:15px; font-weight:700; color:var(--green); margin:0;">${fmt(totais.totalRec)}</p>
-            </div>
-            ${totais.totalBeneficiosDisponivel > 0 ? `
-              <div style="grid-column: 1 / -1; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:11px; color:var(--muted);">🥗 Vales VA / VR Disponíveis:</span>
-                <span style="font-size:12px; font-weight:700; color:var(--green);">${fmt(totais.totalBeneficiosDisponivel)}</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Módulo de Listas & Tarefas (Etapa 2)
-    if (modDef.id === 'listas') {
-      const listas = S.listas || [];
-      const totalListas = listas.length;
-      let totalPendentes = 0;
-      let comprasPendentes = 0;
-      let tarefasPendentes = 0;
-
-      listas.forEach(l => {
-        const res = calcularResumoLista(l);
-        if (l.tipo === 'compras') {
-          comprasPendentes += res.itensPendentes;
-          totalPendentes += res.itensPendentes;
-        } else {
-          tarefasPendentes += res.pendentes;
-          totalPendentes += res.pendentes;
-        }
-      });
-
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="go('listas')">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-              ${modDef.icone}
-            </div>
-            <span style="font-size:11px; font-weight:700; color:var(--primary);">${totalListas} ${totalListas === 1 ? 'lista' : 'listas'}</span>
-          </div>
-          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">${totalPendentes > 0 ? `${totalPendentes} pendências ativas` : 'Tudo em dia na rotina!'}</p>
-          <div style="font-size:11px; color:var(--muted); display:flex; gap:6px;">
-            <span>🛒 ${comprasPendentes} itens</span>
-            <span>•</span>
-            <span>✅ ${tarefasPendentes} tarefas</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Módulo de Calendário Familiar (Etapa 3)
-    if (modDef.id === 'calendario') {
-      const hoje = new Date();
-      const dtIni = hoje.toISOString().slice(0, 10);
-      const dtFimObj = new Date(hoje);
-      dtFimObj.setDate(hoje.getDate() + 7);
-      const dtFim = dtFimObj.toISOString().slice(0, 10);
-
-      const eventos7Dias = obterEventosConsolidadosPeriodo(dtIni, dtFim);
-      const totalEventos = eventos7Dias.length;
-      const proximos2 = eventos7Dias.slice(0, 2);
-
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="go('calendario')">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-              ${modDef.icone}
-            </div>
-            <span style="font-size:11px; font-weight:700; color:var(--primary);">${totalEventos} próx. 7d</span>
-          </div>
-          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">${totalEventos > 0 ? `${totalEventos} compromissos na semana` : 'Semana livre em família!'}</p>
-          <div style="font-size:11px; color:var(--muted); display:flex; flex-direction:column; gap:3px;">
-            ${proximos2.length === 0 ? '<span>Nenhum evento agendado</span>' : proximos2.map(e => `
-              <div style="display:flex; align-items:center; gap:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                <span class="cal-dot" style="background:${e.cor};"></span>
-                <span style="font-weight:600; color:var(--text);">${escapeHtml(e.titulo)}</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Módulo de Mural / Mensagens da Família (Etapa 6)
-    if (modDef.id === 'mensagens') {
-      const fixadas = typeof obterMensagensFixadasFamilia === 'function' ? obterMensagensFixadasFamilia() : [];
-      const msgs = S.mensagensFamilia || [];
-      const recadoDestaque = fixadas.length > 0 ? fixadas[0] : msgs[msgs.length - 1];
-      const naoLidas = typeof obterContagemMensagensNaoLidas === 'function' ? obterContagemMensagensNaoLidas() : 0;
-      const textoSnippet = recadoDestaque && recadoDestaque.texto
-        ? recadoDestaque.texto.replace(/<[^>]*>/g, '').trim()
-        : '';
-
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalChatFamilia()">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-              ${modDef.icone}
-            </div>
-            ${naoLidas > 0 ? `
-              <span style="background:var(--red); color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">${naoLidas} nova${naoLidas > 1 ? 's' : ''}</span>
-            ` : `
-              <span style="font-size:11px; font-weight:700; color:var(--primary);">${msgs.length} msgs</span>
-            `}
-          </div>
-          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">
-            ${recadoDestaque ? (recadoDestaque.fixada ? `📌 ${escapeHtml(textoSnippet.slice(0, 38))}${textoSnippet.length > 38 ? '...' : ''}` : `💬 ${escapeHtml(textoSnippet.slice(0, 38))}${textoSnippet.length > 38 ? '...' : ''}`) : 'Mural livre para recados familiares!'}
-          </p>
-          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
-            <span>📌 ${fixadas.length} fixado${fixadas.length === 1 ? '' : 's'}</span>
-            <span>•</span>
-            <span style="color:var(--blue); font-weight:600;">Abrir Chat →</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Módulo de Contatos Compartilhados (Etapa 6)
-    if (modDef.id === 'contatos') {
-      const contatos = S.contatosFamilia || [];
-      const emergencias = contatos.filter(c => !!c.emergencia);
-      const primeiroEmerg = emergencias[0];
-
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalContatosFamilia()">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-              ${modDef.icone}
-            </div>
-            <span style="font-size:11px; font-weight:700; color:${emergencias.length > 0 ? 'var(--red)' : 'var(--primary)'};">
-              ${emergencias.length > 0 ? `🚨 ${emergencias.length} emergência` : `${contatos.length} contatos`}
-            </span>
-          </div>
-          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">
-            ${primeiroEmerg ? `🚨 ${escapeHtml(primeiroEmerg.nome)}: ${escapeHtml(primeiroEmerg.telefone || primeiroEmerg.whatsapp)}` : `${contatos.length} contatos salvos no círculo`}
-          </p>
-          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
-            <span>📞 Discagem rápida</span>
-            <span>•</span>
-            <span style="color:var(--blue); font-weight:600;">Ver Todos →</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Módulo de Refeições & Cardápio da Semana (Etapa 7)
-    if (modDef.id === 'refeicoes' || modDef.id === 'receitas_cul') {
-      const diasSemanaArray = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
-      const hojeDiaNome = diasSemanaArray[new Date().getDay()] || 'segunda';
-      const refeicoesHoje = (S.cardapioSemanal || []).filter(r => r.diaSemana === hojeDiaNome && r.circuloId === (S.circuloAtivoId || 'circ_1'));
-      const faltantes = typeof obterIngredientesFaltantesCardapio === 'function' ? obterIngredientesFaltantesCardapio() : [];
-
-      const almocoHoje = refeicoesHoje.find(r => r.tipoRefeicao === 'almoco');
-      const jantarHoje = refeicoesHoje.find(r => r.tipoRefeicao === 'jantar');
-      const destaqueRefeicao = almocoHoje ? `Almoço: ${almocoHoje.pratoLivre || 'Receita da Casa'}` : (jantarHoje ? `Jantar: ${jantarHoje.pratoLivre || 'Receita da Casa'}` : 'Planeje as refeições de hoje');
-
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalRefeicoesFamilia()">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-              ${modDef.icone}
-            </div>
-            <span style="font-size:11px; font-weight:700; color:var(--primary);">
-              ${(S.cardapioSemanal || []).length} planejadas
-            </span>
-          </div>
-          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">
-            🍲 ${escapeHtml(destaqueRefeicao)}
-          </p>
-          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
-            <span>🛒 ${faltantes.length > 0 ? `${faltantes.length} itens a comprar` : 'Lista em dia!'}</span>
-            <span>•</span>
-            <span style="color:var(--blue); font-weight:600;">Ver Cardápio →</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Módulo de Cofre de Documentos (Etapa 7)
-    if (modDef.id === 'documentos') {
-      const mAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
-      const mId = mAtivo ? mAtivo.id : (S.membroAtivoId || 'm_1');
-      const docsVisiveis = typeof listarDocumentosVisiveisParaMembro === 'function'
-        ? listarDocumentosVisiveisParaMembro(mId)
-        : (S.documentosFamilia || []);
-      const alertasVencendo = typeof obterAlertasDocumentosVencendo === 'function'
-        ? obterAlertasDocumentosVencendo(30)
-        : [];
-
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalDocumentosFamilia()">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-              ${modDef.icone}
-            </div>
-            ${alertasVencendo.length > 0 ? `
-              <span style="background:var(--red); color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">
-                ⚠️ ${alertasVencendo.length} vencendo
-              </span>
-            ` : `
-              <span style="font-size:11px; font-weight:700; color:var(--primary);">${docsVisiveis.length} docs</span>
-            `}
-          </div>
-          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">
-            ${alertasVencendo.length > 0 ? `⚠️ Atenção: ${escapeHtml(alertasVencendo[0].titulo)} vence em breve!` : 'Cofre seguro com 4 pastas da família'}
-          </p>
-          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
-            <span>🔒 Pastas seguras</span>
-            <span>•</span>
-            <span style="color:var(--blue); font-weight:600;">Abrir Cofre →</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Módulo de Grade Horária Semanal (Etapa 7)
-    if (modDef.id === 'horario' || modDef.id === 'grade_horaria') {
-      const diasSemanaArray = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
-      const hojeDiaNome = diasSemanaArray[new Date().getDay()] || 'segunda';
-      const itensHoje = typeof listarGradeHorariaFiltrada === 'function'
-        ? listarGradeHorariaFiltrada({ diaSemana: hojeDiaNome })
-        : (S.gradeHoraria || []).filter(g => g.diaSemana === hojeDiaNome);
-
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalGradeHoraria()">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-              ${modDef.icone}
-            </div>
-            <span style="font-size:11px; font-weight:700; color:var(--primary);">${itensHoje.length} hoje</span>
-          </div>
-          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">
-            ${itensHoje.length > 0 ? `🕒 Próx: ${escapeHtml(itensHoje[0].titulo)} (${itensHoje[0].horaInicio})` : 'Nenhuma aula/rotina agendada hoje'}
-          </p>
-          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
-            <span>📅 Rotina semanal</span>
-            <span>•</span>
-            <span style="color:var(--blue); font-weight:600;">Ver Grade →</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Card Especial do Módulo de Metas & Sonhos da Família (Etapa 8)
-    if (modDef.id === 'metas_fam' || modDef.id === 'metas') {
-      const metas = S.metasFamilia || [];
-      const primeira = metas[0];
-      const pctPrimeira = primeira && primeira.valorAlvo > 0
-        ? Math.min(100, Math.round((primeira.valorAtual / primeira.valorAlvo) * 100))
-        : 0;
-
-      return `
-        <div class="modulo-card card" style="cursor:pointer;" onclick="abrirModalMetasFamilia()">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-              ${modDef.icone}
-            </div>
-            <span style="font-size:11px; font-weight:700; color:var(--primary);">${metas.length} ${metas.length === 1 ? 'meta' : 'metas'}</span>
-          </div>
-          <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-          <p class="modulo-card-desc" style="margin-bottom:6px;">
-            ${primeira ? `${primeira.icone || '🎯'} ${escapeHtml(primeira.titulo)}: ${pctPrimeira}%` : 'Defina os sonhos da família'}
-          </p>
-          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
-            <span>💰 Poupança conjunta</span>
-            <span>•</span>
-            <span style="color:var(--blue); font-weight:600;">Ver Metas →</span>
-          </div>
-        </div>
-      `;
-    }
-
-    // Cards Padrão do Grid Familiar
-    return `
-      <div class="modulo-card card" style="cursor:pointer;" onclick="go('${modDef.telaAlvo || 'explorar'}')">
-        <div class="modulo-icon-bubble" style="background:${modDef.bgIcon};">
-          ${modDef.icone}
-        </div>
-        <p class="modulo-card-title">${escapeHtml(modDef.nome)}</p>
-        <p class="modulo-card-desc">${escapeHtml(modDef.desc)}</p>
-      </div>
-    `;
-  }).join('');
+    </div>
+  `).join('');
 }
 
 function renderAbaExplorar() {
@@ -11005,6 +11454,108 @@ ${S.metas.length?'- Metas: '+S.metas.map(m=>`${m.nome}: ${fmt(m.atual)} de ${fmt
 CONTEXTO: Gestão financeira familiar. Renda extra anual: 13° salário (dez), PLR (set e fev), possível bônus semestral. Objetivo: sair do vermelho, quitar inadimplências e parcelamentos, chegar a R$100k e depois R$1 milhão.
 
 Use metodologia avalanche (maior juro primeiro). Dê planos com números e datas reais quando possível.`;
+}
+
+/**
+ * Executa chamadas à API Gemini com fallback resiliente entre os modelos em cascata.
+ * Decisão de design: Atende à diretriz de contingência ("Sempre quando atingir o limite em um modelo de IA altere para o próximo melhor").
+ * Ordem estrita: gemini-2.5-flash -> gemini-2.5-pro -> gemini-2.0-flash -> gemini-1.5-flash -> gemini-1.5-pro.
+ * Em caso de status HTTP 429 (Rate Limit / Quota Exceeded), 503 (Overloaded) ou erro com indicação de cota/limite,
+ * passa imediatamente para o próximo modelo sem travar a experiência do usuário.
+ * 
+ * @param {object} requisicao - Parâmetros da requisição contendo contents e generationConfig
+ * @returns {Promise<{text: string, model: string, raw: object}>} Resposta com o texto extraído e o modelo que respondeu
+ */
+async function chamarGeminiComFallback(requisicao) {
+  const chave = requisicao?.key || apiKey || S.apiKey;
+  if (!chave || !chave.trim()) {
+    throw new Error('Chave de API do Gemini não configurada.');
+  }
+
+  const corpo = {
+    contents: requisicao.contents || [],
+    ...(requisicao.generationConfig ? { generationConfig: requisicao.generationConfig } : {})
+  };
+
+  const listaModelos = Array.isArray(MODELOS_GEMINI_FALLBACK) && MODELOS_GEMINI_FALLBACK.length > 0
+    ? MODELOS_GEMINI_FALLBACK
+    : ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+
+  let ultimoErro = null;
+
+  for (let i = 0; i < listaModelos.length; i++) {
+    const modeloAtual = listaModelos[i];
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${encodeURIComponent(chave)}`;
+
+    try {
+      const resposta = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpo)
+      });
+
+      // Status 429: Rate Limit / Quota Exceeded; 503: Service Unavailable; 500: Erro interno temporário
+      if (resposta.status === 429 || resposta.status === 503 || resposta.status === 500) {
+        let detalheErro = `HTTP ${resposta.status}`;
+        try {
+          const errData = await resposta.json();
+          if (errData?.error?.message) detalheErro = errData.error.message;
+        } catch (eJson) {
+          // Erro de parse JSON tratado explicitamente; mantém o código HTTP
+          detalheErro = `HTTP ${resposta.status} (corpo não-JSON)`;
+        }
+        console.warn(`[Gemini Fallback] Modelo ${modeloAtual} atingiu limite (${detalheErro}). Alternando para o próximo modelo da lista...`);
+        ultimoErro = new Error(`Modelo ${modeloAtual} excedeu quota (${detalheErro})`);
+        continue;
+      }
+
+      if (!resposta.ok) {
+        let msgErro = `HTTP ${resposta.status}`;
+        try {
+          const errData = await resposta.json();
+          if (errData?.error?.message) msgErro = errData.error.message;
+        } catch (eParse) {
+          // Erro de parse JSON tratado explicitamente
+          msgErro = `HTTP ${resposta.status} (falha ao ler mensagem de erro)`;
+        }
+
+        const msgLower = msgErro.toLowerCase();
+        if (msgLower.includes('quota') || msgLower.includes('exhausted') || msgLower.includes('rate limit')) {
+          console.warn(`[Gemini Fallback] Quota esgotada em ${modeloAtual} (${msgErro}). Alternando para o próximo modelo...`);
+          ultimoErro = new Error(`Quota esgotada em ${modeloAtual}: ${msgErro}`);
+          continue;
+        }
+
+        // Se for erro definitivo (ex: prompt inválido ou chave sem permissão), interrompe imediatamente
+        throw new Error(`Erro na API Gemini (${modeloAtual}): ${msgErro}`);
+      }
+
+      const jsonResposta = await resposta.json();
+      const textoFinal = jsonResposta.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return {
+        text: textoFinal,
+        model: modeloAtual,
+        raw: jsonResposta
+      };
+    } catch (err) {
+      const msgErr = (err?.message || '').toLowerCase();
+      const erroTratavel = msgErr.includes('429') || msgErr.includes('quota') || msgErr.includes('exhausted') || msgErr.includes('rate limit') || msgErr.includes('503');
+
+      if (erroTratavel && i < listaModelos.length - 1) {
+        console.warn(`[Gemini Fallback] Exceção tratada em ${modeloAtual}. Tentando próximo modelo... Detalhe:`, err.message);
+        ultimoErro = err;
+        continue;
+      }
+
+      // Se for a última tentativa ou erro fatal de autenticação
+      ultimoErro = err;
+      if (msgErr.includes('api_key_invalid') || msgErr.includes('api key not valid')) {
+        throw err;
+      }
+    }
+  }
+
+  throw ultimoErro || new Error('Todos os modelos de IA da lista de contingência falharam.');
 }
 
 async function ask(q) {
@@ -15820,10 +16371,6 @@ function confirmarExcluirItemGradeModal(itemId) {
 }
 
 function abrirModuloExplorar(moduloId) {
-  if (moduloId === 'escritorio_3d') {
-    if (typeof window !== 'undefined') window.open('office-3d.html', '_blank');
-    return;
-  }
   if (moduloId === 'mensagens') {
     abrirModalChatFamilia();
     return;
@@ -17399,8 +17946,22 @@ if (typeof module !== 'undefined' && module.exports) {
     abrirModalGasto,
     abrirModalDivida,
     abrirModalInvestimento,
+    initFirebase,
+    setFbDbParaTestes,
     fazerLogin,
     fazerCadastro,
+    fazerLoginGoogle,
+    entrarModoLocal,
+    fazerLogoffApp,
+    aplicarLoginGate,
+    selecionarMembroLogin,
+    selecionarMembroAparelho,
+    abrirModalPerfilConta,
+    atualizarModalPerfilConta,
+    escutarSincronizacaoTempoReal,
+    docId,
+    loadFromCloud,
+    MODELOS_GEMINI_FALLBACK,
     salvarKey,
     pularKey,
     atualizarKey,
@@ -17419,6 +17980,7 @@ if (typeof module !== 'undefined' && module.exports) {
     syncDrive,
     sair,
     salvarFamiliaId,
+    salvarCodigoFamiliaLogin,
     selTag,
     salvarNegociacaoGasto,
     confirmarAdiantamento,
@@ -17680,7 +18242,42 @@ if (typeof module !== 'undefined' && module.exports) {
     renderAssinaturasFixasModal,
     abrirModalAssinaturasFixas,
     fecharModalAssinaturasFixas,
+    aoSelecionarFotoMembroModal,
+    removerFotoMembroModal,
+    aoSelecionarFotoPerfilConta,
+    removerFotoPerfilAtual,
+    aoSelecionarCapaFamilia,
+    selecionarDiaCalendarioSplit,
     getState: () => S,
     S
   };
 }
+
+if (typeof window !== 'undefined') {
+  window.MODELOS_GEMINI_FALLBACK = MODELOS_GEMINI_FALLBACK;
+  window.chamarGeminiComFallback = chamarGeminiComFallback;
+  window.aplicarLoginGate = aplicarLoginGate;
+  window.selecionarMembroLogin = selecionarMembroLogin;
+  window.selecionarMembroAparelho = selecionarMembroAparelho;
+  window.abrirModalPerfilConta = abrirModalPerfilConta;
+  window.atualizarModalPerfilConta = atualizarModalPerfilConta;
+  window.fazerLoginGoogle = fazerLoginGoogle;
+  window.fazerLogin = fazerLogin;
+  window.fazerCadastro = fazerCadastro;
+  window.entrarModoLocal = entrarModoLocal;
+  window.fazerLogoffApp = fazerLogoffApp;
+  window.sair = sair;
+  window.escutarSincronizacaoTempoReal = escutarSincronizacaoTempoReal;
+  window.docId = docId;
+  window.loadFromCloud = loadFromCloud;
+  window.salvarCodigoFamiliaLogin = salvarCodigoFamiliaLogin;
+  window.initFirebase = initFirebase;
+  window.setFbDbParaTestes = setFbDbParaTestes;
+  window.aoSelecionarFotoMembroModal = aoSelecionarFotoMembroModal;
+  window.removerFotoMembroModal = removerFotoMembroModal;
+  window.aoSelecionarFotoPerfilConta = aoSelecionarFotoPerfilConta;
+  window.removerFotoPerfilAtual = removerFotoPerfilAtual;
+  window.aoSelecionarCapaFamilia = aoSelecionarCapaFamilia;
+  window.selecionarDiaCalendarioSplit = selecionarDiaCalendarioSplit;
+}
+
