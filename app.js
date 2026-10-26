@@ -1273,15 +1273,41 @@ function selecionarCirculo(circuloId) {
   render();
 }
 
+/**
+ * Gera um código da família único no formato FAM-XXXXXX válido por 7 dias.
+ * Salva na coleção codigosFamilia/{CODIGO} no Firestore.
+ */
 function gerarConviteCirculo(circuloId, papelProposto = 'membro') {
-  const circulo = (S.circulos || []).find(c => c.id === (circuloId || S.circuloAtivoId)) || obterCirculoAtivo();
-  if (!circulo) return null;
+  return gerarCodigoFamilia(circuloId, papelProposto);
+}
 
-  const codigo = 'FAM-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+function gerarCodigoFamilia(circuloId, papelProposto = 'membro') {
+  const circulo = (S.circulos || []).find(c => c.id === (circuloId || S.circuloAtivoId)) || (typeof obterCirculoAtivo === 'function' ? obterCirculoAtivo() : null) || { id: 'circ_1', nome: 'Nossa Família' };
+  const famId = docId();
+  const hexRandom = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const codigo = 'FAM-' + hexRandom;
   const expiraEm = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // Validade de 7 dias
+  const criadoPor = fbUser ? fbUser.uid : (S.membroAtivoId || 'local');
 
-  circulo.codigoConvite = codigo;
-  circulo.expiraEm = expiraEm;
+  if (circulo) {
+    circulo.codigoConvite = codigo;
+    circulo.expiraEm = expiraEm;
+  }
+
+  if (fbDb && typeof fbDb.collection === 'function') {
+    try {
+      fbDb.collection('codigosFamilia').doc(codigo).set({
+        familiaId: famId,
+        criadoPor: criadoPor,
+        expiraEm: expiraEm,
+        criadoEm: new Date().toISOString()
+      }).catch(err => {
+        console.error('Erro ao salvar codigoFamilia no Firestore:', err);
+      });
+    } catch (e) {
+      console.error('Erro ao salvar código no Firestore:', e);
+    }
+  }
 
   save();
   return {
@@ -5670,7 +5696,7 @@ function loadState(overrideState){
 
   try {
     if (typeof localStorage !== 'undefined') {
-      familiaId = localStorage.getItem('dnm_familia_id') || 'familia-alex-gabi';
+      familiaId = localStorage.getItem('dnm_familia_id') || null;
       const meuMembro = localStorage.getItem('dnm_meu_membro_id');
       if (meuMembro) S.membroAtivoId = meuMembro;
     }
@@ -5758,7 +5784,7 @@ const firebaseConfig = {
 let fbUser = null;
 let fbDb = null;
 let saveTimer = null;
-let familiaId = 'familia-alex-gabi';
+let familiaId = null;
 let unsubscribeSnapshot = null;
 
 /**
@@ -5839,8 +5865,9 @@ function initFirebase() {
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem('dnm_sessao_ativa', 'true');
         }
-        detectarMembroPorIdentificador(user.email || user.displayName || '');
+        await resolverOuCriarContaFamilia(user);
         await loadFromCloud();
+        garantirMembroUsuarioLogado(user);
         escutarSincronizacaoTempoReal();
         aplicarLoginGate(true);
       } else {
@@ -5861,10 +5888,164 @@ function initFirebase() {
 }
 
 /**
+ * Cria a estrutura inicial com estado limpo para contas individuais recém-criadas.
+ * Garante que dados de exemplo (Alex/Gabi/Dudu) não poluam novas contas reais.
+ */
+function criarEstadoLimpoContaNova(uid, nomeUsuario = 'Eu') {
+  const nomeLimpo = nomeUsuario || 'Eu';
+  return {
+    versaoSchema: 2,
+    tema: 'claro',
+    circulos: [
+      { id: `circ_${uid}`, nome: 'Minha Família', codigoConvite: '', expiraEm: '', criadoEm: new Date().toISOString() }
+    ],
+    circuloAtivoId: `circ_${uid}`,
+    fotoCapaFamiliaUrl: '',
+    membrosPerfil: [
+      { id: uid, uid: uid, circuloId: `circ_${uid}`, nome: nomeLimpo, papel: 'admin', cor: '#5581E3', iniciais: gerarIniciaisNome(nomeLimpo), aniversario: '', fotoUrl: '' }
+    ],
+    membroAtivoId: uid,
+    membrosUids: [uid],
+    receitas: [],
+    gastos: [],
+    dividas: [],
+    cartoes: [],
+    comprasCartao: [],
+    faturasCartao: [],
+    investimentos: [],
+    metas: [],
+    eventos: [],
+    listas: [],
+    aniversarios: [],
+    contatos: [],
+    documentos: [],
+    receitasCulinarias: [],
+    cardapio: {},
+    gradeHoraria: [],
+    carteirasBeneficio: [],
+    movimentacoesBeneficio: [],
+    categorias: JSON.parse(JSON.stringify(DEFAULT_CATEGORIAS_GASTOS)),
+    tiposDivida: JSON.parse(JSON.stringify(DEFAULT_TIPOS_DIVIDA)),
+    feedAtividade: [],
+    mensagensChat: [],
+    onboardingDone: true,
+    apiKey: apiKey || S.apiKey || ''
+  };
+}
+
+/**
+ * Resolve a família vinculada ao usuário logado seguindo a ordem estrita do contrato:
+ * 1. Se contas/{uid} existe, usa o familiaId cadastrado.
+ * 2. Senão, se existir legado local (dnm_familia_id) ou base familia-alex-gabi vinculada:
+ *    adota esse id e grava em contas/{uid} (CRÍTICO: nunca perde o histórico do Alex).
+ * 3. Senão, conta nova individual: familiaId = uid, estado inicial limpo.
+ */
+async function resolverOuCriarContaFamilia(user) {
+  if (!user || !user.uid) return null;
+  const uid = user.uid;
+  let famIdResolvido = null;
+
+  if (fbDb && typeof fbDb.collection === 'function') {
+    try {
+      const contaDoc = await fbDb.collection('contas').doc(uid).get();
+      if (contaDoc && contaDoc.exists) {
+        const dadosConta = contaDoc.data() || {};
+        if (dadosConta.familiaId) {
+          famIdResolvido = dadosConta.familiaId;
+        }
+      }
+    } catch (errConta) {
+      console.warn('Aviso ao consultar contas/{uid} no Firestore:', errConta.message || errConta);
+    }
+
+    if (!famIdResolvido) {
+      const legadoLocal = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_familia_id'));
+      let temLegadoAlex = Boolean(legadoLocal && legadoLocal === 'familia-alex-gabi');
+
+      if (!temLegadoAlex) {
+        try {
+          const docLegado = await fbDb.collection('usuarios').doc('familia-alex-gabi').get();
+          if (docLegado && docLegado.exists) {
+            // Se o usuário está acessando a base legada do Alex e Gabi, preserva
+            temLegadoAlex = true;
+          }
+        } catch (errLegado) {
+          console.warn('Aviso ao checar doc legado familia-alex-gabi:', errLegado.message || errLegado);
+        }
+      }
+
+      if (temLegadoAlex || legadoLocal) {
+        famIdResolvido = legadoLocal || 'familia-alex-gabi';
+      } else {
+        famIdResolvido = uid;
+      }
+
+      try {
+        const nomeUsuario = user.displayName || (user.email ? user.email.split('@')[0] : 'Titular');
+        await fbDb.collection('contas').doc(uid).set({
+          familiaId: famIdResolvido,
+          nome: nomeUsuario,
+          criadoEm: new Date().toISOString(),
+          atualizadoEm: new Date().toISOString()
+        }, { merge: true });
+      } catch (errSalvarConta) {
+        console.error('Erro ao salvar mapeamento contas/{uid}:', errSalvarConta);
+      }
+    }
+  } else {
+    const legadoLocal = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_familia_id'));
+    famIdResolvido = legadoLocal || uid;
+  }
+
+  familiaId = famIdResolvido;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('dnm_familia_id', famIdResolvido);
+  }
+
+  return famIdResolvido;
+}
+
+/**
+ * Garante que o usuário logado esteja presente como membro ativo no círculo familiar.
+ */
+function garantirMembroUsuarioLogado(user) {
+  if (!user || !user.uid) return;
+  const uid = user.uid;
+
+  if (!Array.isArray(S.membrosPerfil)) S.membrosPerfil = [];
+  let membro = S.membrosPerfil.find(m => m.id === uid || m.uid === uid);
+
+  if (!membro) {
+    const nome = user.displayName || (user.email ? user.email.split('@')[0] : 'Eu');
+    const isCriador = (familiaId === uid) || (S.membrosPerfil.length === 0);
+    membro = {
+      id: uid,
+      uid: uid,
+      circuloId: S.circuloAtivoId || (S.circulos?.[0]?.id) || 'circ_1',
+      nome: nome,
+      papel: isCriador ? 'admin' : 'membro',
+      cor: '#5581E3',
+      iniciais: gerarIniciaisNome(nome),
+      aniversario: '',
+      fotoUrl: user.photoURL || ''
+    };
+    S.membrosPerfil.push(membro);
+  }
+
+  S.membroAtivoId = uid;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('dnm_meu_membro_id', uid);
+  }
+
+  if (!Array.isArray(S.membrosUids)) S.membrosUids = [];
+  if (!S.membrosUids.includes(uid)) {
+    S.membrosUids.push(uid);
+  }
+}
+
+/**
  * Escuta atualizações no Firestore em tempo real via onSnapshot.
- * Decisão de design: Atende à prioridade 4 ("E quando a Gabi logar ela tem que ter acesso e visualizar a mesma coisa que eu").
- * Permite que Alex e Gabi vejam inclusões de gastos, compras e metas mutuamente sem recarregar a tela.
- * Preserva o membro ativo do dispositivo local (dnm_meu_membro_id) para manter a visão personalizada de cada um.
+ * Permite sincronização em tempo real entre todos os aparelhos da mesma família.
  */
 function escutarSincronizacaoTempoReal() {
   if (!fbDb) return;
@@ -5881,8 +6062,7 @@ function escutarSincronizacaoTempoReal() {
       if (doc && doc.exists) {
         const dadosNuvem = doc.data();
         if (dadosNuvem) {
-          // Preserva o membro do aparelho local (Alex = m_1, Gabi = m_2)
-          const meuMembroId = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
+          const meuMembroId = (fbUser ? fbUser.uid : null) || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
           const chaveLocal = apiKey || S.apiKey;
 
           Object.assign(S, dadosNuvem);
@@ -5919,18 +6099,6 @@ function escutarSincronizacaoTempoReal() {
 function telefoneParaEmail(tel) {
   const d = (tel || '').replace(/\D/g, '');
   return d + '@negativoaomilhao.app';
-}
-
-/**
- * Detecta se o usuário que está logando é Alex ou Gabi e sincroniza o perfil do aparelho.
- */
-function detectarMembroPorIdentificador(texto) {
-  const t = (texto || '').toLowerCase();
-  if (t.includes('gabi') || t.includes('gabriela')) {
-    selecionarMembroLogin('m_2', 'Gabi');
-  } else if (t.includes('alex') || t.includes('alexsander')) {
-    selecionarMembroLogin('m_1', 'Alex');
-  }
 }
 
 /**
@@ -6190,13 +6358,71 @@ function abrirModalOpcoesFotoPerfil() {
   if (typeof openM === 'function') openM('m-opcoes-foto-perfil');
 }
 
-function aoSelecionarFotoGerenciarConta(event) {
+/**
+ * Redimensiona uma imagem utilizando Canvas para no máximo maxDim px antes de gerar dataURL base64.
+ * Decisão de design: Impede que fotos pesadas da câmera/galeria estourem o limite estrito de 1MB do documento Firestore.
+ */
+function redimensionarImagemCanvas(file, maxDim = 256) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve('');
+      return;
+    }
+    if (typeof FileReader === 'undefined' || typeof Image === 'undefined') {
+      resolve('data:image/jpeg;base64,mockRedimensionado256');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = err => {
+      console.error('Erro ao ler arquivo para redimensionamento:', err);
+      reject(err);
+    };
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onerror = err => {
+        console.error('Erro ao carregar imagem no Canvas:', err);
+        reject(err);
+      };
+      img.onload = function() {
+        let width = img.width || maxDim;
+        let height = img.height || maxDim;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          resolve(dataUrl);
+        } catch (eCanvas) {
+          console.warn('Aviso no redimensionamento canvas, usando original:', eCanvas);
+          resolve(e.target.result);
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function aoSelecionarFotoGerenciarConta(event) {
   const file = event?.target?.files?.[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const dataUrl = e.target.result;
+  try {
+    const dataUrl = await redimensionarImagemCanvas(file, 256);
     const membro = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
     if (membro) {
       membro.fotoUrl = dataUrl;
@@ -6205,8 +6431,9 @@ function aoSelecionarFotoGerenciarConta(event) {
       if (typeof renderMuralInicio === 'function') renderMuralInicio();
       if (typeof atualizarModalConfigPerfil === 'function') atualizarModalConfigPerfil();
     }
-  };
-  reader.readAsDataURL(file);
+  } catch (err) {
+    console.error('Erro ao processar imagem de perfil:', err);
+  }
 }
 
 function removerFotoPerfilGerenciar() {
@@ -6408,8 +6635,8 @@ function atualizarModalPerfilConta() {
 /**
  * Aplica máscara de telefone brasileiro em tempo real ou preserva digitação de e-mail.
  * Padrões:
- * - 11 dígitos: (11) 98814-6347
- * - 10 dígitos: (11) 8814-6347
+ * - 11 dígitos: (11) 99999-9999
+ * - 10 dígitos: (11) 9999-9999
  */
 function formatarTelefoneBR(valor) {
   if (!valor) return '';
@@ -6434,9 +6661,6 @@ function aoDigitarIdentificadorLogin(input) {
     if (chipsContainer) {
       chipsContainer.style.display = 'flex';
     }
-    if (typeof detectarMembroPorIdentificador === 'function') {
-      detectarMembroPorIdentificador(val);
-    }
     return;
   }
 
@@ -6446,9 +6670,6 @@ function aoDigitarIdentificadorLogin(input) {
   }
   const formatado = formatarTelefoneBR(val);
   input.value = formatado;
-  if (typeof detectarMembroPorIdentificador === 'function') {
-    detectarMembroPorIdentificador(val);
-  }
 }
 
 /**
@@ -6471,10 +6692,6 @@ function aplicarProvedorEmail(provedor) {
   const chipsContainer = document.getElementById('login-email-chips');
   if (chipsContainer) {
     chipsContainer.style.display = 'none';
-  }
-
-  if (typeof detectarMembroPorIdentificador === 'function') {
-    detectarMembroPorIdentificador(telInput.value);
   }
 
   const senhaInput = document.getElementById('login-senha');
@@ -6502,7 +6719,7 @@ function fazerCadastro() {
   if (!identificador.includes('@')) {
     const d = identificador.replace(/\D/g, '');
     if (d.length < 10) {
-      if (msg) msg.textContent = 'Digite um telefone válido com DDD (ex: (11) 98814-6347).';
+      if (msg) msg.textContent = 'Digite um telefone válido com DDD (ex: (11) 99999-9999).';
       return;
     }
     emailFormatado = telefoneParaEmail(d);
@@ -6513,8 +6730,6 @@ function fazerCadastro() {
     return;
   }
 
-  detectarMembroPorIdentificador(identificador);
-
   if (typeof firebase === 'undefined' || !firebase.auth) {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('dnm_sessao_ativa', 'true');
@@ -6524,15 +6739,13 @@ function fazerCadastro() {
     return;
   }
 
-  if (msg) msg.textContent = 'Criando conta da família...';
+  if (msg) msg.textContent = 'Criando sua conta...';
   firebase.auth().createUserWithEmailAndPassword(emailFormatado, senha)
     .then(cred => {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('dnm_sessao_ativa', 'true');
       }
       if (msg) msg.textContent = '';
-      detectarMembroPorIdentificador(cred.user?.email || identificador);
-      // Abre o app direto sem exigir que digite tudo de novo!
       S.onboardingDone = true;
       aplicarLoginGate(true);
     })
@@ -6565,13 +6778,11 @@ function fazerLogin() {
   if (!identificador.includes('@')) {
     const d = identificador.replace(/\D/g, '');
     if (d.length < 10) {
-      if (msg) msg.textContent = 'Digite um telefone válido com DDD (ex: (11) 98814-6347).';
+      if (msg) msg.textContent = 'Digite um telefone válido com DDD (ex: (11) 99999-9999).';
       return;
     }
     emailFormatado = telefoneParaEmail(d);
   }
-
-  detectarMembroPorIdentificador(identificador);
 
   if (typeof firebase === 'undefined' || !firebase.auth) {
     if (typeof localStorage !== 'undefined') {
@@ -6589,18 +6800,17 @@ function fazerLogin() {
         localStorage.setItem('dnm_sessao_ativa', 'true');
       }
       if (msg) msg.textContent = '';
-      detectarMembroPorIdentificador(cred.user?.email || identificador);
       S.onboardingDone = true;
       aplicarLoginGate(true);
     })
     .catch(e => {
       console.error('Erro no login Firebase:', e);
       if (e.code === 'auth/user-not-found') {
-        if (msg) msg.innerHTML = 'Essa conta ainda não existe. Toque em <strong>Criar Conta da Família</strong> logo abaixo.';
+        if (msg) msg.innerHTML = 'Essa conta ainda não existe. Toque em <strong>Criar Nova Conta</strong> logo abaixo.';
       } else if (e.code === 'auth/wrong-password') {
         if (msg) msg.textContent = 'Senha incorreta. Verifique e tente novamente.';
       } else if (e.code === 'auth/invalid-credential') {
-        if (msg) msg.innerHTML = 'Credenciais não encontradas ou incorretas. Se ainda não possui acesso, toque em <strong>Criar Conta da Família</strong> abaixo.';
+        if (msg) msg.innerHTML = 'Credenciais não encontradas ou incorretas. Se ainda não possui acesso, toque em <strong>Criar Nova Conta</strong> abaixo.';
       } else if (e.code === 'auth/invalid-email') {
         if (msg) msg.textContent = 'Formato de telefone ou e-mail inválido.';
       } else {
@@ -6626,7 +6836,6 @@ function fazerLoginGoogle() {
         localStorage.setItem('dnm_sessao_ativa', 'true');
       }
       if (msg) msg.textContent = '';
-      detectarMembroPorIdentificador(cred.user?.email || cred.user?.displayName || '');
       S.onboardingDone = true;
       aplicarLoginGate(true);
     })
@@ -6719,11 +6928,23 @@ function updateContaStatus() {
 }
 
 /**
- * Retorna o ID do documento compartilhado no Firestore.
- * Padrão familiar: 'familia-alex-gabi' para sincronia mútua entre Alex e Gabi.
+ * Retorna o ID do documento da família no Firestore.
+ * Prioriza dnm_familia_id do localStorage se definido, ou familiaId da conta/sessão, ou uid individual.
  */
 function docId() {
-  return familiaId || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_familia_id')) || 'familia-alex-gabi';
+  const doLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('dnm_familia_id') : null;
+  return doLocal || familiaId || (fbUser ? fbUser.uid : 'demo_local');
+}
+
+function setFamiliaId(id) {
+  familiaId = id || null;
+  if (typeof localStorage !== 'undefined') {
+    if (id) {
+      localStorage.setItem('dnm_familia_id', id);
+    } else {
+      localStorage.removeItem('dnm_familia_id');
+    }
+  }
 }
 
 async function loadFromCloud() {
@@ -6734,11 +6955,11 @@ async function loadFromCloud() {
     const doc = await fbDb.collection('usuarios').doc(id).get();
     if (doc.exists) {
       const dadosNuvem = doc.data();
-      const meuMembroId = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
+      const meuMembroId = (fbUser ? fbUser.uid : null) || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
       const chaveLocal = apiKey || S.apiKey;
 
       Object.assign(S, dadosNuvem);
-      S.membroAtivoId = meuMembroId; // Preserva membro local
+      S.membroAtivoId = meuMembroId; // Preserva membro autenticado
       if (chaveLocal && !S.apiKey) S.apiKey = chaveLocal;
 
       try {
@@ -6749,9 +6970,17 @@ async function loadFromCloud() {
         console.error('Erro ao gravar dnm_data no localStorage em loadFromCloud:', e);
       }
     } else {
-      // Primeira inicialização do documento compartilhado
+      // Primeira inicialização do documento compartilhado/individual
+      if (fbUser && fbUser.uid && id === fbUser.uid) {
+        const estadoLimpo = criarEstadoLimpoContaNova(fbUser.uid, fbUser.displayName || fbUser.email);
+        Object.assign(S, estadoLimpo);
+      }
       const dataToSync = { ...S };
       delete dataToSync.apiKey;
+      if (fbUser && fbUser.uid) {
+        if (!Array.isArray(dataToSync.membrosUids)) dataToSync.membrosUids = [];
+        if (!dataToSync.membrosUids.includes(fbUser.uid)) dataToSync.membrosUids.push(fbUser.uid);
+      }
       await fbDb.collection('usuarios').doc(id).set(dataToSync);
     }
   } catch(e) {
@@ -6881,9 +7110,7 @@ if (typeof document !== 'undefined') {
 function init() {
   try {
     if (typeof localStorage !== 'undefined') {
-      familiaId = localStorage.getItem('dnm_familia_id') || 'familia-alex-gabi';
-      localStorage.setItem('dnm_familia_id', familiaId);
-
+      familiaId = localStorage.getItem('dnm_familia_id') || null;
       const meuMembro = localStorage.getItem('dnm_meu_membro_id');
       if (meuMembro) S.membroAtivoId = meuMembro;
     }
@@ -7155,15 +7382,11 @@ function salvarModalMembro() {
   closeM('m-membro');
 }
 
-/**
- * Upload e pré-visualização de foto de perfil no modal de edição de membro.
- */
-function aoSelecionarFotoMembroModal(event) {
+async function aoSelecionarFotoMembroModal(event) {
   const file = event?.target?.files?.[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const dataUrl = e.target.result;
+  try {
+    const dataUrl = await redimensionarImagemCanvas(file, 256);
     const preview = document.getElementById('mb-foto-preview');
     const inputUrl = document.getElementById('mb-foto-url');
     const btnRemover = document.getElementById('mb-btn-remover-foto');
@@ -7173,8 +7396,9 @@ function aoSelecionarFotoMembroModal(event) {
     }
     if (inputUrl) inputUrl.value = dataUrl;
     if (btnRemover) btnRemover.style.display = 'inline-block';
-  };
-  reader.readAsDataURL(file);
+  } catch (err) {
+    console.error('Erro ao redimensionar foto do membro:', err);
+  }
 }
 
 function removerFotoMembroModal() {
@@ -7261,19 +7485,17 @@ function excluirMembroModal() {
 }
 
 function abrirModalConviteCirculo() {
-  const convite = gerarConviteCirculo();
+  const convite = typeof gerarConviteCirculo === 'function' ? gerarConviteCirculo() : null;
   if (!convite) return;
 
-  const circulo = obterCirculoAtivo();
+  const circulo = typeof obterCirculoAtivo === 'function' ? obterCirculoAtivo() : null;
   const cvCirculoNome = document.getElementById('cv-circulo-nome');
-  if (cvCirculoNome && circulo) cvCirculoNome.textContent = circulo.nome;
+  if (cvCirculoNome && circulo) cvCirculoNome.textContent = circulo.nome || 'Nossa Família';
 
   const codEl = document.getElementById('cv-codigo-txt') || document.getElementById('convite-circulo-codigo');
-  const linkEl = document.getElementById('convite-link-texto');
   const expiraEl = document.getElementById('cv-expira-txt') || document.getElementById('convite-expira-texto');
 
   if (codEl) codEl.textContent = convite.codigo;
-  if (linkEl) linkEl.value = convite.link;
   if (expiraEl) {
     const d = new Date(convite.expiraEm);
     expiraEl.textContent = `Válido até ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -7286,9 +7508,22 @@ function abrirModalConvite() {
   abrirModalConviteCirculo();
 }
 
+function abrirModalEntrarComCodigo() {
+  abrirModalConviteCirculo();
+  setTimeout(() => {
+    const inp = document.getElementById('input-codigo-entrar-familia');
+    if (inp) {
+      inp.focus();
+      if (typeof inp.scrollIntoView === 'function') {
+        inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, 100);
+}
+
 function copiarCodigoConvite() {
   const codEl = document.getElementById('cv-codigo-txt') || document.getElementById('convite-circulo-codigo');
-  const codigo = codEl ? codEl.textContent : '';
+  const codigo = codEl ? codEl.textContent.trim() : '';
   if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(codigo).catch(err => console.error('Erro ao copiar código:', err));
   }
@@ -7301,6 +7536,343 @@ function copiarLinkConvite() {
 
 function gerarNovoConviteModal() {
   abrirModalConviteCirculo();
+  exibirToastNotificacao('Novo código gerado com sucesso! ✨', '🔄');
+}
+
+/**
+ * Compartilha o código de ingresso familiar via Web Share API ou direciona para o WhatsApp.
+ */
+async function compartilharCodigoFamilia() {
+  const codEl = document.getElementById('cv-codigo-txt');
+  const codigo = codEl ? codEl.textContent.trim() : '';
+  if (!codigo || codigo === 'FAM-XXXXXX') return;
+
+  const textoCompartilhar = `Oi! Entre na nossa família no Do Negativo ao Milhão usando o código: ${codigo}. Ele é válido por 7 dias!`;
+
+  if (typeof navigator !== 'undefined' && navigator.share) {
+    try {
+      await navigator.share({
+        title: 'Código da Família - Do Negativo ao Milhão',
+        text: textoCompartilhar
+      });
+      return;
+    } catch (errShare) {
+      if (errShare.name !== 'AbortError') {
+        console.warn('Fallback do navigator.share:', errShare);
+      } else {
+        return;
+      }
+    }
+  }
+
+  // Fallback para envio direto pelo WhatsApp
+  const urlWhats = `https://api.whatsapp.com/send?text=${encodeURIComponent(textoCompartilhar)}`;
+  if (typeof window !== 'undefined') {
+    window.open(urlWhats, '_blank');
+  }
+}
+
+/**
+ * Função pura de merge (JUNTAR dados, não substituir).
+ * Atende com precisão às regras do Alexsander e da Stella:
+ * - Mescla por id, gerando novos ids para os itens entrantes em caso de colisão e preservando referências (cartões, faturas, carteiras).
+ * - Ignora dados de seed/exemplo (ev_padrao_*, lst_*_padrao, aniv_*, cont_emergencia_*, meta_fam_padrao_*, msg_inicio_*).
+ * - Preenche titular com o nome do membro entrante quando estiver vazio nos lançamentos financeiros.
+ * - Preserva configurações da família (categorias, tetos, tipos de dívida) e inclui apenas categorias/tipos novos.
+ * - Adiciona o usuário em membrosPerfil como 'membro' e em membrosUids.
+ *
+ * @param {object} dadosFamilia - Dados atuais do documento da família de destino
+ * @param {object} dadosIndividuais - Dados da conta individual que está ingressando
+ * @param {object} usuarioEntrante - Dados do usuário autenticado ({ uid, nome, displayName, email })
+ * @returns {object} Dados finais consolidados da família
+ */
+function mesclarDadosFamilia(dadosFamilia, dadosIndividuais, usuarioEntrante) {
+  const resultado = JSON.parse(JSON.stringify(dadosFamilia || {}));
+  const entrante = JSON.parse(JSON.stringify(dadosIndividuais || {}));
+  const nomeUsuario = usuarioEntrante?.displayName || usuarioEntrante?.nome || (usuarioEntrante?.email ? usuarioEntrante.email.split('@')[0] : 'Familiar');
+  const uid = usuarioEntrante?.uid || (entrante.membroAtivoId || 'm_novo');
+
+  const isSeed = id => {
+    if (!id || typeof id !== 'string') return false;
+    return id.startsWith('ev_padrao_') ||
+           (id.startsWith('lst_') && id.includes('_padrao')) ||
+           id.startsWith('aniv_') ||
+           id.startsWith('cont_emergencia_') ||
+           id.startsWith('meta_fam_padrao_') ||
+           id.startsWith('msg_inicio_');
+  };
+
+  // Mapa para remap de IDs em caso de colisão ou para manter integridade relacional
+  const mapaNovosIds = {};
+  const gerarNovoId = (prefixo, idAntigo) => {
+    const randomHex = Math.random().toString(36).substring(2, 7);
+    const novo = `${prefixo}_mrg_${Date.now()}_${randomHex}`;
+    mapaNovosIds[idAntigo] = novo;
+    return novo;
+  };
+
+  // 1. Identificar cartões e carteiras da conta entrante que colidem e gerar novos IDs
+  (entrante.cartoes || []).forEach(c => {
+    if (isSeed(c.id)) return;
+    const jaExiste = (resultado.cartoes || []).some(existente => existente.id === c.id);
+    if (jaExiste) {
+      c.id = gerarNovoId('cartao', c.id);
+    }
+  });
+
+  (entrante.carteirasBeneficio || []).forEach(w => {
+    if (isSeed(w.id)) return;
+    const jaExiste = (resultado.carteirasBeneficio || []).some(existente => existente.id === w.id);
+    if (jaExiste) {
+      w.id = gerarNovoId('benef', w.id);
+    }
+  });
+
+  // Atualizar referências nos itens dependentes da conta entrante
+  (entrante.comprasCartao || []).forEach(compra => {
+    if (mapaNovosIds[compra.cartaoId]) {
+      compra.cartaoId = mapaNovosIds[compra.cartaoId];
+    }
+  });
+  (entrante.faturasCartao || []).forEach(fat => {
+    if (mapaNovosIds[fat.cartaoId]) {
+      fat.cartaoId = mapaNovosIds[fat.cartaoId];
+    }
+  });
+  (entrante.movimentacoesBeneficio || []).forEach(mov => {
+    if (mapaNovosIds[mov.carteiraId]) {
+      mov.carteiraId = mapaNovosIds[mov.carteiraId];
+    }
+  });
+
+  // 2. Mesclar listas de entidades
+  const colecoesMesclar = [
+    { chave: 'gastos', prefixo: 'gasto', ehFinanceiro: true },
+    { chave: 'receitas', prefixo: 'rec', ehFinanceiro: true },
+    { chave: 'dividas', prefixo: 'div', ehFinanceiro: true },
+    { chave: 'cartoes', prefixo: 'cartao', ehFinanceiro: false },
+    { chave: 'comprasCartao', prefixo: 'compra', ehFinanceiro: true },
+    { chave: 'faturasCartao', prefixo: 'fat', ehFinanceiro: true },
+    { chave: 'investimentos', prefixo: 'inv', ehFinanceiro: true },
+    { chave: 'metas', prefixo: 'meta', ehFinanceiro: true },
+    { chave: 'eventos', prefixo: 'ev', ehFinanceiro: false },
+    { chave: 'listas', prefixo: 'lst', ehFinanceiro: false },
+    { chave: 'aniversarios', prefixo: 'aniv', ehFinanceiro: false },
+    { chave: 'contatos', prefixo: 'cont', ehFinanceiro: false },
+    { chave: 'documentos', prefixo: 'doc', ehFinanceiro: false },
+    { chave: 'receitasCulinarias', prefixo: 'cul', ehFinanceiro: false },
+    { chave: 'gradeHoraria', prefixo: 'grd', ehFinanceiro: false },
+    { chave: 'carteirasBeneficio', prefixo: 'benef', ehFinanceiro: false },
+    { chave: 'movimentacoesBeneficio', prefixo: 'mov', ehFinanceiro: true }
+  ];
+
+  colecoesMesclar.forEach(({ chave, prefixo, ehFinanceiro }) => {
+    if (!Array.isArray(resultado[chave])) resultado[chave] = [];
+    const itensEntrantes = Array.isArray(entrante[chave]) ? entrante[chave] : [];
+
+    itensEntrantes.forEach(item => {
+      if (isSeed(item.id)) return; // Ignora itens de demonstração/seed
+
+      const jaExiste = resultado[chave].some(existente => existente.id === item.id);
+      if (jaExiste) {
+        item.id = gerarNovoId(prefixo, item.id);
+      }
+
+      if (ehFinanceiro && (!item.titular || item.titular.trim() === '')) {
+        item.titular = nomeUsuario;
+      }
+
+      resultado[chave].push(item);
+    });
+  });
+
+  // Cardápio semanal (objeto por dias): mescla refeições faltantes
+  if (entrante.cardapio && typeof entrante.cardapio === 'object') {
+    if (!resultado.cardapio || typeof resultado.cardapio !== 'object') resultado.cardapio = {};
+    Object.keys(entrante.cardapio).forEach(dia => {
+      if (!resultado.cardapio[dia]) {
+        resultado.cardapio[dia] = entrante.cardapio[dia];
+      }
+    });
+  }
+
+  // 3. Configurações: mantém as da família e acrescenta novas por nome
+  if (Array.isArray(entrante.categorias)) {
+    if (!Array.isArray(resultado.categorias)) resultado.categorias = [];
+    entrante.categorias.forEach(cat => {
+      const nomeCat = typeof cat === 'string' ? cat : cat.nome;
+      const jaTem = resultado.categorias.some(c => (typeof c === 'string' ? c : c.nome) === nomeCat);
+      if (!jaTem && nomeCat) {
+        resultado.categorias.push(cat);
+      }
+    });
+  }
+
+  if (Array.isArray(entrante.tiposDivida)) {
+    if (!Array.isArray(resultado.tiposDivida)) resultado.tiposDivida = [];
+    entrante.tiposDivida.forEach(tp => {
+      const nomeTp = typeof tp === 'string' ? tp : tp.nome;
+      const jaTem = resultado.tiposDivida.some(t => (typeof t === 'string' ? t : t.nome) === nomeTp);
+      if (!jaTem && nomeTp) {
+        resultado.tiposDivida.push(tp);
+      }
+    });
+  }
+
+  // 4. Membros: adiciona usuário em membrosPerfil e membrosUids
+  if (!Array.isArray(resultado.membrosPerfil)) resultado.membrosPerfil = [];
+  const jaMembro = resultado.membrosPerfil.find(m => m.id === uid || m.uid === uid);
+  if (!jaMembro) {
+    resultado.membrosPerfil.push({
+      id: uid,
+      uid: uid,
+      nome: nomeUsuario,
+      papel: 'membro',
+      cor: entrante.membrosPerfil?.[0]?.cor || '#5581E3',
+      fotoUrl: entrante.membrosPerfil?.[0]?.fotoUrl || '',
+      iniciais: gerarIniciaisNome(nomeUsuario)
+    });
+  }
+
+  if (!Array.isArray(resultado.membrosUids)) resultado.membrosUids = [];
+  if (!resultado.membrosUids.includes(uid)) {
+    resultado.membrosUids.push(uid);
+  }
+
+  return resultado;
+}
+
+/**
+ * Entra na família por código informado, realizando o MERGE com os dados existentes.
+ */
+async function entrarComCodigoFamilia(codigoInput) {
+  const codigo = String(codigoInput || '').trim().toUpperCase();
+  if (!codigo) {
+    alert('Digite o código da família (ex: FAM-XXXXXX).');
+    return;
+  }
+
+  if (!fbDb || typeof fbDb.collection !== 'function') {
+    alert('Conecte-se à internet para entrar na família.');
+    return;
+  }
+
+  try {
+    const codDoc = await fbDb.collection('codigosFamilia').doc(codigo).get();
+    if (!codDoc || !codDoc.exists) {
+      alert('Código da família não encontrado ou incorreto.');
+      return;
+    }
+
+    const infoCodigo = codDoc.data() || {};
+    if (infoCodigo.expiraEm && new Date(infoCodigo.expiraEm).getTime() < Date.now()) {
+      alert('Este código da família expirou. Peça ao administrador para gerar um novo código.');
+      return;
+    }
+
+    const novaFamiliaId = infoCodigo.familiaId;
+    if (!novaFamiliaId) {
+      alert('Código de família inválido.');
+      return;
+    }
+
+    if (novaFamiliaId === docId()) {
+      alert('Você já está conectado nesta mesma família!');
+      return;
+    }
+
+    // Contagem para resumo e confirmação
+    const isSeed = id => !id || (id || '').startsWith('ev_padrao_') || (id || '').includes('_padrao');
+    const qtdGastos = (S.gastos || []).filter(g => !isSeed(g.id)).length;
+    const qtdEventos = (S.eventos || []).filter(e => !isSeed(e.id)).length;
+    const qtdListas = (S.listas || []).filter(l => !isSeed(l.id)).length;
+
+    const mensagemConfirma = `Vamos juntar seus ${qtdGastos} gastos, ${qtdEventos} eventos e ${qtdListas} listas aos da família. Confirmar?`;
+    if (typeof confirm === 'function' && !confirm(mensagemConfirma)) {
+      return;
+    }
+
+    // Salva backup de segurança da conta individual antes do merge
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('dnm_backup_individual', JSON.stringify(S));
+      }
+    } catch (eBkp) {
+      console.warn('Aviso ao salvar backup individual:', eBkp);
+    }
+
+    const userLogado = fbUser || {
+      uid: S.membroAtivoId || 'user_local',
+      displayName: S.membrosPerfil?.[0]?.nome || 'Familiar'
+    };
+
+    const famDocRef = fbDb.collection('usuarios').doc(novaFamiliaId);
+    let dadosFinais = null;
+
+    if (typeof fbDb.runTransaction === 'function') {
+      await fbDb.runTransaction(async transaction => {
+        const docSnapshot = await transaction.get(famDocRef);
+        const dadosFamiliaExistentes = docSnapshot.exists ? docSnapshot.data() : {};
+        dadosFinais = mesclarDadosFamilia(dadosFamiliaExistentes, S, userLogado);
+        delete dadosFinais.apiKey;
+        transaction.set(famDocRef, dadosFinais, { merge: true });
+
+        if (userLogado.uid) {
+          const contaRef = fbDb.collection('contas').doc(userLogado.uid);
+          transaction.set(contaRef, {
+            familiaId: novaFamiliaId,
+            atualizadoEm: new Date().toISOString()
+          }, { merge: true });
+        }
+      });
+    } else {
+      const docSnapshot = await famDocRef.get();
+      const dadosFamiliaExistentes = docSnapshot.exists ? docSnapshot.data() : {};
+      dadosFinais = mesclarDadosFamilia(dadosFamiliaExistentes, S, userLogado);
+      delete dadosFinais.apiKey;
+      await famDocRef.set(dadosFinais, { merge: true });
+      if (userLogado.uid) {
+        await fbDb.collection('contas').doc(userLogado.uid).set({
+          familiaId: novaFamiliaId,
+          atualizadoEm: new Date().toISOString()
+        }, { merge: true });
+      }
+    }
+
+    // Atualiza estado local e listener de tempo real
+    familiaId = novaFamiliaId;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('dnm_familia_id', novaFamiliaId);
+      localStorage.setItem('dnm_data', JSON.stringify(dadosFinais));
+    }
+    Object.assign(S, dadosFinais);
+    S.membroAtivoId = userLogado.uid;
+
+    if (unsubscribeSnapshot) {
+      try { unsubscribeSnapshot(); } catch (eUnsub) { console.error('Erro ao cancelar snapshot anterior:', eUnsub); }
+      unsubscribeSnapshot = null;
+    }
+    escutarSincronizacaoTempoReal();
+
+    if (typeof closeM === 'function') closeM('m-convite-circulo');
+    if (typeof render === 'function') render();
+    updateFamiliaStatus();
+
+    if (typeof exibirToastNotificacao === 'function') {
+      exibirToastNotificacao('Dados mesclados com a família com sucesso! ✨', '🎉');
+    } else {
+      alert('Dados mesclados com a família com sucesso!');
+    }
+  } catch (err) {
+    console.error('Erro ao entrar com código da família:', err);
+    alert('Erro ao entrar na família: ' + (err.message || err));
+  }
+}
+
+function acionarEntrarComCodigoFamilia() {
+  const inp = document.getElementById('input-codigo-entrar-familia');
+  const cod = inp ? inp.value.trim() : '';
+  entrarComCodigoFamilia(cod);
 }
 
 function abrirModalNotifPrefs() {
@@ -19158,7 +19730,18 @@ if (typeof module !== 'undefined' && module.exports) {
     deixarGrupoFamiliar,
     aoAlternarSwitchNotificacoes,
     abrirModalEscolherAvatar,
-    selecionarAvatarIlustrado,
+    // Nova Arquitetura de Contas, Código de Família e Merge
+    gerarCodigoFamilia,
+    compartilharCodigoFamilia,
+    mesclarDadosFamilia,
+    entrarComCodigoFamilia,
+    acionarEntrarComCodigoFamilia,
+    abrirModalEntrarComCodigo,
+    resolverOuCriarContaFamilia,
+    garantirMembroUsuarioLogado,
+    criarEstadoLimpoContaNova,
+    redimensionarImagemCanvas,
+    setFamiliaId,
     AVATARES_ILUSTRADOS_LISTA,
     CORES_PALETA_MEMBRO,
     getState: () => S,
@@ -19219,5 +19802,16 @@ if (typeof window !== 'undefined') {
   window.selecionarAvatarIlustrado = selecionarAvatarIlustrado;
   window.AVATARES_ILUSTRADOS_LISTA = AVATARES_ILUSTRADOS_LISTA;
   window.CORES_PALETA_MEMBRO = CORES_PALETA_MEMBRO;
+  window.gerarCodigoFamilia = gerarCodigoFamilia;
+  window.compartilharCodigoFamilia = compartilharCodigoFamilia;
+  window.mesclarDadosFamilia = mesclarDadosFamilia;
+  window.entrarComCodigoFamilia = entrarComCodigoFamilia;
+  window.acionarEntrarComCodigoFamilia = acionarEntrarComCodigoFamilia;
+  window.abrirModalEntrarComCodigo = abrirModalEntrarComCodigo;
+  window.resolverOuCriarContaFamilia = resolverOuCriarContaFamilia;
+  window.garantirMembroUsuarioLogado = garantirMembroUsuarioLogado;
+  window.criarEstadoLimpoContaNova = criarEstadoLimpoContaNova;
+  window.redimensionarImagemCanvas = redimensionarImagemCanvas;
+  window.setFamiliaId = setFamiliaId;
 }
 

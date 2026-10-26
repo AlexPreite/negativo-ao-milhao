@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <meta name="theme-color" content="#0a0a0a"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -59,7 +59,7 @@
   #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: 430px; margin: 0 auto; position: relative; background: var(--bg); }
   
   /* TOP BAR FAMILIAR */
-  #header-top-bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 8px; flex-shrink: 0; }
+  #header-top-bar { display: flex; justify-content: space-between; align-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) 20px 8px; flex-shrink: 0; }
   .circulo-selector-btn { display: flex; align-items: center; gap: 6px; background: var(--bg2); border: 1px solid var(--border); padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; box-shadow: var(--card-shadow); }
   .top-bar-actions { display: flex; align-items: center; gap: 8px; }
   .icon-btn-circle { width: 38px; height: 38px; border-radius: 50%; background: var(--bg2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--text); cursor: pointer; position: relative; box-shadow: var(--card-shadow); }
@@ -208,9 +208,25 @@
   .btn-primary { background: var(--text); color: var(--bg); border-color: transparent; font-weight: 600; }
 
   /* MODAL */
-  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: flex-end; justify-content: center; }
+  .modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200;
+    align-items: flex-end; justify-content: center;
+    padding-top: max(16px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+  }
   .modal-bg.open { display: flex; }
-  .modal { background: var(--bg2); border-radius: 20px 20px 0 0; padding: 20px 20px 40px; width: 100%; max-width: 430px; max-height: 88vh; overflow-y: auto; border-top: 1px solid var(--border2); }
+  .modal {
+    background: var(--bg2); border-radius: 20px 20px 0 0;
+    padding: 20px 20px max(24px, env(safe-area-inset-bottom, 0px));
+    width: 100%; max-width: 430px;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px);
+    overflow-y: auto; border-top: 1px solid var(--border2);
+  }
+  .modal-header-sticky {
+    position: sticky; top: 0; background: var(--bg2); z-index: 10;
+    margin-top: -20px; padding-top: 20px; margin-bottom: 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
   .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
   .modal-close { float: right; cursor: pointer; color: var(--muted); font-size: 24px; line-height: 1; }
   .input-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
@@ -687,24 +703,6 @@
       <p class="sub">Organizador Familiar & Finanças Compartilhadas</p>
     </div>
 
-    <!-- SELETOR RÁPIDO: QUEM É VOCÊ NA FAMÍLIA? -->
-    <div style="text-align:left;margin-top:2px;">
-      <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:block;">
-        👤 Quem é você na família?
-      </label>
-      <div style="display:flex;gap:8px;">
-        <div class="login-membro-chip sel" id="chip-login-alex" onclick="selecionarMembroLogin('m_1', 'Alex')">
-          👑 Alex
-        </div>
-        <div class="login-membro-chip" id="chip-login-gabi" onclick="selecionarMembroLogin('m_2', 'Gabi')">
-          💜 Gabi
-        </div>
-        <div class="login-membro-chip" id="chip-login-outro" onclick="selecionarMembroLogin('outro', 'Outro')">
-          + Outro
-        </div>
-      </div>
-    </div>
-
     <!-- FORMULÁRIO DE ACESSO -->
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
       <!-- SELETOR DE PAÍS + CAMPO TELEFONE OU E-MAIL COM MÁSCARA AUTOMÁTICA -->
@@ -718,7 +716,7 @@
             <option value="+44">🇬🇧 +44</option>
           </select>
           <div class="key-input-wrap" style="flex:1;margin:0;">
-            <input type="text" id="login-tel-email" name="login-tel" placeholder="(11) 98814-6347 ou e-mail" oninput="aoDigitarIdentificadorLogin(this)" style="text-align:left;padding:13px 14px;font-size:14px;width:100%;"/>
+            <input type="text" id="login-tel-email" name="login-tel" placeholder="(00) 00000-0000 ou e-mail" oninput="aoDigitarIdentificadorLogin(this)" style="text-align:left;padding:13px 14px;font-size:14px;width:100%;"/>
           </div>
         </div>
 
@@ -748,23 +746,9 @@
       </button>
 
       <button type="button" class="btn" style="margin:0;padding:11px;font-size:13px;" onclick="fazerCadastro()">
-        Criar Conta da Família
+        Criar Nova Conta
       </button>
     </div>
-
-    <!-- SINCRONIZAÇÃO COMPARTILHADA ALEX & GABI -->
-    <details style="text-align:left;background:var(--bg3);border-radius:12px;padding:8px 12px;font-size:12px;border:1px solid var(--border);">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text);outline:none;">
-        ☁️ Círculo Compartilhado (Alex & Gabi)
-      </summary>
-      <p style="color:var(--muted);margin:6px 0 8px;line-height:1.35;font-size:11.5px;">
-        Ao entrar, este aparelho conecta automaticamente na base compartilhada da família:
-      </p>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <input type="text" id="login-codigo-familia" value="familia-alex-gabi" style="flex:1;padding:8px;font-size:12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);font-weight:700;"/>
-        <button type="button" class="btn" style="width:auto;margin:0;padding:8px 10px;font-size:11px;" onclick="salvarCodigoFamiliaLogin()">OK</button>
-      </div>
-    </details>
 
     <div style="margin-top:2px;">
       <span class="skip-btn" style="font-size:12px;cursor:pointer;color:var(--muted);" onclick="entrarModoLocal()">
@@ -1130,8 +1114,8 @@
         </div>
         <p class="big-num" style="font-size:22px;" id="fam-circulo-nome-box">Nossa Família</p>
         <div style="display:flex;gap:8px;margin-top:12px;">
-          <button type="button" class="btn btn-primary" style="margin:0;padding:9px;font-size:12px;" onclick="abrirModalConvite()">✉️ Convidar Membro</button>
-          <button type="button" class="btn" style="margin:0;padding:9px;font-size:12px;" onclick="abrirModalMembro()">+ Novo Membro</button>
+          <button type="button" class="btn btn-primary" style="margin:0;padding:9px;font-size:12px;" onclick="abrirModalConvite()">🔑 Código da Família</button>
+          <button type="button" class="btn" style="margin:0;padding:9px;font-size:12px;" onclick="abrirModalEntrarComCodigo()">🔗 Entrar com Código</button>
         </div>
       </div>
 
@@ -1463,11 +1447,17 @@
         <input type="text" id="novo-circulo-nome" placeholder="Ex: Casa na Praia, Família Silva" style="flex:1;"/>
         <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:10px 14px;font-size:13px;" onclick="salvarNovoCirculoModal()">Criar</button>
       </div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
+      <p class="card-label" style="margin-bottom:6px;">Conectar com Código da Família</p>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-primary" style="flex:1;margin:0;padding:10px;font-size:12px;" onclick="closeM('m-circulo');abrirModalConvite();">🔑 Gerar Código</button>
+        <button type="button" class="btn" style="flex:1;margin:0;padding:10px;font-size:12px;" onclick="closeM('m-circulo');abrirModalEntrarComCodigo();">🔗 Entrar com Código</button>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- MODAL MEMBRO (ADICIONAR / EDITAR) -->
+<!-- MODAL MEMBRO (GERENCIAR / EXCLUIR) -->
 <div class="modal-bg" id="m-membro">
   <div class="modal">
     <span class="modal-close" onclick="closeM('m-membro')">×</span>
@@ -1515,28 +1505,43 @@
       <input type="date" id="mb-aniversario"/>
     </div>
 
-    <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="salvarMembroModal()">Salvar Membro</button>
+    <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="salvarMembroModal()">Salvar Alterações</button>
     <button type="button" class="btn btn-r" id="mb-btn-excluir" style="display:none;margin-top:6px;" onclick="excluirMembroModal()">Excluir Membro</button>
   </div>
 </div>
 
-<!-- MODAL CONVITE DE 7 DIAS -->
+<!-- MODAL CÓDIGO DA FAMÍLIA & ENTRAR COM CÓDIGO -->
 <div class="modal-bg" id="m-convite-circulo">
-  <div class="modal">
+  <div class="modal" style="max-height:90vh; overflow-y:auto;">
     <span class="modal-close" onclick="closeM('m-convite-circulo')">×</span>
-    <p class="modal-title">✉️ Convite Familiar (Válido por 7 dias)</p>
+    <p class="modal-title">🔑 Código da Família</p>
     <p style="font-size:13px;color:var(--muted);line-height:1.4;margin-bottom:14px;">
-      Envie este código ou link para seu parceiro(a) ou familiar. Ao entrar, ele fará parte do círculo <strong id="cv-circulo-nome">Nossa Família</strong>.
+      Compartilhe este código com quem mora com você para conectarem na mesma família (<strong id="cv-circulo-nome">Nossa Família</strong>).
     </p>
 
-    <div class="card" style="text-align:center;background:var(--bg3);border:1px dashed var(--primary);padding:18px;">
+    <div class="card" style="text-align:center;background:var(--bg3);border:1px dashed var(--primary);padding:18px;margin-bottom:12px;">
       <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Código de Ingresso</p>
       <p style="font-size:26px;font-weight:800;letter-spacing:2px;color:var(--primary);margin:0;" id="cv-codigo-txt">FAM-XXXXXX</p>
       <p style="font-size:11px;color:var(--muted);margin-top:6px;" id="cv-expira-txt">Vence em: 7 dias</p>
     </div>
 
-    <button type="button" class="btn btn-primary" onclick="copiarLinkConvite()">📋 Copiar Link de Convite</button>
-    <button type="button" class="btn" style="margin-top:6px;" onclick="gerarNovoConviteModal()">🔄 Gerar Novo Código</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <button type="button" class="btn btn-primary" style="margin:0;padding:11px 12px;font-size:12px;font-weight:700;" onclick="copiarCodigoConvite()">📋 Copiar Código</button>
+      <button type="button" class="btn btn-g" style="margin:0;padding:11px 12px;font-size:12px;font-weight:700;" onclick="compartilharCodigoFamilia()">📤 Compartilhar</button>
+    </div>
+    <button type="button" class="btn" style="margin:0 0 16px;padding:9px;font-size:12px;" onclick="gerarNovoConviteModal()">🔄 Gerar Novo Código</button>
+
+    <!-- BLOCO: ENTRAR COM CÓDIGO DA FAMÍLIA (MERGE) -->
+    <div style="border-top:1px solid var(--border);padding-top:14px;text-align:left;">
+      <p style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">🔗 Tenho um código da família</p>
+      <p style="font-size:12px;color:var(--muted);line-height:1.35;margin-bottom:8px;">
+        Digite o código recebido para juntar seus dados e participar do grupo familiar:
+      </p>
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="input-codigo-entrar-familia" placeholder="Ex: FAM-AB12CD" style="flex:1;text-transform:uppercase;font-weight:700;font-size:13px;letter-spacing:1px;padding:10px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg3);color:var(--text);"/>
+        <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:10px 16px;font-size:12px;font-weight:700;" onclick="acionarEntrarComCodigoFamilia()">Entrar</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1620,9 +1625,9 @@
         <div style="font-size:26px;margin-bottom:4px;">📅</div>
         <div style="font-size:13px;font-weight:700;">Novo Evento</div>
       </button>
-      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalMembro();">
-        <div style="font-size:26px;margin-bottom:4px;">👤</div>
-        <div style="font-size:13px;font-weight:700;">Novo Membro</div>
+      <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalConvite();">
+        <div style="font-size:26px;margin-bottom:4px;">🔑</div>
+        <div style="font-size:13px;font-weight:700;">Código Família</div>
       </button>
       <button type="button" class="card" style="margin:0;text-align:center;padding:14px;cursor:pointer;" onclick="closeM('m-fab-menu');abrirModalCarteirasBeneficio();">
         <div style="font-size:26px;margin-bottom:4px;">🥗</div>
@@ -3418,8 +3423,8 @@
 
 <!-- MODAL GRADE HORÁRIA SEMANAL (Etapa 7) -->
 <div class="modal-bg" id="m-grade-horaria">
-  <div class="modal" style="max-width:560px; max-height:88vh; display:flex; flex-direction:column; padding:16px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">
+  <div class="modal" style="max-width:560px; max-height:calc(100dvh - env(safe-area-inset-top, 0px) - 24px); display:flex; flex-direction:column; padding:16px; padding-top:max(16px, env(safe-area-inset-top, 0px));">
+    <div style="position:sticky; top:0; background:var(--bg2); z-index:10; display:flex; justify-content:space-between; align-items:center; margin-top:-8px; padding-top:8px; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="font-size:22px;">🕒</span>
         <div>
@@ -3922,7 +3927,7 @@
         <!-- TELEFONE -->
         <div style="margin-bottom:12px;">
           <label style="font-size:11px; color:var(--muted); font-weight:700; display:block; margin-bottom:4px;">Telefone / WhatsApp:</label>
-          <input type="tel" id="gerenciar-conta-telefone" placeholder="(11) 98814-6347" oninput="this.value = formatarTelefoneBR(this.value)" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px;" />
+          <input type="tel" id="gerenciar-conta-telefone" placeholder="(00) 00000-0000" oninput="this.value = formatarTelefoneBR(this.value)" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px;" />
         </div>
 
         <!-- ENDEREÇO -->
