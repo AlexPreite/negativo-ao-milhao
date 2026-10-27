@@ -183,14 +183,66 @@ global.window = { secaoAtiva: 'inicio' };
 
 // Carrega o app.js em contexto controlado
 const vm = require('vm');
+
+const localStore = {};
+const mockLocalStorage = {
+  getItem: (k) => (Object.prototype.hasOwnProperty.call(localStore, k) ? localStore[k] : null),
+  setItem: (k, v) => { localStore[k] = String(v); },
+  removeItem: (k) => { delete localStore[k]; },
+  clear: () => { Object.keys(localStore).forEach(k => delete localStore[k]); }
+};
+
+const sessionStore = {};
+const mockSessionStorage = {
+  getItem: (k) => (Object.prototype.hasOwnProperty.call(sessionStore, k) ? sessionStore[k] : null),
+  setItem: (k, v) => { sessionStore[k] = String(v); },
+  removeItem: (k) => { delete sessionStore[k]; },
+  clear: () => { Object.keys(sessionStore).forEach(k => delete sessionStore[k]); }
+};
+
+const mockContasDb = {};
+const mockUsuariosDb = {};
+const mockFbDb = {
+  collection: (col) => ({
+    doc: (id) => ({
+      get: async () => {
+        if (col === 'contas') {
+          return { exists: Boolean(mockContasDb[id]), data: () => mockContasDb[id] || {} };
+        }
+        if (col === 'usuarios') {
+          return { exists: Boolean(mockUsuariosDb[id]), data: () => mockUsuariosDb[id] || {} };
+        }
+        return { exists: false, data: () => ({}) };
+      },
+      set: async (dados, opts) => {
+        if (col === 'contas') {
+          mockContasDb[id] = (opts && opts.merge) ? { ...(mockContasDb[id] || {}), ...dados } : dados;
+        }
+        if (col === 'usuarios') {
+          mockUsuariosDb[id] = (opts && opts.merge) ? { ...(mockUsuariosDb[id] || {}), ...dados } : dados;
+        }
+      }
+    })
+  })
+};
+
 const context = {
   console,
   document: domMock,
   window: global.window,
-  localStorage: {
-    getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {}
+  localStorage: mockLocalStorage,
+  sessionStorage: mockSessionStorage,
+  fbDb: mockFbDb,
+  firebase: {
+    initializeApp: () => {},
+    apps: [{}],
+    firestore: () => mockFbDb,
+    auth: () => ({
+      signOut: () => Promise.resolve(),
+      signInWithEmailAndPassword: () => Promise.resolve({ user: { uid: 'u1' } }),
+      createUserWithEmailAndPassword: () => Promise.resolve({ user: { uid: 'u2' } }),
+      onAuthStateChanged: () => {}
+    })
   },
   alert: () => {},
   confirm: () => true,
@@ -215,6 +267,9 @@ vm.runInContext(appJsContent, context);
 Object.assign(context, context.module.exports);
 if (context.window && context.window.S) {
   context.S = context.window.S;
+}
+if (context.window && context.window.setFbDbParaTestes) {
+  context.window.setFbDbParaTestes(mockFbDb);
 }
 
 test('go(id) deve registrar secaoAtiva em window e S', () => {
@@ -453,6 +508,184 @@ test('mesclarDadosFamilia() agrega dados individuais aos familiares sem perdas n
   assert.strictEqual(resultado.gastos.length, 2, 'Merge deve conter 2 gastos agregados');
   assert.strictEqual(resultado.receitas.length, 2, 'Merge deve conter 2 receitas agregadas');
   assert.ok(resultado.membrosFamilia.includes('Alex') && resultado.membrosFamilia.includes('Gabi'), 'Membros devem ser unificados');
+});
+
+// ----------------------------------------------------
+// 6. TESTES DE ISOLAMENTO DE CONTAS & SEGURANÇA NO AUTH
+// ----------------------------------------------------
+console.log('\n6. Verificação de Isolamento de Contas & Segurança no Auth:');
+
+test('isUsuarioAlex(user) identifica exclusivamente o Alexsander', () => {
+  assert.strictEqual(context.isUsuarioAlex({ email: 'alexsander.preite@icloud.com' }), true);
+  assert.strictEqual(context.isUsuarioAlex({ email: 'alexpreite@gmail.com' }), true);
+  assert.strictEqual(context.isUsuarioAlex({ phoneNumber: '+5511988146347' }), true);
+
+  assert.strictEqual(context.isUsuarioAlex({ email: 'gabi@exemplo.com' }), false);
+  assert.strictEqual(context.isUsuarioAlex({ phoneNumber: '+5511999998888' }), false);
+  assert.strictEqual(context.isUsuarioAlex(null), false);
+});
+
+test('resolverOuCriarContaFamilia(alex) preserva estritamente familia-alex-gabi', async () => {
+  const userAlex = {
+    uid: 'uid_alex_123',
+    email: 'alexsander.preite@icloud.com',
+    displayName: 'Alexsander'
+  };
+
+  const famId = await context.resolverOuCriarContaFamilia(userAlex);
+  assert.strictEqual(famId, 'familia-alex-gabi');
+  assert.strictEqual(mockContasDb['uid_alex_123'].familiaId, 'familia-alex-gabi');
+  assert.strictEqual(mockLocalStorage.getItem('dnm_familia_id'), 'familia-alex-gabi');
+});
+
+test('resolverOuCriarContaFamilia(novoUsuario) cria conta individual e apartada (uid) sem código', async () => {
+  const userNovo = {
+    uid: 'uid_gabi_nova',
+    email: 'gabi.nova@exemplo.com',
+    displayName: 'Gabi'
+  };
+
+  const famId = await context.resolverOuCriarContaFamilia(userNovo);
+  assert.strictEqual(famId, 'uid_gabi_nova', 'Usuário novo sem código deve ter família igual ao seu próprio uid');
+  assert.strictEqual(mockContasDb['uid_gabi_nova'].familiaId, 'uid_gabi_nova');
+  assert.ok(mockUsuariosDb['uid_gabi_nova'], 'Deve inicializar documento em usuarios/{uid}');
+  assert.strictEqual(mockUsuariosDb['uid_gabi_nova'].gastos.length, 0, 'Novo usuário deve ter estado limpo');
+});
+
+test('resolverOuCriarContaFamilia reseta conta contaminada não-Alex que herdou familia-alex-gabi sem código', async () => {
+  // Simula usuário que sofreu com o bug anterior
+  mockContasDb['uid_contaminada'] = {
+    familiaId: 'familia-alex-gabi',
+    nome: 'Terceiro'
+  };
+
+  const userContaminado = {
+    uid: 'uid_contaminada',
+    email: 'terceiro@exemplo.com',
+    displayName: 'Terceiro'
+  };
+
+  const famId = await context.resolverOuCriarContaFamilia(userContaminado);
+  assert.strictEqual(famId, 'uid_contaminada', 'Deve auto-resetar a conta contaminada para individual');
+  assert.strictEqual(mockContasDb['uid_contaminada'].familiaId, 'uid_contaminada');
+});
+
+test('fazerLogoffApp() limpa rigorosamente storage, reseta familiaId, S e fecha modais', () => {
+  mockLocalStorage.setItem('dnm_sessao_ativa', 'true');
+  mockLocalStorage.setItem('dnm_familia_id', 'familia-alex-gabi');
+  mockLocalStorage.setItem('dnm_data', JSON.stringify({ gastos: [1, 2] }));
+  mockLocalStorage.setItem('dnm_meu_membro_id', 'm_1');
+  mockSessionStorage.setItem('dnm_sessao_ativa', 'true');
+
+  const modaisFechados = [];
+  context.closeM = (id) => { modaisFechados.push(id); };
+
+  context.fazerLogoffApp();
+
+  assert.strictEqual(mockLocalStorage.getItem('dnm_sessao_ativa'), null);
+  assert.strictEqual(mockLocalStorage.getItem('dnm_familia_id'), null);
+  assert.strictEqual(mockLocalStorage.getItem('dnm_data'), null);
+  assert.strictEqual(mockLocalStorage.getItem('dnm_meu_membro_id'), null);
+  assert.strictEqual(mockSessionStorage.getItem('dnm_sessao_ativa'), null);
+  assert.strictEqual(context.getFamiliaId ? context.getFamiliaId() : context.window.familiaId, '');
+  assert.strictEqual(context.getFbUser ? context.getFbUser() : context.window.fbUser, null);
+  assert.ok(modaisFechados.includes('m-perfil-conta'));
+  assert.ok(modaisFechados.includes('m-gerenciar-conta'));
+  assert.ok(modaisFechados.includes('m-config-perfil-full'));
+});
+
+test('docId() blinda contra leitura de cache familia-alex-gabi em usuários não-Alex', () => {
+  // 1. Alex conectado
+  if (context.setFbUserParaTestes) {
+    context.setFbUserParaTestes({ email: 'alexsander.preite@icloud.com', uid: 'uid_alex' });
+  } else {
+    context.fbUser = { email: 'alexsander.preite@icloud.com', uid: 'uid_alex' };
+  }
+  assert.strictEqual(context.docId(), 'familia-alex-gabi');
+
+  // 2. Não-Alex com cache residual contaminado de Alex no localStorage
+  if (context.setFbUserParaTestes) {
+    context.setFbUserParaTestes({ email: 'gabi@exemplo.com', uid: 'uid_gabi' });
+  } else {
+    context.fbUser = { email: 'gabi@exemplo.com', uid: 'uid_gabi' };
+  }
+  mockLocalStorage.setItem('dnm_familia_id', 'familia-alex-gabi');
+  assert.strictEqual(context.docId(), 'uid_gabi', 'Não-Alex com cache espúrio deve retornar seu próprio uid');
+
+  // 3. Usuário legítimo em outra família
+  mockLocalStorage.setItem('dnm_familia_id', 'familia_outra_123');
+  assert.strictEqual(context.docId(), 'familia_outra_123');
+});
+
+// ----------------------------------------------------
+// 7. TESTES DE NAVEGAÇÃO, UX E BOTÕES DE RETORNO EM MODAIS
+// ----------------------------------------------------
+console.log('\n7. Verificação de UX de Retorno e Ações em Modais:');
+
+test('m-gerenciar-conta possui header sticky, botões de 44x44px e barra de ações no rodapé', () => {
+  assert.ok(htmlContent.includes('id="m-gerenciar-conta"'), 'm-gerenciar-conta deve existir');
+  assert.ok(htmlContent.includes('id="btn-salvar-gerenciar-conta-rodape"'), 'Deve possuir botão de salvar no rodapé');
+  assert.ok(htmlContent.includes('← Cancelar / Voltar'), 'Deve possuir botão cancelar/voltar no rodapé');
+  assert.ok(htmlContent.includes('position:sticky; top:0'), 'Cabeçalho de gerenciar conta deve ser sticky');
+});
+
+test('m-config-perfil-full possui botões de 44x44px, sem badge Premium e com retorno ao início', () => {
+  assert.ok(htmlContent.includes('id="m-config-perfil-full"'), 'm-config-perfil-full deve existir');
+  assert.ok(htmlContent.includes('← Voltar ao Início'), 'Deve possuir botão Voltar ao Início no rodapé');
+  assert.ok(!htmlContent.includes('Assinatura Premium'), 'Item Assinatura Premium deve ter sido removido a pedido de Alex');
+});
+
+test('m-convite-circulo e m-escolher-avatar possuem botões claros de voltar no topo e rodapé', () => {
+  assert.ok(htmlContent.includes('id="m-convite-circulo"'), 'm-convite-circulo deve existir');
+  assert.ok(htmlContent.includes('← Voltar para Configurações'), 'm-convite-circulo deve ter botão Voltar para Configurações');
+  assert.ok(htmlContent.includes('id="m-escolher-avatar"'), 'm-escolher-avatar deve existir');
+  assert.ok(htmlContent.includes('← Voltar para Gerenciar Conta'), 'm-escolher-avatar deve ter botão Voltar para Gerenciar Conta');
+});
+
+// ----------------------------------------------------
+// 8. TESTES DO AGENTE FINANCEIRO / CHAT LIMPO DIÁRIO
+// ----------------------------------------------------
+console.log('\n8. Verificação do Agente Financeiro / Chat Limpo Diário:');
+
+test('renderChat() exibe apenas mensagens do dia atual e ignora mensagens de dias anteriores', () => {
+  const S = context.getState ? context.getState() : (context.window.S || context.S);
+  context.S = S;
+  const hoje = new Date().toISOString().slice(0, 10);
+  S.chat = [
+    { role: 'user', parts: [{ text: 'Pergunta de ontem' }], data: '2026-01-01' },
+    { role: 'model', parts: [{ text: 'Resposta de ontem' }], data: '2026-01-01' },
+    { role: 'user', parts: [{ text: 'Pergunta de hoje' }], data: hoje },
+    { role: 'model', parts: [{ text: 'Resposta de hoje' }], data: hoje }
+  ];
+
+  context.renderChat();
+  const htmlChat = domMock.getElementById('chat-msgs').innerHTML;
+
+  assert.ok(htmlChat.includes('Pergunta de hoje'), 'Mensagem de hoje deve estar visível');
+  assert.ok(htmlChat.includes('Resposta de hoje'), 'Resposta de hoje deve estar visível');
+  assert.ok(!htmlChat.includes('Pergunta de ontem'), 'Mensagem de ontem NÃO deve estar visível');
+  assert.ok(!htmlChat.includes('Resposta de ontem'), 'Resposta de ontem NÃO deve estar visível');
+});
+
+test('iniciarNovoChatIA() zera S.chat e atualiza renderChat() com estado limpo', () => {
+  const S = context.getState ? context.getState() : (context.window.S || context.S);
+  context.S = S;
+  S.chat = [{ role: 'user', parts: [{ text: 'Mensagem' }], data: new Date().toISOString().slice(0, 10) }];
+  context.iniciarNovoChatIA();
+
+  assert.strictEqual(S.chat.length, 0, 'S.chat deve estar vazio após iniciarNovoChatIA');
+  const htmlChat = domMock.getElementById('chat-msgs').innerHTML;
+  assert.ok(htmlChat.includes('Use as sugestões acima'), 'Chat deve exibir tela inicial limpa');
+});
+
+test('Botão Novo Chat está presente no cabeçalho do Agente Norte no HTML', () => {
+  assert.ok(htmlContent.includes('iniciarNovoChatIA()'), 'Botão iniciarNovoChatIA deve estar presente no HTML');
+  assert.ok(htmlContent.includes('✨ Novo Chat'), 'Texto ✨ Novo Chat deve estar visível');
+});
+
+test('Não devem existir anotações pendentes // VERIFICAR: no código', () => {
+  assert.strictEqual(appJsContent.includes('// VERIFICAR:'), false, 'Não deve conter // VERIFICAR: em app.js');
+  assert.strictEqual(htmlContent.includes('// VERIFICAR:'), false, 'Não deve conter // VERIFICAR: em index.html');
 });
 
 console.log('\n====================================================');

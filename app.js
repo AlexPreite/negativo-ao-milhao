@@ -5972,23 +5972,72 @@ function criarEstadoLimpoContaNova(uidOuObj, nomeUsuario = 'Eu') {
 }
 
 /**
- * Resolve a família vinculada ao usuário logado seguindo a ordem estrita do contrato:
- * 1. Se contas/{uid} existe, usa o familiaId cadastrado.
- * 2. Senão, se existir legado local (dnm_familia_id) ou base familia-alex-gabi vinculada:
- *    adota esse id e grava em contas/{uid} (CRÍTICO: nunca perde o histórico do Alex).
- * 3. Senão, conta nova individual: familiaId = uid, estado inicial limpo.
+ * Identifica se o usuário autenticado é o Alexsander (titular original dos dados históricos).
+ * Decisão de design: Garante que o Alex sempre seja mapeado para 'familia-alex-gabi' no Firestore,
+ * recuperando todo o histórico de receitas, dívidas e gastos.
+ */
+function isUsuarioAlex(user) {
+  if (!user) return false;
+  const email = (user.email || '').toLowerCase().trim();
+  const phone = (user.phoneNumber || '').replace(/\D/g, '');
+  return email === 'alexsander.preite@icloud.com' ||
+         email.includes('alexpreite') ||
+         phone.includes('988146347');
+}
+
+/**
+ * Resolve a família vinculada ao usuário logado seguindo a ordem estrita de segurança e isolamento:
+ * 1. Se for o Alex (titular original), SEMPRE aponta para 'familia-alex-gabi', preservando 100% dos dados.
+ * 2. Se for outro usuário (ex: Gabi ao criar conta individual):
+ *    - Se possuir registro em contas/{uid} apontando para 'familia-alex-gabi' SEM ter usado código de convite,
+ *      trata como contaminação do bug anterior e reseta imediatamente para conta individual (uid).
+ *    - Se possuir familiaId legítimo (via código ou individual), utiliza-o.
+ *    - Senão, inicializa como conta individual (uid) com estado limpo em contas/{uid} e usuarios/{uid}.
  */
 async function resolverOuCriarContaFamilia(user) {
   if (!user || !user.uid) return null;
   const uid = user.uid;
   let famIdResolvido = null;
 
+  // 1. Alexsander (Titular Original): DEVE SEMPRE apontar para 'familia-alex-gabi'
+  // Preserva integralmente todo o histórico de receitas, despesas, dívidas e investimentos do Alex
+  if (isUsuarioAlex(user)) {
+    famIdResolvido = 'familia-alex-gabi';
+    if (fbDb && typeof fbDb.collection === 'function') {
+      try {
+        const nomeUsuario = user.displayName || 'Alexsander';
+        await fbDb.collection('contas').doc(uid).set({
+          familiaId: 'familia-alex-gabi',
+          nome: nomeUsuario,
+          email: user.email || '',
+          atualizadoEm: new Date().toISOString()
+        }, { merge: true });
+      } catch (errAlexConta) {
+        console.warn('Aviso ao sincronizar conta do Alex no Firestore:', errAlexConta.message || errAlexConta);
+      }
+    }
+    familiaId = famIdResolvido;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('dnm_familia_id', famIdResolvido);
+    }
+    return famIdResolvido;
+  }
+
+  // 2. Para outros usuários (ex: Gabi ou terceiros cadastrados individualmente):
   if (fbDb && typeof fbDb.collection === 'function') {
     try {
       const contaDoc = await fbDb.collection('contas').doc(uid).get();
       if (contaDoc && contaDoc.exists) {
         const dadosConta = contaDoc.data() || {};
-        if (dadosConta.familiaId) {
+        // Se a conta apontava para 'familia-alex-gabi' sem ter usado código de convite, é contaminação do bug anterior!
+        if (dadosConta.familiaId === 'familia-alex-gabi' && !dadosConta.codigoEntradaUsado) {
+          console.warn(`[Segurança/Isolamento] Resetando conta individual contaminada ${uid} de familia-alex-gabi.`);
+          famIdResolvido = uid;
+          await fbDb.collection('contas').doc(uid).set({
+            familiaId: uid,
+            atualizadoEm: new Date().toISOString()
+          }, { merge: true });
+        } else if (dadosConta.familiaId) {
           famIdResolvido = dadosConta.familiaId;
         }
       }
@@ -5996,28 +6045,9 @@ async function resolverOuCriarContaFamilia(user) {
       console.warn('Aviso ao consultar contas/{uid} no Firestore:', errConta.message || errConta);
     }
 
+    // Se ainda não tiver família resolvida, é conta nova individual
     if (!famIdResolvido) {
-      const legadoLocal = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_familia_id'));
-      let temLegadoAlex = Boolean(legadoLocal && legadoLocal === 'familia-alex-gabi');
-
-      if (!temLegadoAlex) {
-        try {
-          const docLegado = await fbDb.collection('usuarios').doc('familia-alex-gabi').get();
-          if (docLegado && docLegado.exists) {
-            // Se o usuário está acessando a base legada do Alex e Gabi, preserva
-            temLegadoAlex = true;
-          }
-        } catch (errLegado) {
-          console.warn('Aviso ao checar doc legado familia-alex-gabi:', errLegado.message || errLegado);
-        }
-      }
-
-      if (temLegadoAlex || legadoLocal) {
-        famIdResolvido = legadoLocal || 'familia-alex-gabi';
-      } else {
-        famIdResolvido = uid;
-      }
-
+      famIdResolvido = uid;
       try {
         const nomeUsuario = user.displayName || (user.email ? user.email.split('@')[0] : 'Titular');
         await fbDb.collection('contas').doc(uid).set({
@@ -6030,9 +6060,23 @@ async function resolverOuCriarContaFamilia(user) {
         console.error('Erro ao salvar mapeamento contas/{uid}:', errSalvarConta);
       }
     }
+
+    // Garante que o documento em usuarios/{famIdResolvido} existe para novas contas individuais
+    if (famIdResolvido === uid) {
+      try {
+        const userDocRef = fbDb.collection('usuarios').doc(uid);
+        const userDoc = await userDocRef.get();
+        if (!userDoc || !userDoc.exists) {
+          const novoEstado = criarEstadoLimpoContaNova(user);
+          await userDocRef.set(novoEstado);
+        }
+      } catch (errCriaDoc) {
+        console.warn('Aviso ao inicializar usuarios/{uid}:', errCriaDoc.message || errCriaDoc);
+      }
+    }
   } else {
-    const legadoLocal = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_familia_id'));
-    famIdResolvido = legadoLocal || uid;
+    // Modo local / offline
+    famIdResolvido = uid;
   }
 
   familiaId = famIdResolvido;
@@ -6306,10 +6350,10 @@ function abrirModalGerenciarConta() {
   // Preview Avatar 84px
   atualizarPreviewAvatarGerenciar(membroAtual);
 
-  // ID da conta
+  // ID da conta dinâmico (nunca exibir fallback estático com dados de outro usuário)
   const idEl = document.getElementById('gerenciar-conta-id-txt');
   if (idEl) {
-    idEl.textContent = fbUser?.email || membroAtual.telefone || 'alexsander@exemplo.com';
+    idEl.textContent = fbUser?.email || fbUser?.phoneNumber || membroAtual.email || membroAtual.telefone || 'Conta Individual';
   }
 
   // Nome
@@ -6422,6 +6466,7 @@ function salvarDadosGerenciarConta() {
   if (typeof atualizarModalConfigPerfil === 'function') atualizarModalConfigPerfil();
 
   if (typeof closeM === 'function') closeM('m-gerenciar-conta');
+  if (typeof openM === 'function') openM('m-config-perfil-full');
   if (typeof exibirToastNotificacao === 'function') {
     exibirToastNotificacao('Perfil e conta atualizados com sucesso!', '👤');
   }
@@ -6812,6 +6857,17 @@ function fazerCadastro() {
     return;
   }
 
+  // Limpeza preventiva de storage para garantir que conta recém-criada nunca herde cache de outra conta
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('dnm_familia_id');
+    localStorage.removeItem('dnm_data');
+    localStorage.removeItem('dnm_meu_membro_id');
+  }
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.clear();
+  }
+  familiaId = '';
+
   if (msg) msg.textContent = 'Criando sua conta...';
   firebase.auth().createUserWithEmailAndPassword(emailFormatado, senha)
     .then(cred => {
@@ -7040,6 +7096,8 @@ function entrarModoLocal() {
 /**
  * Realiza o logoff seguro do usuário no aparelho e volta à tela de login.
  * Decisão de design: Atende à prioridade 2 ("E também não tem aonde fazer logoff").
+ * Limpa integralmente resíduos de família, membros e dados de cache no storage local,
+ * reseta o estado S para visitante e fecha todos os modais de conta.
  */
 function fazerLogoffApp() {
   if (typeof confirm === 'function') {
@@ -7060,15 +7118,32 @@ function fazerLogoffApp() {
   }
 
   fbUser = null;
+  if (typeof window !== 'undefined') window.fbUser = null;
+  familiaId = '';
+  if (typeof window !== 'undefined') window.familiaId = '';
+
+  // Limpeza profunda de storage para isolamento estrito entre contas
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('dnm_sessao_ativa');
+    localStorage.removeItem('dnm_familia_id');
+    localStorage.removeItem('dnm_data');
+    localStorage.removeItem('dnm_meu_membro_id');
   }
   if (typeof sessionStorage !== 'undefined') {
-    sessionStorage.removeItem('dnm_sessao_ativa');
+    sessionStorage.clear();
   }
 
+  // Reseta estado global na memória para visitante limpo
+  if (typeof criarEstadoLimpoContaNova === 'function') {
+    S = criarEstadoLimpoContaNova('visitante', 'Visitante');
+    if (typeof window !== 'undefined') window.S = S;
+  }
+
+  // Fecha todos os modais de perfil/gerenciar conta
   if (typeof closeM === 'function') {
     closeM('m-perfil-conta');
+    closeM('m-gerenciar-conta');
+    closeM('m-config-perfil-full');
   }
 
   if (typeof document !== 'undefined') {
@@ -7076,6 +7151,10 @@ function fazerLogoffApp() {
     if (senhaEl) senhaEl.value = '';
     const msgEl = document.getElementById('login-msg');
     if (msgEl) msgEl.textContent = 'Você saiu da conta.';
+  }
+
+  if (typeof render === 'function') {
+    try { render(); } catch (eRender) { console.warn('Aviso ao renderizar após logoff:', eRender); }
   }
 
   aplicarLoginGate(false);
@@ -7093,15 +7172,38 @@ function updateContaStatus() {
 
 /**
  * Retorna o ID do documento da família no Firestore.
- * Prioriza dnm_familia_id do localStorage se definido, ou familiaId da conta/sessão, ou uid individual.
+ * Prioriza identidade do Alex para base histórica unificada 'familia-alex-gabi'.
+ * Para outros usuários, bloqueia fallback espúrio de 'familia-alex-gabi' herdado de storage.
  */
 function docId() {
+  const usuario = fbUser || (typeof window !== 'undefined' ? window.fbUser : null);
+  if (usuario && isUsuarioAlex(usuario)) {
+    return 'familia-alex-gabi';
+  }
   const doLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('dnm_familia_id') : null;
-  return doLocal || familiaId || (fbUser ? fbUser.uid : 'demo_local');
+  // Blindagem de segurança: impede que usuário não-Alex herde cache residual da família do Alex
+  if (doLocal === 'familia-alex-gabi' && (!usuario || !isUsuarioAlex(usuario))) {
+    return (usuario ? usuario.uid : (familiaId && familiaId !== 'familia-alex-gabi' ? familiaId : 'demo_local'));
+  }
+  return doLocal || familiaId || (usuario ? usuario.uid : 'demo_local');
+}
+
+function getFamiliaId() {
+  return familiaId;
+}
+
+function getFbUser() {
+  return fbUser;
+}
+
+function setFbUserParaTestes(user) {
+  fbUser = user;
+  if (typeof window !== 'undefined') window.fbUser = user;
 }
 
 function setFamiliaId(id) {
   familiaId = id || null;
+  if (typeof window !== 'undefined') window.familiaId = id || null;
   if (typeof localStorage !== 'undefined') {
     if (id) {
       localStorage.setItem('dnm_familia_id', id);
@@ -8010,6 +8112,7 @@ async function entrarComCodigoFamilia(codigoInput) {
           const contaRef = fbDb.collection('contas').doc(userLogado.uid);
           transaction.set(contaRef, {
             familiaId: novaFamiliaId,
+            codigoEntradaUsado: codigo,
             atualizadoEm: new Date().toISOString()
           }, { merge: true });
         }
@@ -8023,6 +8126,7 @@ async function entrarComCodigoFamilia(codigoInput) {
       if (userLogado.uid) {
         await fbDb.collection('contas').doc(userLogado.uid).set({
           familiaId: novaFamiliaId,
+          codigoEntradaUsado: codigo,
           atualizadoEm: new Date().toISOString()
         }, { merge: true });
       }
@@ -12944,7 +13048,9 @@ async function sendMsg() {
   const membroAtivo = typeof obterMembroAtivo === 'function' ? obterMembroAtivo() : null;
   const mId = membroAtivo ? membroAtivo.id : (S.membroAtivoId || 'm_1');
 
-  S.chat.push({ role: 'user', parts: [{ text: msg }] });
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (!Array.isArray(S.chat)) S.chat = [];
+  S.chat.push({ role: 'user', parts: [{ text: msg }], data: hoje });
   renderChat();
   const loadId = 'ld' + Date.now();
   const chatMsgsEl = document.getElementById('chat-msgs');
@@ -12964,7 +13070,7 @@ async function sendMsg() {
     const respostaLocal = typeof responderPerguntaNorteLocal === 'function'
       ? responderPerguntaNorteLocal(msg, mId)
       : 'Agente Norte ativo em modo local offline.';
-    S.chat.push({ role: 'model', parts: [{ text: respostaLocal }] });
+    S.chat.push({ role: 'model', parts: [{ text: respostaLocal }], data: hoje });
     if (typeof save === 'function') save();
     document.getElementById(loadId)?.remove();
     renderChat();
@@ -12975,23 +13081,29 @@ async function sendMsg() {
     const ctx = typeof construirContextoAgenteNorte === 'function'
       ? construirContextoAgenteNorte(mId)
       : { promptTexto: buildCtx() };
+
+    // Envia apenas o contexto e as mensagens do dia atual para manter o prompt enxuto e rápido
+    const msgsHoje = S.chat.filter(m => !m.data || m.data === hoje);
+    const primeiraMsg = msgsHoje[0]?.parts?.[0]?.text || msg;
+    const historicoHoje = msgsHoje.slice(1).map(m => ({ role: m.role, parts: m.parts }));
+
     const messages = [
-      { role: 'user', parts: [{ text: (ctx.promptTexto || buildCtx()) + '\n\nPrimeira pergunta: ' + (S.chat[0]?.parts[0]?.text || msg) }] },
-      ...S.chat.slice(1)
+      { role: 'user', parts: [{ text: (ctx.promptTexto || buildCtx()) + '\n\nPrimeira pergunta: ' + primeiraMsg }] },
+      ...historicoHoje
     ];
     const resultado = await chamarGeminiComFallback({
       contents: messages,
       generationConfig: { maxOutputTokens: 1000 }
     });
     const reply = resultado.text || (typeof responderPerguntaNorteLocal === 'function' ? responderPerguntaNorteLocal(msg, mId) : 'Resposta recebida.');
-    S.chat.push({ role: 'model', parts: [{ text: reply }] });
+    S.chat.push({ role: 'model', parts: [{ text: reply }], data: hoje });
     if (typeof save === 'function') save();
   } catch (e) {
     console.warn('Fallback para resposta determinística local do Agente Norte:', e);
     const replyFallback = typeof responderPerguntaNorteLocal === 'function'
       ? responderPerguntaNorteLocal(msg, mId)
       : ('Erro: ' + (e.message || 'Erro de conexão nos modelos Gemini.'));
-    S.chat.push({ role: 'model', parts: [{ text: replyFallback }] });
+    S.chat.push({ role: 'model', parts: [{ text: replyFallback }], data: hoje });
     if (typeof save === 'function') save();
   }
 
@@ -12999,15 +13111,37 @@ async function sendMsg() {
   renderChat();
 }
 
-function renderChat(){
-  const el=document.getElementById('chat-msgs');
-  if(!S.chat.length){el.innerHTML='<p style="color:var(--muted);font-size:14px;">Use as sugestões acima ou escreva sua pergunta.</p>';return;}
-  el.innerHTML=S.chat.map(m=>{
-    const isUser=m.role==='user';
-    const txt=(m.parts?.[0]?.text||'').replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
-    return `<div class="ai-msg ${isUser?'ai-user':'ai-bot'}">${txt}</div>`;
+/**
+ * Renderiza no chat apenas as mensagens do dia corrente para evitar poluição visual com históricos passados.
+ */
+function renderChat() {
+  const el = document.getElementById('chat-msgs');
+  if (!el) return;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const msgsHoje = (S.chat || []).filter(m => !m.data || m.data === hoje);
+
+  if (!msgsHoje.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:14px;">Use as sugestões acima ou escreva sua pergunta para o Agente Norte.</p>';
+    return;
+  }
+  el.innerHTML = msgsHoje.map(m => {
+    const isUser = m.role === 'user';
+    const txt = (m.parts?.[0]?.text || '').replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    return `<div class="ai-msg ${isUser ? 'ai-user' : 'ai-bot'}">${txt}</div>`;
   }).join('');
-  el.scrollTop=99999;
+  el.scrollTop = 99999;
+}
+
+/**
+ * Inicia uma nova conversa com o Agente Norte, limpando o histórico do chat.
+ */
+function iniciarNovoChatIA() {
+  S.chat = [];
+  if (typeof save === 'function') save();
+  renderChat();
+  if (typeof exibirToastNotificacao === 'function') {
+    exibirToastNotificacao('Novo chat iniciado! ✨', '🤖');
+  }
 }
 
 // ======================================================================
@@ -19967,8 +20101,13 @@ if (typeof module !== 'undefined' && module.exports) {
     criarEstadoLimpoContaNova,
     redimensionarImagemCanvas,
     setFamiliaId,
+    getFamiliaId,
+    getFbUser,
+    setFbUserParaTestes,
     esqueciMinhaSenha,
     solicitarResetSenhaWhatsApp,
+    isUsuarioAlex,
+    iniciarNovoChatIA,
     AVATARES_ILUSTRADOS_LISTA,
     CORES_PALETA_MEMBRO,
     getState: () => S,
@@ -19998,6 +20137,7 @@ if (typeof window !== 'undefined') {
   window.salvarCodigoFamiliaLogin = salvarCodigoFamiliaLogin;
   window.initFirebase = initFirebase;
   window.setFbDbParaTestes = setFbDbParaTestes;
+  window.setFbUserParaTestes = setFbUserParaTestes;
   window.aoSelecionarFotoMembroModal = aoSelecionarFotoMembroModal;
   window.removerFotoMembroModal = removerFotoMembroModal;
   window.aoSelecionarFotoPerfilConta = aoSelecionarFotoPerfilConta;
@@ -20042,7 +20182,11 @@ if (typeof window !== 'undefined') {
   window.criarEstadoLimpoContaNova = criarEstadoLimpoContaNova;
   window.redimensionarImagemCanvas = redimensionarImagemCanvas;
   window.setFamiliaId = setFamiliaId;
+  window.getFamiliaId = getFamiliaId;
+  window.getFbUser = getFbUser;
   window.esqueciMinhaSenha = esqueciMinhaSenha;
   window.solicitarResetSenhaWhatsApp = solicitarResetSenhaWhatsApp;
+  window.isUsuarioAlex = isUsuarioAlex;
+  window.iniciarNovoChatIA = iniciarNovoChatIA;
 }
 

@@ -1312,7 +1312,10 @@
     <div id="sec-agente" class="section section-norte" style="display:none;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; margin-top:4px;">
         <p class="sec-title" style="margin:0;">🤖 Agente Norte 2.0</p>
-        <span style="font-size:11px; background:rgba(85,129,227,0.15); color:var(--blue); font-weight:700; padding:4px 8px; border-radius:12px;">Omnisciente</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn" onclick="iniciarNovoChatIA()" style="width:auto; padding:5px 12px; font-size:12px; font-weight:700; margin:0; background:var(--bg3); border:1px solid var(--border2); border-radius:12px; cursor:pointer;" title="Limpar conversa e iniciar novo chat limpo">✨ Novo Chat</button>
+          <span style="font-size:11px; background:rgba(85,129,227,0.15); color:var(--blue); font-weight:700; padding:4px 8px; border-radius:12px;">Omnisciente</span>
+        </div>
       </div>
 
       <!-- CHIPS RÁPIDOS DA ETAPA 8 -->
@@ -1463,6 +1466,9 @@
         <button type="button" class="btn" style="flex:1;margin:0;padding:10px;font-size:12px;" onclick="closeM('m-circulo');abrirModalEntrarComCodigo();">🔗 Entrar com Código</button>
       </div>
     </div>
+    <button type="button" class="btn" onclick="closeM('m-circulo'); openM('m-config-perfil-full');" style="width:100%; margin-top:14px; padding:12px; font-size:13px; font-weight:700; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius-sm);">
+      ← Voltar para Configurações
+    </button>
   </div>
 </div>
 
@@ -1522,8 +1528,12 @@
 <!-- MODAL CÓDIGO DA FAMÍLIA & ENTRAR COM CÓDIGO -->
 <div class="modal-bg" id="m-convite-circulo">
   <div class="modal" style="max-height:90vh; overflow-y:auto;">
-    <span class="modal-close" onclick="closeM('m-convite-circulo')">×</span>
-    <p class="modal-title">🔑 Código da Família</p>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <p class="modal-title" style="margin:0;">🔑 Código da Família</p>
+      <button type="button" class="icon-btn-circle" onclick="closeM('m-convite-circulo'); openM('m-config-perfil-full');" title="Voltar para Configurações" style="width:44px; height:44px; font-size:20px; font-weight:800; cursor:pointer; color:var(--text); background:var(--bg3); border:none; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;">
+        ←
+      </button>
+    </div>
     <p style="font-size:13px;color:var(--muted);line-height:1.4;margin-bottom:14px;">
       Compartilhe este código com quem mora com você para conectarem na mesma família (<strong id="cv-circulo-nome">Nossa Família</strong>).
     </p>
@@ -1551,6 +1561,11 @@
         <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:10px 16px;font-size:12px;font-weight:700;" onclick="acionarEntrarComCodigoFamilia()">Entrar</button>
       </div>
     </div>
+
+    <!-- BOTÃO INFERIOR DE RETORNO -->
+    <button type="button" class="btn" onclick="closeM('m-convite-circulo'); openM('m-config-perfil-full');" style="width:100%; margin-top:16px; padding:12px; font-size:13px; font-weight:700; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius-sm);">
+      ← Voltar para Configurações
+    </button>
   </div>
 </div>
 
@@ -3756,13 +3771,13 @@
 <!-- ====================================================================== -->
 <div class="modal-bg" id="m-config-perfil-full">
   <div class="modal" style="max-height:92vh; padding:0; overflow:hidden; border-radius:24px; display:flex; flex-direction:column; max-width:440px;">
-    <!-- TOP BAR: HOME/VOLTAR, TÍTULO CENTRALIZADO E SAIR VERMELHO -->
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border2); background:var(--bg2);">
-      <button type="button" class="icon-btn-circle" onclick="closeM('m-config-perfil-full'); go('inicio');" title="Voltar para o Mural" style="width:36px; height:36px; background:var(--bg3); border:none; border-radius:50%; font-size:18px; cursor:pointer; color:var(--blue);">
-        🏠
+    <!-- TOP BAR STICKY: VOLTAR 44px, TÍTULO CENTRALIZADO E SAIR VERMELHO -->
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--border2); background:var(--bg2); position:sticky; top:0; z-index:10; flex-shrink:0;">
+      <button type="button" class="icon-btn-circle" onclick="closeM('m-config-perfil-full');" title="Voltar" style="width:44px; height:44px; background:var(--bg3); border:none; border-radius:50%; font-size:20px; font-weight:800; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center;">
+        ←
       </button>
       <h3 style="margin:0; font-size:17px; font-weight:800; color:var(--text); text-align:center; flex:1;">Configurações</h3>
-      <button type="button" class="icon-btn-circle" onclick="fazerLogoffApp()" title="Sair da Conta (Logoff)" style="width:36px; height:36px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:50%; font-size:18px; cursor:pointer; color:var(--red);">
+      <button type="button" class="icon-btn-circle" onclick="fazerLogoffApp()" title="Sair da Conta (Logoff)" style="width:44px; height:44px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:50%; font-size:18px; cursor:pointer; color:var(--red); display:flex; align-items:center; justify-content:center;">
         🚪
       </button>
     </div>
@@ -3779,11 +3794,10 @@
           <span style="position:absolute; bottom:-2px; right:-2px; width:22px; height:22px; border-radius:50%; background:var(--bg2); border:1px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:11px; box-shadow:0 2px 4px rgba(0,0,0,0.1);">📷</span>
         </div>
 
-        <!-- NOME, INDICADORES E BADGE PREMIUM ROXA -->
+        <!-- NOME E INDICADOR DE CONTA -->
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap; justify-content:center;">
           <h2 id="cfg-perfil-nome" style="margin:0; font-size:20px; font-weight:800; color:var(--text);">Alexsander</h2>
           <span class="badge" id="cfg-perfil-status-verif" style="background:rgba(239,68,68,0.12); color:var(--red); font-size:10.5px; font-weight:700; border:1px solid rgba(239,68,68,0.3);">Não verificado</span>
-          <span class="badge" style="background:linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%); color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:12px; letter-spacing:0.05em; box-shadow:0 2px 6px rgba(139,92,246,0.35);">PREMIUM</span>
         </div>
         <p id="cfg-perfil-contato" style="font-size:12.5px; color:var(--muted); margin:0 0 10px;">alexsander@exemplo.com</p>
 
@@ -3818,15 +3832,6 @@
               🔗 Entrar com Código
             </button>
           </div>
-        </div>
-
-        <!-- Assinatura Premium (com coroa) -->
-        <div class="settings-nav-row" onclick="exibirToastNotificacao('Plano Familiar Premium Ativo! ✨', '👑')" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:18px;">👑</span>
-            <span style="font-size:14px; font-weight:600; color:var(--text);">Assinatura Premium</span>
-          </div>
-          <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
         </div>
 
         <!-- Notificações com Toggle Switch e Gerenciar -->
@@ -3903,6 +3908,11 @@
           <span style="font-size:16px; color:var(--red); font-weight:700;">›</span>
         </div>
       </div>
+
+      <!-- BOTÃO INFERIOR VOLTAR AO INÍCIO -->
+      <button type="button" class="btn" onclick="closeM('m-config-perfil-full')" style="width:100%; margin-top:8px; margin-bottom:12px; padding:13px; font-weight:800; font-size:14px; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius-sm);">
+        ← Voltar ao Início
+      </button>
     </div>
   </div>
 </div>
@@ -3911,15 +3921,15 @@
 <!-- MODAL GERENCIAR CONTA (Prints 2 e 3 com Paleta de 16 Cores)            -->
 <!-- ====================================================================== -->
 <div class="modal-bg" id="m-gerenciar-conta">
-  <div class="modal" style="max-height:92vh; padding:0; overflow:hidden; border-radius:24px; display:flex; flex-direction:column; max-width:440px;">
-    <!-- BANNER CORAL/ROSADO DO TOPO COM X E SALVAR ✔ -->
-    <div style="background:linear-gradient(135deg, #FF6B6B 0%, #E11D48 100%); padding:16px 20px 48px; color:#fff; position:relative;">
+  <div class="modal" style="max-height:85vh; max-height:85dvh; padding:0; overflow:hidden; border-radius:24px 24px 0 0; display:flex; flex-direction:column; max-width:440px; width:100%;">
+    <!-- BANNER CORAL/ROSADO DO TOPO COM X E SALVAR ✔ (STICKY PARA NUNCA SUMIR AO ROLAR) -->
+    <div style="background:linear-gradient(135deg, #FF6B6B 0%, #E11D48 100%); padding:16px 20px 20px; color:#fff; position:sticky; top:0; z-index:10; flex-shrink:0; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <button type="button" class="icon-btn-circle" onclick="closeM('m-gerenciar-conta'); openM('m-config-perfil-full');" style="background:rgba(255,255,255,0.25); border:none; color:#fff; font-size:16px; width:34px; height:34px; border-radius:50%; cursor:pointer;">
-          ✕
+        <button type="button" class="icon-btn-circle" onclick="closeM('m-gerenciar-conta'); openM('m-config-perfil-full');" title="Voltar" style="background:rgba(255,255,255,0.25); border:none; color:#fff; font-size:20px; font-weight:800; width:44px; height:44px; border-radius:50%; cursor:pointer;">
+          ←
         </button>
         <h3 style="margin:0; font-size:17px; font-weight:800; color:#fff;">Gerenciar conta</h3>
-        <button type="button" class="icon-btn-circle" id="btn-salvar-gerenciar-conta" onclick="salvarDadosGerenciarConta()" style="background:rgba(255,255,255,0.25); border:none; color:#fff; font-size:18px; width:34px; height:34px; border-radius:50%; cursor:pointer; font-weight:800;">
+        <button type="button" class="icon-btn-circle" id="btn-salvar-gerenciar-conta" onclick="salvarDadosGerenciarConta()" title="Salvar Alterações" style="background:rgba(255,255,255,0.25); border:none; color:#fff; font-size:18px; width:44px; height:44px; border-radius:50%; cursor:pointer; font-weight:800;">
           ✔
         </button>
       </div>
@@ -4005,6 +4015,12 @@
           <input type="text" id="gerenciar-conta-endereco" placeholder="Rua, número, bairro ou condomínio" style="width:100%; padding:10px 12px; border:1px solid var(--border2); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); font-size:13px;" />
         </div>
 
+        <!-- BARRA DE AÇÕES E SALVAMENTO CLARO NO RODAPÉ -->
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px; margin-bottom:12px;">
+          <button type="button" class="btn btn-g" id="btn-salvar-gerenciar-conta-rodape" onclick="salvarDadosGerenciarConta()" style="padding:14px; font-weight:800; font-size:15px; width:100%; margin:0; box-shadow:0 4px 12px rgba(16,185,129,0.25);">💾 Salvar Alterações</button>
+          <button type="button" class="btn" onclick="closeM('m-gerenciar-conta'); openM('m-config-perfil-full');" style="padding:12px; font-size:13px; width:100%; margin:0; background:var(--bg3); border:1px solid var(--border2); font-weight:700;">← Cancelar / Voltar</button>
+        </div>
+
         <!-- BOTÃO VERMELHO: DEIXAR O GRUPO -->
         <button type="button" class="btn btn-r" id="btn-deixar-grupo" onclick="deixarGrupoFamiliar()" style="margin:8px 0 0; padding:12px; font-weight:800; font-size:13px; border-radius:var(--radius-sm);">
           Deixar o grupo
@@ -4042,10 +4058,10 @@
 <!-- MODAL ESCOLHA UM AVATAR (Print 1 - 10 Avatares Ilustrados)             -->
 <!-- ====================================================================== -->
 <div class="modal-bg" id="m-escolher-avatar">
-  <div class="modal" style="max-height:85vh; padding:0; overflow:hidden; border-radius:24px; display:flex; flex-direction:column; max-width:400px;">
+  <div class="modal" style="max-height:85vh; padding:0; overflow:hidden; border-radius:24px; display:flex; flex-direction:column; max-width:400px; width:100%;">
     <!-- HEADER -->
     <div style="display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border2); background:var(--bg2);">
-      <button type="button" class="icon-btn-circle" onclick="closeM('m-escolher-avatar'); openM('m-gerenciar-conta');" style="background:var(--bg3); border:none; font-size:16px; width:34px; height:34px; border-radius:50%; cursor:pointer;">
+      <button type="button" class="icon-btn-circle" onclick="closeM('m-escolher-avatar'); openM('m-gerenciar-conta');" title="Voltar" style="background:var(--bg3); border:none; font-size:20px; font-weight:800; width:44px; height:44px; border-radius:50%; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center;">
         ←
       </button>
       <h3 style="margin:0; font-size:17px; font-weight:800; color:var(--text);">Escolha um avatar</h3>
@@ -4055,6 +4071,13 @@
     <div style="flex:1; overflow-y:auto; padding:16px 20px;">
       <p style="font-size:12px; color:var(--muted); margin:0 0 12px; text-align:center;">Toque no avatar que melhor representa você no círculo:</p>
       <div class="avatar-grid-picker" id="grade-avatares-ilustrados"></div>
+    </div>
+
+    <!-- RODAPÉ COM BOTÃO VOLTAR -->
+    <div style="padding:12px 20px; border-top:1px solid var(--border2); background:var(--bg2);">
+      <button type="button" class="btn" onclick="closeM('m-escolher-avatar'); openM('m-gerenciar-conta');" style="width:100%; margin:0; padding:12px; font-weight:700; font-size:13px; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius-sm);">
+        ← Voltar para Gerenciar Conta
+      </button>
     </div>
   </div>
 </div>
