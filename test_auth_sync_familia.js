@@ -688,6 +688,216 @@ test('Não devem existir anotações pendentes // VERIFICAR: no código', () => 
   assert.strictEqual(htmlContent.includes('// VERIFICAR:'), false, 'Não deve conter // VERIFICAR: em index.html');
 });
 
-console.log('\n====================================================');
-console.log(` RESULTADO FINAL: ${passedTests}/${totalTests} TESTES APROVADOS COM SUCESSO!`);
-console.log('====================================================\n');
+// ----------------------------------------------------
+// 9. TESTES DO ROTEADOR GEMINI & FALLBACK RESILIENTE
+// ----------------------------------------------------
+console.log('\n9. Verificação do Roteador Gemini & Fallback de Modelos Ativos:');
+
+test('MODELOS_GEMINI_FALLBACK contém os novos modelos oficiais ativos e nenhum descontinuado', () => {
+  const modelos = context.MODELOS_GEMINI_FALLBACK || (context.window && context.window.MODELOS_GEMINI_FALLBACK);
+  assert.ok(modelos && typeof modelos.length === 'number', 'MODELOS_GEMINI_FALLBACK deve ser um array');
+  const esperados = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+  assert.deepStrictEqual(Array.from(modelos), esperados, 'Lista de fallback deve seguir exatamente a ordem oficial definida');
+
+  // Não deve conter modelos descontinuados pelo Google na v1beta
+  const descontinuados = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+  descontinuados.forEach(m => {
+    assert.strictEqual(Array.from(modelos).includes(m), false, `Modelo descontinuado ${m} não deve estar na lista ativa`);
+  });
+});
+
+test('MODELOS_GEMINI_COMPROVANTES possui a lista prioritária para leitura de recibos/notas fiscais', () => {
+  const modelosComprovantes = context.MODELOS_GEMINI_COMPROVANTES || (context.window && context.window.MODELOS_GEMINI_COMPROVANTES);
+  assert.ok(modelosComprovantes && typeof modelosComprovantes.length === 'number', 'MODELOS_GEMINI_COMPROVANTES deve ser um array');
+  assert.deepStrictEqual(Array.from(modelosComprovantes), ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']);
+});
+
+test('Existe apenas UMA definição de chamarGeminiComFallback no código de app.js', () => {
+  const freshAppJs = fs.readFileSync(appJsPath, 'utf8');
+  const matches = freshAppJs.match(/async\s+function\s+chamarGeminiComFallback/g);
+  assert.strictEqual(matches ? matches.length : 0, 1, 'Deve existir exatamente uma definição de chamarGeminiComFallback');
+});
+
+test('extrairComImagem e chamarGeminiVisionCupom utilizam MODELOS_GEMINI_COMPROVANTES', () => {
+  const freshAppJs = fs.readFileSync(appJsPath, 'utf8');
+  assert.ok(freshAppJs.includes('modelos: MODELOS_GEMINI_COMPROVANTES'), 'Deve referenciar MODELOS_GEMINI_COMPROVANTES na leitura de comprovantes e cupons');
+});
+
+(async () => {
+  await (async () => {
+    totalTests++;
+    try {
+      // Mock do fetchFn onde o primeiro modelo retorna 404 (not found) e o segundo responde com sucesso 200
+      let chamadaCount = 0;
+      const modelosChamados = [];
+      const mockFetch = async (url) => {
+        chamadaCount++;
+        const matchModelo = url.match(/\/models\/([^:]+):generateContent/);
+        const modelo = matchModelo ? matchModelo[1] : 'desconhecido';
+        modelosChamados.push(modelo);
+
+        if (modelo === 'gemini-1.5-pro' || chamadaCount === 1) {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({
+              error: {
+                message: "models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods."
+              }
+            })
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [
+              { content: { parts: [{ text: '{"descricao":"Supermercado","valor":150.50}' }] } }
+            ]
+          })
+        };
+      };
+
+      const resp = await context.chamarGeminiComFallback({
+        contents: [{ role: 'user', parts: [{ text: 'ler comprovante' }] }],
+        modelos: ['gemini-1.5-pro', 'gemini-3.8-flash'],
+        key: 'test_key_valida',
+        fetchFn: mockFetch
+      });
+
+      assert.strictEqual(resp.model, 'gemini-3.8-flash', 'Deve ter feito fallback para o segundo modelo');
+      assert.ok(resp.text.includes('Supermercado'), 'Texto retornado deve ser o do modelo que respondeu com sucesso');
+      assert.strictEqual(modelosChamados[0], 'gemini-1.5-pro');
+      assert.strictEqual(modelosChamados[1], 'gemini-3.8-flash');
+      passedTests++;
+      console.log('  ✅ [PASS] chamarGeminiComFallback faz fallback resiliente em erro 404/not found sem disparar throw prematuro');
+    } catch (err) {
+      console.error('  ❌ [FAIL] chamarGeminiComFallback faz fallback resiliente em erro 404/not found sem disparar throw prematuro');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  await (async () => {
+    totalTests++;
+    try {
+      // Mock do fetchFn onde o primeiro modelo retorna 429 cota esgotada e o segundo sucede
+      const modelosChamados = [];
+      const mockFetch = async (url) => {
+        const matchModelo = url.match(/\/models\/([^:]+):generateContent/);
+        const modelo = matchModelo ? matchModelo[1] : 'desconhecido';
+        modelosChamados.push(modelo);
+
+        if (modelosChamados.length === 1) {
+          return {
+            ok: false,
+            status: 429,
+            json: async () => ({ error: { message: 'Quota exceeded for quota metric RESOURCE_EXHAUSTED' } })
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [{ content: { parts: [{ text: 'OK Cota' }] } }]
+          })
+        };
+      };
+
+      const resp = await context.chamarGeminiComFallback({
+        contents: [{ role: 'user', parts: [{ text: 'teste cota' }] }],
+        modelos: ['gemini-3.8-flash', 'gemini-3.6-flash'],
+        key: 'test_key_valida',
+        fetchFn: mockFetch
+      });
+
+      assert.strictEqual(resp.model, 'gemini-3.6-flash');
+      assert.strictEqual(resp.text, 'OK Cota');
+      passedTests++;
+      console.log('  ✅ [PASS] chamarGeminiComFallback faz fallback em status 429/cota esgotada');
+    } catch (err) {
+      console.error('  ❌ [FAIL] chamarGeminiComFallback faz fallback em status 429/cota esgotada');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  await (async () => {
+    totalTests++;
+    try {
+      // Mock do fetchFn com API_KEY_INVALID: deve interromper imediatamente
+      let chamadas = 0;
+      const mockFetch = async () => {
+        chamadas++;
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ error: { message: 'API_KEY_INVALID: API key not valid. Please pass a valid API key.' } })
+        };
+      };
+
+      let erroCapturado = null;
+      try {
+        await context.chamarGeminiComFallback({
+          contents: [{ role: 'user', parts: [{ text: 'teste key' }] }],
+          modelos: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'],
+          key: 'chave_invalida',
+          fetchFn: mockFetch
+        });
+      } catch (e) {
+        erroCapturado = e;
+      }
+
+      assert.ok(erroCapturado, 'Deve ter disparado exceção de chave inválida');
+      assert.ok(erroCapturado.message.includes('API_KEY_INVALID'), 'Mensagem de erro deve conter API_KEY_INVALID');
+      assert.strictEqual(chamadas, 1, 'Não deve tentar outros modelos se a chave de API for inválida');
+      passedTests++;
+      console.log('  ✅ [PASS] chamarGeminiComFallback interrompe imediatamente em erro de API_KEY_INVALID sem tentar outros modelos');
+    } catch (err) {
+      console.error('  ❌ [FAIL] chamarGeminiComFallback interrompe imediatamente em erro de API_KEY_INVALID sem tentar outros modelos');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  await (async () => {
+    totalTests++;
+    try {
+      // Mock de falha em todos os modelos: deve lançar erro explicativo final
+      const mockFetch = async () => {
+        return {
+          ok: false,
+          status: 503,
+          json: async () => ({ error: { message: 'The model is overloaded. Please try again later.' } })
+        };
+      };
+
+      let erroCapturado = null;
+      try {
+        await context.chamarGeminiComFallback({
+          contents: [{ role: 'user', parts: [{ text: 'teste sobrecarga' }] }],
+          modelos: ['gemini-3.8-flash', 'gemini-3.6-flash'],
+          key: 'chave_valida',
+          fetchFn: mockFetch
+        });
+      } catch (e) {
+        erroCapturado = e;
+      }
+
+      assert.ok(erroCapturado, 'Deve lançar erro quando todos os modelos falharem');
+      assert.ok(erroCapturado.message.includes('Todos os modelos Gemini do roteador falharam'), 'Deve indicar que todos os modelos falharam');
+      passedTests++;
+      console.log('  ✅ [PASS] chamarGeminiComFallback lança erro explicativo após todos os modelos falharem');
+    } catch (err) {
+      console.error('  ❌ [FAIL] chamarGeminiComFallback lança erro explicativo após todos os modelos falharem');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  console.log('\n====================================================');
+  console.log(` RESULTADO FINAL: ${passedTests}/${totalTests} TESTES APROVADOS COM SUCESSO!`);
+  console.log('====================================================\n');
+})();

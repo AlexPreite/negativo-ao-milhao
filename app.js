@@ -27,7 +27,11 @@ function sincronizarTiposDividaMap() {
 }
 
 const PALETA_FAMILIAR = ['#5581E3', '#EC4899', '#10B981', '#F59E0B', '#8B5CF6', '#3B82F6', '#EF4444', '#14B8A6'];
-const MODELOS_GEMINI_FALLBACK = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+// Modelos ativos e oficiais no Google Gemini API v1beta (modelos legados 1.5 e 2.0-flash foram descontinuados pela Google)
+const MODELOS_GEMINI_FALLBACK = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+// Modelos prioritários para extração e OCR de comprovantes, notas fiscais e holerites
+const MODELOS_GEMINI_COMPROVANTES = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
+
 
 const MODULOS_INICIO_CATALOGO = [
   { id: 'orcamento', nome: 'Orçamento', desc: 'Saldo em Caixa Real e visão financeira', icone: '🐷', cor: '#10B981', bgIcon: 'rgba(16,185,129,0.14)', categoria: 'avancado', telaAlvo: 'resumo' },
@@ -1725,24 +1729,52 @@ function toggleFabMenu() {
 
 // --- ROTEADOR DE MODELOS GEMINI RESILIENTE (ADR-004 / ETAPA 1) ---
 /**
- * Roteador de Modelos Gemini com Fallback Ordenado.
- * Resiliente a 429 (Too Many Requests), RESOURCE_EXHAUSTED, 503 e 404.
+ * Roteador de Modelos Gemini com Fallback Ordenado e Resiliente.
+ * Trata erros de cota (429, RESOURCE_EXHAUSTED), indisponibilidade (503, 500) e
+ * modelos não encontrados ou descontinuados na API v1beta (404, 'not found', 'is not supported', 'deprecated', 'invalid model').
+ * 
+ * Regra de contingência: Quando um modelo retorna 404, 'not found' ou 'is not supported' (como ocorreu com gemini-1.5-*),
+ * o roteador registra o aviso no console e faz 'continue' imediatamente para tentar o próximo modelo da lista,
+ * sem interromper o fluxo com throw. Apenas erros definitivos de autenticação (API_KEY_INVALID) causam interrupção imediata.
+ * 
+ * @param {object} requisicao - Parâmetros da chamada contendo contents, systemInstruction, generationConfig, modelos, key e/ou fetchFn
+ * @returns {Promise<{text: string, model: string, modeloUtilizado: string, data: object, raw: object}>}
  */
-async function chamarGeminiComFallback({ contents, systemInstruction, generationConfig, fetchFn = (typeof fetch !== 'undefined' ? fetch : null) }) {
-  const chave = apiKey || (S && S.apiKey);
-  if (!chave) {
+async function chamarGeminiComFallback(requisicao = {}) {
+  // Suporte flexível tanto para objeto de parâmetros { contents, generationConfig, ... } quanto para chamada canônica
+  const {
+    contents = [],
+    systemInstruction,
+    generationConfig,
+    key,
+    modelos,
+    fetchFn = (typeof fetch !== 'undefined' ? fetch : null)
+  } = requisicao || {};
+
+  const chave = key || apiKey || (S && S.apiKey);
+  if (!chave || !chave.trim()) {
     throw new Error('Configure a Gemini API Key em Configurações para usar a inteligência artificial.');
   }
   if (!fetchFn) {
     throw new Error('Nenhum cliente fetch disponível no ambiente.');
   }
 
+  // Utiliza a lista customizada informada na chamada ou a lista global oficial de contingência
+  const listaModelos = Array.isArray(modelos) && modelos.length > 0
+    ? modelos
+    : (Array.isArray(MODELOS_GEMINI_FALLBACK) && MODELOS_GEMINI_FALLBACK.length > 0
+        ? MODELOS_GEMINI_FALLBACK
+        : ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']);
+
   let ultimoErro = null;
 
-  for (const modelo of MODELOS_GEMINI_FALLBACK) {
+  for (let i = 0; i < listaModelos.length; i++) {
+    const modeloAtual = listaModelos[i];
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${chave}`;
-      const payload = { contents };
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${encodeURIComponent(chave)}`;
+      const payload = {
+        contents: Array.isArray(contents) ? contents : [contents]
+      };
       if (systemInstruction) {
         payload.systemInstruction = { parts: [{ text: systemInstruction }] };
       }
@@ -1756,41 +1788,131 @@ async function chamarGeminiComFallback({ contents, systemInstruction, generation
         body: JSON.stringify(payload)
       });
 
-      // Se status de cota ou indisponibilidade, aciona fallback para o próximo modelo
-      if (resp.status === 429 || resp.status === 503 || resp.status === 404 || resp.status === 500) {
-        console.warn(`[Gemini Fallback] Modelo ${modelo} retornou status ${resp.status}. Tentando próximo modelo da lista...`);
+      // Se a resposta HTTP indicar erro, inspeciona o corpo da resposta
+      if (!resp.ok) {
+        let msgErro = `HTTP ${resp.status}`;
+        try {
+          const errData = await resp.json();
+          if (errData?.error?.message) {
+            msgErro = errData.error.message;
+          }
+        } catch (eParse) {
+          // Erro de parse JSON tratado explicitamente; mantém o código HTTP e texto de status
+          msgErro = `HTTP ${resp.status} ${resp.statusText || ''}`.trim();
+        }
+
+        const msgLower = msgErro.toLowerCase();
+
+        // 1. Chave de API inválida / não autorizada: interrompe imediatamente sem tentar outros modelos
+        if (msgLower.includes('api_key_invalid') || msgLower.includes('api key not valid') || msgLower.includes('apikey not valid') || msgLower.includes('invalid api key')) {
+          throw new Error(`Chave de API do Gemini inválida ou não autorizada (API_KEY_INVALID): ${msgErro}`);
+        }
+
+        // 2. Modelo descontinuado, não encontrado ou não suportado (404, not found, is not supported, deprecated, invalid model)
+        const ehNaoEncontradoOuDescontinuado =
+          resp.status === 404 ||
+          msgLower.includes('not found') ||
+          msgLower.includes('is not supported') ||
+          msgLower.includes('not supported') ||
+          msgLower.includes('deprecated') ||
+          msgLower.includes('invalid model');
+
+        if (ehNaoEncontradoOuDescontinuado) {
+          console.warn(`[Gemini Fallback] Modelo ${modeloAtual} não disponível ou descontinuado na API v1beta (${msgErro}). Alternando imediatamente para o próximo modelo...`);
+          ultimoErro = new Error(`Modelo ${modeloAtual} não disponível (${msgErro})`);
+          continue; // Pula imediatamente para a próxima opção da cascata sem travar a requisição
+        }
+
+        // 3. Limite de cota, rate limit ou sobrecarga transitória (429, 503, 500, RESOURCE_EXHAUSTED)
+        const ehCotaOuSobrecarga =
+          resp.status === 429 ||
+          resp.status === 503 ||
+          resp.status === 500 ||
+          msgLower.includes('resource_exhausted') ||
+          msgLower.includes('quota') ||
+          msgLower.includes('rate limit');
+
+        if (ehCotaOuSobrecarga) {
+          console.warn(`[Gemini Fallback] Modelo ${modeloAtual} atingiu limite/cota (${msgErro}). Alternando para o próximo modelo...`);
+          ultimoErro = new Error(`Modelo ${modeloAtual} excedeu quota (${msgErro})`);
+          continue;
+        }
+
+        // 4. Qualquer outro status de erro HTTP: loga e tenta o próximo modelo
+        console.warn(`[Gemini Fallback] Modelo ${modeloAtual} retornou erro (${msgErro}). Alternando para o próximo modelo...`);
+        ultimoErro = new Error(`Erro na API Gemini (${modeloAtual}): ${msgErro}`);
         continue;
       }
 
+      // Resposta com status 200 (OK)
       const data = await resp.json();
 
       if (data.error) {
-        const errMsg = String(data.error.message || '').toUpperCase();
-        if (errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('QUOTA') || data.error.code === 429) {
-          console.warn(`[Gemini Fallback] Cota esgotada no modelo ${modelo} (${data.error.message}). Tentando próximo...`);
+        const msgJson = String(data.error.message || '').toLowerCase();
+
+        // Erro fatal de autenticação
+        if (msgJson.includes('api_key_invalid') || msgJson.includes('api key not valid')) {
+          throw new Error(`Chave de API do Gemini inválida ou não autorizada (API_KEY_INVALID): ${data.error.message}`);
+        }
+
+        // Modelo descontinuado reportado no corpo JSON
+        const ehDescontinuadoJson =
+          msgJson.includes('not found') ||
+          msgJson.includes('is not supported') ||
+          msgJson.includes('not supported') ||
+          msgJson.includes('deprecated') ||
+          msgJson.includes('invalid model');
+
+        if (ehDescontinuadoJson) {
+          console.warn(`[Gemini Fallback] Modelo ${modeloAtual} não suportado no payload retornado (${data.error.message}). Alternando...`);
+          ultimoErro = new Error(`Modelo ${modeloAtual} não suportado: ${data.error.message}`);
           continue;
         }
-        throw new Error(data.error.message || 'Erro na resposta da API Gemini');
+
+        // Cota esgotada reportada no corpo JSON
+        const ehCotaJson =
+          msgJson.includes('resource_exhausted') ||
+          msgJson.includes('quota') ||
+          msgJson.includes('rate limit') ||
+          data.error.code === 429;
+
+        if (ehCotaJson) {
+          console.warn(`[Gemini Fallback] Cota esgotada no modelo ${modeloAtual} (${data.error.message}). Alternando...`);
+          ultimoErro = new Error(`Cota esgotada em ${modeloAtual}: ${data.error.message}`);
+          continue;
+        }
+
+        console.warn(`[Gemini Fallback] Erro na resposta do modelo ${modeloAtual}: ${data.error.message}. Tentando próximo...`);
+        ultimoErro = new Error(`Erro na API Gemini (${modeloAtual}): ${data.error.message}`);
+        continue;
       }
 
-      // Sucesso
+      // Sucesso na extração do texto
+      const textoFinal = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       return {
-        modeloUtilizado: modelo,
+        text: textoFinal,
+        model: modeloAtual,
+        modeloUtilizado: modeloAtual,
         data,
-        text: data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+        raw: data
       };
     } catch (err) {
       ultimoErro = err;
-      const msg = String(err.message || '').toUpperCase();
-      if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('QUOTA')) {
-        console.warn(`[Gemini Fallback] Falha no modelo ${modelo}. Tentando próximo...`);
-        continue;
+      const msgErr = (err?.message || '').toLowerCase();
+
+      // Erro fatal de autenticação: propaga imediatamente
+      if (msgErr.includes('api_key_invalid') || msgErr.includes('api key not valid') || msgErr.includes('chave de api do gemini inválida')) {
+        throw err;
       }
-      console.warn(`[Gemini Fallback] Erro ao chamar modelo ${modelo}:`, err);
+
+      console.warn(`[Gemini Fallback] Falha na chamada ao modelo ${modeloAtual}:`, err.message);
+      // Continua para o próximo modelo resiliente
+      continue;
     }
   }
 
-  throw new Error(`Todos os modelos Gemini do roteador falharam. Último erro: ${ultimoErro ? ultimoErro.message : 'Indisponibilidade de cota'}`);
+  // Lança erro definitivo apenas após esgotar todos os modelos da cascata
+  throw new Error(`Todos os modelos Gemini do roteador falharam. Último erro: ${ultimoErro ? ultimoErro.message : 'Indisponibilidade de modelos de IA'}`);
 }
 
 // ============================================================================
@@ -10887,6 +11009,7 @@ async function extrairComImagem(file, tipoDoc){
         { inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } }
       ]
     }],
+    modelos: MODELOS_GEMINI_COMPROVANTES,
     generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 300 }
   });
 
@@ -12931,107 +13054,9 @@ CONTEXTO: Gestão financeira familiar. Renda extra anual: 13° salário (dez), P
 Use metodologia avalanche (maior juro primeiro). Dê planos com números e datas reais quando possível.`;
 }
 
-/**
- * Executa chamadas à API Gemini com fallback resiliente entre os modelos em cascata.
- * Decisão de design: Atende à diretriz de contingência ("Sempre quando atingir o limite em um modelo de IA altere para o próximo melhor").
- * Ordem estrita: gemini-2.5-flash -> gemini-2.5-pro -> gemini-2.0-flash -> gemini-1.5-flash -> gemini-1.5-pro.
- * Em caso de status HTTP 429 (Rate Limit / Quota Exceeded), 503 (Overloaded) ou erro com indicação de cota/limite,
- * passa imediatamente para o próximo modelo sem travar a experiência do usuário.
- * 
- * @param {object} requisicao - Parâmetros da requisição contendo contents e generationConfig
- * @returns {Promise<{text: string, model: string, raw: object}>} Resposta com o texto extraído e o modelo que respondeu
- */
-async function chamarGeminiComFallback(requisicao) {
-  const chave = requisicao?.key || apiKey || S.apiKey;
-  if (!chave || !chave.trim()) {
-    throw new Error('Chave de API do Gemini não configurada.');
-  }
-
-  const corpo = {
-    contents: requisicao.contents || [],
-    ...(requisicao.generationConfig ? { generationConfig: requisicao.generationConfig } : {})
-  };
-
-  const listaModelos = Array.isArray(MODELOS_GEMINI_FALLBACK) && MODELOS_GEMINI_FALLBACK.length > 0
-    ? MODELOS_GEMINI_FALLBACK
-    : ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
-
-  let ultimoErro = null;
-
-  for (let i = 0; i < listaModelos.length; i++) {
-    const modeloAtual = listaModelos[i];
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${encodeURIComponent(chave)}`;
-
-    try {
-      const resposta = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(corpo)
-      });
-
-      // Status 429: Rate Limit / Quota Exceeded; 503: Service Unavailable; 500: Erro interno temporário
-      if (resposta.status === 429 || resposta.status === 503 || resposta.status === 500) {
-        let detalheErro = `HTTP ${resposta.status}`;
-        try {
-          const errData = await resposta.json();
-          if (errData?.error?.message) detalheErro = errData.error.message;
-        } catch (eJson) {
-          // Erro de parse JSON tratado explicitamente; mantém o código HTTP
-          detalheErro = `HTTP ${resposta.status} (corpo não-JSON)`;
-        }
-        console.warn(`[Gemini Fallback] Modelo ${modeloAtual} atingiu limite (${detalheErro}). Alternando para o próximo modelo da lista...`);
-        ultimoErro = new Error(`Modelo ${modeloAtual} excedeu quota (${detalheErro})`);
-        continue;
-      }
-
-      if (!resposta.ok) {
-        let msgErro = `HTTP ${resposta.status}`;
-        try {
-          const errData = await resposta.json();
-          if (errData?.error?.message) msgErro = errData.error.message;
-        } catch (eParse) {
-          // Erro de parse JSON tratado explicitamente
-          msgErro = `HTTP ${resposta.status} (falha ao ler mensagem de erro)`;
-        }
-
-        const msgLower = msgErro.toLowerCase();
-        if (msgLower.includes('quota') || msgLower.includes('exhausted') || msgLower.includes('rate limit')) {
-          console.warn(`[Gemini Fallback] Quota esgotada em ${modeloAtual} (${msgErro}). Alternando para o próximo modelo...`);
-          ultimoErro = new Error(`Quota esgotada em ${modeloAtual}: ${msgErro}`);
-          continue;
-        }
-
-        // Se for erro definitivo (ex: prompt inválido ou chave sem permissão), interrompe imediatamente
-        throw new Error(`Erro na API Gemini (${modeloAtual}): ${msgErro}`);
-      }
-
-      const jsonResposta = await resposta.json();
-      const textoFinal = jsonResposta.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      return {
-        text: textoFinal,
-        model: modeloAtual,
-        raw: jsonResposta
-      };
-    } catch (err) {
-      const msgErr = (err?.message || '').toLowerCase();
-      const erroTratavel = msgErr.includes('429') || msgErr.includes('quota') || msgErr.includes('exhausted') || msgErr.includes('rate limit') || msgErr.includes('503');
-
-      if (erroTratavel && i < listaModelos.length - 1) {
-        console.warn(`[Gemini Fallback] Exceção tratada em ${modeloAtual}. Tentando próximo modelo... Detalhe:`, err.message);
-        ultimoErro = err;
-        continue;
-      }
-
-      // Se for a última tentativa ou erro fatal de autenticação
-      ultimoErro = err;
-      if (msgErr.includes('api_key_invalid') || msgErr.includes('api key not valid')) {
-        throw err;
-      }
-    }
-  }
-
-  throw ultimoErro || new Error('Todos os modelos de IA da lista de contingência falharam.');
-}
+// [Gemini Fallback] A definição canônica e unificada de chamarGeminiComFallback
+// reside na linha 1730 para atender com resiliência tanto ao OCR de comprovantes/holerites,
+// quanto ao chat do Agente Norte e ao Scanner inteligente de cupom fiscal.
 
 async function ask(q) {
   const el = document.getElementById('ai-input');
@@ -14504,6 +14529,7 @@ Formato do JSON esperado:
         { inline_data: { mime_type: mimeType, data: base64 } }
       ]
     }],
+    modelos: MODELOS_GEMINI_COMPROVANTES,
     generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1200 }
   });
 
@@ -19705,6 +19731,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // Super-App Familiar v2.0 (Etapa 1)
     PALETA_FAMILIAR,
     MODELOS_GEMINI_FALLBACK,
+    MODELOS_GEMINI_COMPROVANTES,
     MODULOS_INICIO_CATALOGO,
     migrarParaUpgradeFamiliarV2,
     aplicarTema,
@@ -20119,6 +20146,7 @@ if (typeof window !== 'undefined') {
   window.S = S;
   window.go = go;
   window.MODELOS_GEMINI_FALLBACK = MODELOS_GEMINI_FALLBACK;
+  window.MODELOS_GEMINI_COMPROVANTES = MODELOS_GEMINI_COMPROVANTES;
   window.chamarGeminiComFallback = chamarGeminiComFallback;
   window.aplicarLoginGate = aplicarLoginGate;
   window.selecionarMembroLogin = selecionarMembroLogin;
