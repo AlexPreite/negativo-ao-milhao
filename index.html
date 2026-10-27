@@ -77,7 +77,7 @@
   .subnav-btn { flex-shrink: 0; padding: 6px 14px; border-radius: 18px; border: 1px solid var(--border2); background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
   .subnav-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
 
-  #content { flex: 1; overflow-y: auto; padding: 0 20px 90px; scrollbar-width: none; }
+  #content { flex: 1; overflow-y: auto; padding: 0 20px 120px; scrollbar-width: none; }
   #content::-webkit-scrollbar { display: none; }
 
   /* BOTTOM NAVIGATION BAR (PÍLULA FLUTUANTE) */
@@ -87,7 +87,7 @@
   .bottom-nav-btn.active { color: var(--primary); font-weight: 700; transform: translateY(-1px); }
 
   /* BOTÃO FAB ADICIONAR (+) */
-  #btn-fab-adicionar { position: absolute; bottom: 84px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; border: none; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 6px 18px rgba(85,129,227,0.4); z-index: 101; transition: transform 0.15s; }
+  #btn-fab-adicionar { position: absolute; bottom: 84px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; border: none; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 6px 18px rgba(85,129,227,0.4); z-index: 90; transition: transform 0.15s; }
   #btn-fab-adicionar:active { transform: scale(0.92); }
 
   /* TOAST NOTIFICAÇÃO */
@@ -795,7 +795,7 @@
         <span>🔔</span>
         <span class="notif-badge-pill" id="notif-badge-count" style="display:none;">0</span>
       </button>
-      <div class="member-avatar-btn" id="header-avatar-btn" onclick="abrirModalPerfilConta()" title="Minha Conta & Membro Ativo" style="background:#5581E3;">
+      <div class="member-avatar-btn" id="header-avatar-btn" onclick="abrirModalPerfilConta()" title="Minha Conta & Membro Ativo" style="background:#5581E3; cursor:pointer;">
         <span id="header-avatar-txt">AL</span>
         <span class="member-crown-badge" id="header-avatar-crown">👑</span>
       </div>
@@ -1363,6 +1363,8 @@
           <button class="btn btn-g" style="width:auto;margin:0;padding:12px 16px;" onclick="addTipoDivida()">Add</button>
         </div>
         <div id="lista-tipos-divida" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
       <!-- EVOLUÇÃO DO ORÇAMENTO: CICLO MENSAL / SALÁRIO (Etapa 4) -->
       <div class="card" id="card-config-orcamento">
         <p class="sec-title" style="margin-top:0;">Evolução do Orçamento & Ciclo Mensal</p>
@@ -1453,6 +1455,7 @@
         <input type="text" id="novo-circulo-nome" placeholder="Ex: Casa na Praia, Família Silva" style="flex:1;"/>
         <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:10px 14px;font-size:13px;" onclick="salvarNovoCirculoModal()">Criar</button>
       </div>
+    </div>
     <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
       <p class="card-label" style="margin-bottom:6px;">Conectar com Código da Família</p>
       <div style="display:flex;gap:8px;">
@@ -3678,6 +3681,9 @@
     <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">Detector automático de despesas recorrentes e serviços no cartão.</p>
     <div id="resumo-assinaturas-fixas-modal"></div>
     <div id="lista-assinaturas-fixas-modal" style="flex:1; overflow-y:auto; padding-right:2px;"></div>
+  </div>
+</div>
+
 <!-- MODAL PERFIL DA CONTA E LOGOFF RÁPIDO (Ponto 2.1) -->
 <div class="modal-bg" id="m-perfil-conta">
   <div class="modal" style="max-height:85vh; padding:20px;">
@@ -3746,70 +3752,91 @@
 </div>
 
 <!-- ====================================================================== -->
-<!-- MODAL COMPLETO DE CONFIGURAÇÕES & PERFIL (Print 5)                      -->
+<!-- MODAL COMPLETO DE CONFIGURAÇÕES & PERFIL (Print 6)                      -->
 <!-- ====================================================================== -->
 <div class="modal-bg" id="m-config-perfil-full">
   <div class="modal" style="max-height:92vh; padding:0; overflow:hidden; border-radius:24px; display:flex; flex-direction:column; max-width:440px;">
-    <!-- TOP BAR DO PRINT 5: HOME, TÍTULO E SAIR -->
+    <!-- TOP BAR: HOME/VOLTAR, TÍTULO CENTRALIZADO E SAIR VERMELHO -->
     <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border2); background:var(--bg2);">
-      <button type="button" class="icon-btn-circle" onclick="closeM('m-config-perfil-full'); go('inicio');" title="Voltar para o Mural" style="width:36px; height:36px; background:var(--bg3); border:none; border-radius:50%; font-size:18px; cursor:pointer;">
+      <button type="button" class="icon-btn-circle" onclick="closeM('m-config-perfil-full'); go('inicio');" title="Voltar para o Mural" style="width:36px; height:36px; background:var(--bg3); border:none; border-radius:50%; font-size:18px; cursor:pointer; color:var(--blue);">
         🏠
       </button>
-      <h3 style="margin:0; font-size:17px; font-weight:800; color:var(--text);">Configurações</h3>
-      <button type="button" class="icon-btn-circle" onclick="fazerLogoffApp()" title="Sair da Conta (Logoff)" style="width:36px; height:36px; background:var(--bg3); border:none; border-radius:50%; font-size:18px; cursor:pointer;">
+      <h3 style="margin:0; font-size:17px; font-weight:800; color:var(--text); text-align:center; flex:1;">Configurações</h3>
+      <button type="button" class="icon-btn-circle" onclick="fazerLogoffApp()" title="Sair da Conta (Logoff)" style="width:36px; height:36px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:50%; font-size:18px; cursor:pointer; color:var(--red);">
         🚪
       </button>
     </div>
 
     <div style="flex:1; overflow-y:auto; padding:20px;">
-      <!-- CARD DE PERFIL DO PRINT 5 -->
+      <!-- CARD DE PERFIL -->
       <div class="card" style="padding:18px; border-radius:20px; display:flex; flex-direction:column; align-items:center; text-align:center; background:var(--bg2); margin-bottom:18px; position:relative; box-shadow:0 4px 16px rgba(0,0,0,0.06);">
-        <!-- AVATAR 72px COM COROA -->
-        <div style="position:relative; margin-bottom:10px;">
-          <div id="cfg-perfil-avatar-preview" style="width:72px; height:72px; border-radius:50%; background:#5581E3; color:#fff; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; border:3px solid #fff; box-shadow:0 4px 12px rgba(0,0,0,0.12); background-size:cover; background-position:center;">
+        <!-- AVATAR COM COROA E CLIQUE PARA FOTO/AVATAR -->
+        <div style="position:relative; margin-bottom:10px; cursor:pointer;" onclick="abrirModalOpcoesFotoPerfil()" title="Clique para alterar foto ou avatar">
+          <div id="cfg-perfil-avatar-preview" style="width:76px; height:76px; border-radius:50%; background:#FF6B6B; color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; border:3px solid #fff; box-shadow:0 4px 14px rgba(0,0,0,0.14); background-size:cover; background-position:center; cursor:pointer;">
             AL
           </div>
-          <span id="cfg-perfil-crown" style="position:absolute; top:-6px; right:-6px; font-size:20px; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">👑</span>
+          <span id="cfg-perfil-crown" style="position:absolute; top:-6px; right:-6px; font-size:22px; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">👑</span>
+          <span style="position:absolute; bottom:-2px; right:-2px; width:22px; height:22px; border-radius:50%; background:var(--bg2); border:1px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:11px; box-shadow:0 2px 4px rgba(0,0,0,0.1);">📷</span>
         </div>
 
-        <!-- NOME, CONTATO E BADGE PREMIUM -->
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-          <h2 id="cfg-perfil-nome" style="margin:0; font-size:19px; font-weight:800; color:var(--text);">Alexsander</h2>
-          <span class="badge" style="background:linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:12px; letter-spacing:0.05em;">PREMIUM</span>
+        <!-- NOME, INDICADORES E BADGE PREMIUM ROXA -->
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap; justify-content:center;">
+          <h2 id="cfg-perfil-nome" style="margin:0; font-size:20px; font-weight:800; color:var(--text);">Alexsander</h2>
+          <span class="badge" id="cfg-perfil-status-verif" style="background:rgba(239,68,68,0.12); color:var(--red); font-size:10.5px; font-weight:700; border:1px solid rgba(239,68,68,0.3);">Não verificado</span>
+          <span class="badge" style="background:linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%); color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:12px; letter-spacing:0.05em; box-shadow:0 2px 6px rgba(139,92,246,0.35);">PREMIUM</span>
         </div>
-        <p id="cfg-perfil-contato" style="font-size:12.5px; color:var(--muted); margin:0 0 14px;">alexsander@exemplo.com</p>
+        <p id="cfg-perfil-contato" style="font-size:12.5px; color:var(--muted); margin:0 0 10px;">alexsander@exemplo.com</p>
 
-        <!-- BOTÃO DESTACADO: GERENCIAR CONTA -->
-        <button type="button" class="btn" id="btn-abrir-gerenciar-conta" onclick="abrirModalGerenciarConta()" style="width:auto; margin:0; padding:8px 22px; font-size:13px; font-weight:700; border-radius:20px; background:var(--bg3); border:1px solid var(--border2); color:var(--text);">
-          Gerenciar conta
+        <!-- LINK AZUL GERENCIAR CONTA -->
+        <button type="button" class="btn" id="btn-abrir-gerenciar-conta" onclick="abrirModalGerenciarConta()" style="width:auto; margin:0; padding:6px 18px; font-size:13px; font-weight:700; border-radius:20px; background:rgba(85,129,227,0.12); border:1px solid rgba(85,129,227,0.3); color:var(--blue); cursor:pointer;">
+          Gerenciar conta ›
         </button>
       </div>
 
-      <!-- LISTA DE OPÇÕES COM SETINHAS > (Estilo iOS / Print 5) -->
+      <!-- LISTA DE OPÇÕES ESTILO iOS (Print 6) -->
       <div class="card" style="padding:4px 0; border-radius:20px; background:var(--bg2); margin-bottom:16px;">
-        <!-- Gerenciar grupos -->
-        <div class="settings-nav-row" onclick="closeM('m-config-perfil-full'); abrirModalCirculo();" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:18px;">🏰</span>
-            <span style="font-size:14px; font-weight:600; color:var(--text);">Gerenciar grupos</span>
+        
+        <!-- GERENCIAR GRUPOS COM USUÁRIOS VINCULADOS E BOTÕES DE CÓDIGO -->
+        <div style="padding:14px 18px; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="closeM('m-config-perfil-full'); abrirModalCirculo();">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span style="font-size:18px;">👥</span>
+              <div>
+                <span style="font-size:14px; font-weight:700; color:var(--text);">Gerenciar grupos</span>
+                <p style="font-size:11.5px; color:var(--muted); margin:2px 0 0;">Círculo familiar & membros ativos</p>
+              </div>
+            </div>
+            <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
           </div>
-          <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
+
+          <!-- BOTÕES RÁPIDOS DE CÓDIGO DA FAMÍLIA -->
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <button type="button" class="btn btn-primary" style="flex:1; margin:0; padding:9px 8px; font-size:12px; font-weight:700;" onclick="closeM('m-config-perfil-full'); abrirModalConvite();">
+              🔑 Gerar Código Família
+            </button>
+            <button type="button" class="btn" style="flex:1; margin:0; padding:9px 8px; font-size:12px; font-weight:700; background:var(--bg3); border:1px solid var(--border2);" onclick="closeM('m-config-perfil-full'); abrirModalEntrarComCodigo();">
+              🔗 Entrar com Código
+            </button>
+          </div>
         </div>
 
-        <!-- Assinatura Premium -->
-        <div class="settings-nav-row" onclick="exibirToastNotificacao('Plano Familiar Premium Ativo! ✨', '⭐')" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
+        <!-- Assinatura Premium (com coroa) -->
+        <div class="settings-nav-row" onclick="exibirToastNotificacao('Plano Familiar Premium Ativo! ✨', '👑')" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
           <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:18px;">⭐</span>
+            <span style="font-size:18px;">👑</span>
             <span style="font-size:14px; font-weight:600; color:var(--text);">Assinatura Premium</span>
           </div>
           <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
         </div>
 
-        <!-- Notificações com Toggle Switch -->
+        <!-- Notificações com Toggle Switch e Gerenciar -->
         <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border2);">
-          <div style="display:flex; align-items:center; gap:12px;">
+          <div style="display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="closeM('m-config-perfil-full'); abrirModalNotifPrefs();">
             <span style="font-size:18px;">🔔</span>
-            <span style="font-size:14px; font-weight:600; color:var(--text);">Notificações</span>
+            <div>
+              <span style="font-size:14px; font-weight:600; color:var(--text);">Notificações</span>
+              <p style="font-size:11px; color:var(--muted); margin:1px 0 0;">Gerenciar alertas ›</p>
+            </div>
           </div>
           <label class="switch-toggle" style="position:relative; display:inline-block; width:44px; height:24px; margin:0;">
             <input type="checkbox" id="cfg-switch-notificacoes" checked onchange="aoAlternarSwitchNotificacoes(this)">
@@ -3829,11 +3856,40 @@
           </label>
         </div>
 
-        <!-- Personalizar Tela Inicial -->
+        <!-- Personalizar Tela Inicial (ícone de celular) -->
         <div class="settings-nav-row" onclick="closeM('m-config-perfil-full'); go('config');" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
           <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:18px;">🎨</span>
+            <span style="font-size:18px;">📱</span>
             <span style="font-size:14px; font-weight:600; color:var(--text);">Personalizar Tela Inicial</span>
+          </div>
+          <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
+        </div>
+
+        <!-- Língua (ícone de idiomas) -->
+        <div class="settings-nav-row" onclick="exibirToastNotificacao('Idioma: Português (Brasil) 🇧🇷', '🌐')" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px;">🌐</span>
+            <span style="font-size:14px; font-weight:600; color:var(--text);">Língua</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:12px; color:var(--muted);">Português (BR)</span>
+            <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
+          </div>
+        </div>
+
+        <!-- Configurações Avançadas (IA Gemini, Backup JSON) -->
+        <div class="settings-nav-row" onclick="openM('m-key')" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px;">✨</span>
+            <span style="font-size:14px; font-weight:600; color:var(--text);">Chave Inteligência Artificial (Gemini)</span>
+          </div>
+          <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
+        </div>
+
+        <div class="settings-nav-row" onclick="exportarJSON()" style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; cursor:pointer; border-bottom:1px solid var(--border2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:18px;">💾</span>
+            <span style="font-size:14px; font-weight:600; color:var(--text);">Exportar Backup Completo (JSON)</span>
           </div>
           <span style="font-size:16px; color:var(--muted); font-weight:700;">›</span>
         </div>

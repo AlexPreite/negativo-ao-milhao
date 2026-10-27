@@ -1675,7 +1675,39 @@ function abrirFabMenu() {
 }
 
 function abrirMenuAcaoRapida() {
-  abrirFabMenu();
+  const secao = (typeof window !== 'undefined' && window.secaoAtiva) ||
+                (typeof S !== 'undefined' && S && S.secaoAtiva) ||
+                'inicio';
+
+  if (secao === 'gastos') {
+    abrirModalGasto();
+  } else if (secao === 'receitas') {
+    abrirModalReceita();
+  } else if (secao === 'dividas') {
+    abrirModalDivida();
+  } else if (secao === 'calendario') {
+    if (typeof abrirModalEventoCalendario === 'function') {
+      abrirModalEventoCalendario();
+    } else {
+      abrirFabMenu();
+    }
+  } else if (secao === 'listas') {
+    if (typeof abrirModalNovaLista === 'function') {
+      abrirModalNovaLista();
+    } else {
+      abrirFabMenu();
+    }
+  } else if (secao === 'metas') {
+    if (typeof abrirModalNovaMetaFamilia === 'function') {
+      abrirModalNovaMetaFamilia();
+    } else if (typeof abrirModalInvestimento === 'function') {
+      abrirModalInvestimento();
+    } else {
+      openM('m-meta');
+    }
+  } else {
+    abrirFabMenu();
+  }
 }
 
 function fecharFabMenu() {
@@ -6147,8 +6179,20 @@ function selecionarMembroAparelho(membroId) {
  * Abre o modal de perfil e conta familiar.
  */
 function abrirModalPerfilConta() {
-  atualizarModalConfigPerfil();
-  atualizarModalPerfilConta();
+  try {
+    if (typeof atualizarModalConfigPerfil === 'function') {
+      atualizarModalConfigPerfil();
+    }
+  } catch (err) {
+    console.warn('Erro ao atualizar modal config perfil:', err);
+  }
+  try {
+    if (typeof atualizarModalPerfilConta === 'function') {
+      atualizarModalPerfilConta();
+    }
+  } catch (err) {
+    console.warn('Erro ao atualizar modal perfil conta:', err);
+  }
   if (typeof openM === 'function') {
     const fullEl = typeof document !== 'undefined' ? document.getElementById('m-config-perfil-full') : null;
     if (fullEl) {
@@ -6203,6 +6247,22 @@ function atualizarModalConfigPerfil() {
   const contatoEl = document.getElementById('cfg-perfil-contato');
   if (contatoEl) {
     contatoEl.textContent = fbUser?.email || membroAtual.telefone || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_sessao_ativa') === 'true' ? 'Conectado na nuvem' : 'alexsander@exemplo.com');
+  }
+
+  const statusVerifEl = document.getElementById('cfg-perfil-status-verif');
+  if (statusVerifEl) {
+    const isVerificado = Boolean(typeof fbUser !== 'undefined' && fbUser && fbUser.emailVerified);
+    if (isVerificado) {
+      statusVerifEl.textContent = 'Verificado';
+      statusVerifEl.style.background = 'rgba(16,185,129,0.12)';
+      statusVerifEl.style.color = 'var(--green)';
+      statusVerifEl.style.borderColor = 'rgba(16,185,129,0.3)';
+    } else {
+      statusVerifEl.textContent = 'Não verificado';
+      statusVerifEl.style.background = 'rgba(239,68,68,0.12)';
+      statusVerifEl.style.color = 'var(--red)';
+      statusVerifEl.style.borderColor = 'rgba(239,68,68,0.3)';
+    }
   }
 
   const swDark = document.getElementById('cfg-switch-darkmode');
@@ -7292,7 +7352,22 @@ function go(id) {
     id = 'inicio';
   }
 
+  if (typeof window !== 'undefined') window.secaoAtiva = id;
+  if (typeof S !== 'undefined' && S) S.secaoAtiva = id;
+
   if (typeof document === 'undefined') return;
+
+  // Controle contextual do Botão FAB Adicionar (+):
+  // Oculto em telas que já possuem botões nativos de adicionar (gastos, receitas, dividas)
+  // Exibido nas demais abas (calendario, listas, metas, inicio, etc.)
+  const btnFab = document.getElementById('btn-fab-adicionar');
+  if (btnFab) {
+    if (['gastos', 'receitas', 'dividas'].includes(id)) {
+      btnFab.style.display = 'none';
+    } else {
+      btnFab.style.display = 'flex';
+    }
+  }
 
   // Oculta todas as seções
   document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
@@ -7843,9 +7918,14 @@ function mesclarDadosFamilia(dadosFamilia, dadosIndividuais, usuarioEntrante) {
     resultado.membrosUids.push(uid);
   }
 
-  // Sincroniza lista legada de nomes da família
+  // Sincroniza lista legada de nomes da família sem perder membros existentes
+  if (!Array.isArray(resultado.membrosFamilia)) resultado.membrosFamilia = [];
   if (Array.isArray(resultado.membrosPerfil)) {
-    resultado.membrosFamilia = resultado.membrosPerfil.map(m => m.nome);
+    resultado.membrosPerfil.forEach(m => {
+      if (m.nome && !resultado.membrosFamilia.includes(m.nome)) {
+        resultado.membrosFamilia.push(m.nome);
+      }
+    });
   }
 
   return resultado;
@@ -10610,29 +10690,61 @@ function anteciparCompraCartao(compraId) {
 }
 
 function abrirModalGasto(){
-  document.getElementById('g-data').value = dataDefaultParaModal();
-  document.getElementById('g-is-parcelado').checked = false;
-  document.getElementById('g-bloco-parcelamento').style.display = 'none';
-  document.getElementById('g-num-parcelas').value = '2';
-  document.getElementById('g-preview-parcela').textContent = '';
-  if(document.getElementById('g-origem-divida')) document.getElementById('g-origem-divida').value = '';
-  
-  if(document.getElementById('g-is-recorrente')) {
-    document.getElementById('g-is-recorrente').checked = false;
-    document.getElementById('g-bloco-recorrente').style.display = 'none';
-    document.getElementById('g-prazo-recorrente').value = '12';
-    document.getElementById('g-meses-recorrente').value = '12';
-    const rowPers = document.getElementById('g-row-meses-personalizado');
-    if(rowPers) rowPers.style.display = 'none';
-    document.getElementById('g-preview-recorrente').textContent = '';
+  try {
+    const elData = document.getElementById('g-data');
+    if (elData) elData.value = (typeof dataDefaultParaModal === 'function') ? dataDefaultParaModal() : new Date().toISOString().slice(0, 10);
+    
+    const elParc = document.getElementById('g-is-parcelado');
+    if (elParc) elParc.checked = false;
+    
+    const elBlocoParc = document.getElementById('g-bloco-parcelamento');
+    if (elBlocoParc) elBlocoParc.style.display = 'none';
+    
+    const elNumParc = document.getElementById('g-num-parcelas');
+    if (elNumParc) elNumParc.value = '2';
+    
+    const elPrevParc = document.getElementById('g-preview-parcela');
+    if (elPrevParc) elPrevParc.textContent = '';
+    
+    const elOrigemDiv = document.getElementById('g-origem-divida');
+    if (elOrigemDiv) elOrigemDiv.value = '';
+    
+    const elRec = document.getElementById('g-is-recorrente');
+    if (elRec) {
+      elRec.checked = false;
+      const elBlocoRec = document.getElementById('g-bloco-recorrente');
+      if (elBlocoRec) elBlocoRec.style.display = 'none';
+      const elPrazoRec = document.getElementById('g-prazo-recorrente');
+      if (elPrazoRec) elPrazoRec.value = '12';
+      const elMesesRec = document.getElementById('g-meses-recorrente');
+      if (elMesesRec) elMesesRec.value = '12';
+      const rowPers = document.getElementById('g-row-meses-personalizado');
+      if (rowPers) rowPers.style.display = 'none';
+      const elPrevRec = document.getElementById('g-preview-recorrente');
+      if (elPrevRec) elPrevRec.textContent = '';
+    }
+    if (typeof renderCategoriasModalGasto === 'function') renderCategoriasModalGasto();
+    if (typeof atualizarSelectsTipoDivida === 'function') atualizarSelectsTipoDivida();
+  } catch (err) {
+    console.warn('Erro ao preparar campos do modal de gasto:', err);
   }
-  renderCategoriasModalGasto();
-  atualizarSelectsTipoDivida();
   openM('m-gasto');
 }
-function abrirModalReceita(){ document.getElementById('r-data').value=dataDefaultParaModal(); openM('m-receita'); }
+function abrirModalReceita(){
+  try {
+    const elData = document.getElementById('r-data');
+    if (elData) elData.value = (typeof dataDefaultParaModal === 'function') ? dataDefaultParaModal() : new Date().toISOString().slice(0, 10);
+  } catch (err) {
+    console.warn('Erro ao inicializar data da receita:', err);
+  }
+  openM('m-receita');
+}
 function abrirModalDivida(){
-  atualizarSelectsTipoDivida();
+  try {
+    if (typeof atualizarSelectsTipoDivida === 'function') atualizarSelectsTipoDivida();
+  } catch (err) {
+    console.warn('Erro ao atualizar selects de tipo de dívida:', err);
+  }
   openM('m-divida');
 }
 function abrirModalInvestimento(metaId){
@@ -10895,13 +11007,13 @@ function del(arr, id) {
   if (arr === S.gastos) {
     estornarBeneficioDeGasto(id);
   }
-  return arr.filter(i => i.id !== id);
+  return arr.filter(i => String(i.id) !== String(id));
 }
 
 function delGasto(id) {
   estornarBeneficioDeGasto(id);
   if (Array.isArray(S.gastos)) {
-    S.gastos = S.gastos.filter(g => g.id !== id);
+    S.gastos = S.gastos.filter(g => String(g.id) !== String(id));
   }
   if (typeof save === 'function') save();
   if (typeof render === 'function') render();
@@ -10943,7 +11055,7 @@ function saldoRestante(d){
 }
 
 function marcarQuitada(id){
-  const d=S.dividas.find(x=>x.id===id);
+  const d=S.dividas.find(x=>String(x.id)===String(id));
   if(!d) return;
   const val=prompt('Valor pago na quitação (R$):', d.saldo);
   if(val===null) return;
@@ -10955,9 +11067,9 @@ function marcarQuitada(id){
 
 let acordoDividaId=null;
 function abrirAcordo(id){
-  const d=S.dividas.find(x=>x.id===id);
+  const d=S.dividas.find(x=>String(x.id)===String(id));
   if(!d) return;
-  acordoDividaId=id;
+  acordoDividaId=String(id);
   document.getElementById('ac-credor').textContent=d.credor;
   document.getElementById('ac-total').value=d.saldo;
   document.getElementById('ac-entrada').value='';
@@ -10965,7 +11077,7 @@ function abrirAcordo(id){
   openM('m-acordo');
 }
 function salvarAcordo(){
-  const d=S.dividas.find(x=>x.id===acordoDividaId);
+  const d=S.dividas.find(x=>String(x.id)===String(acordoDividaId));
   if(!d) return;
   const total=parseFloat(document.getElementById('ac-total').value);
   const entrada=parseFloat(document.getElementById('ac-entrada').value)||0;
@@ -11005,7 +11117,7 @@ function salvarAcordo(){
   save(); closeM('m-acordo'); render();
 }
 function toggleParcela(dividaId, num){
-  const d=S.dividas.find(x=>x.id===dividaId);
+  const d=S.dividas.find(x=>String(x.id)===String(dividaId));
   if(!d||!d.acordo) return;
   const p=d.acordo.parcelas.find(x=>x.num===num);
   if(!p) return;
@@ -11464,7 +11576,11 @@ function mudarAno(delta){
 }
 
 function abrirModalDivida(){
-  atualizarSelectsTipoDivida();
+  try {
+    if (typeof atualizarSelectsTipoDivida === 'function') atualizarSelectsTipoDivida();
+  } catch (err) {
+    console.warn('Erro ao atualizar selects de tipo de dívida:', err);
+  }
   openM('m-divida');
 }
 
@@ -12522,16 +12638,16 @@ function renderDividas(){
       parcelasHtml=`
         <div class="div-line"><span style="color:var(--muted);">Entrada</span><span>${fmt(d.acordo.entrada)}</span></div>
         <div class="div-line"><span style="color:var(--muted);">Parcelas pagas</span><span>${pagas}/${d.acordo.numParcelas} (${fmt(d.acordo.valorParcela)} cada)</span></div>
-        <div class="parcelas-grid">${d.acordo.parcelas.map(p=>`<span class="parcela-pill ${p.paga?'pp-paga':''}" onclick="toggleParcela(${d.id},${p.num})">${p.num}</span>`).join('')}</div>
+        <div class="parcelas-grid">${d.acordo.parcelas.map(p=>`<span class="parcela-pill ${p.paga?'pp-paga':''}" onclick="toggleParcela('${escapeHtml(String(d.id))}',${p.num})">${p.num}</span>`).join('')}</div>
         <p style="font-size:11px;color:var(--muted);margin-top:4px;">Toque no número pra marcar/desmarcar a parcela como paga</p>
         <div style="display:flex;gap:6px;margin-top:10px;">
-          <button class="btn" style="width:100%;margin:0;padding:8px 10px;font-size:12px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.35);cursor:pointer;" onclick="quebrarAcordo(${d.id})">⚠️ Quebrar Acordo</button>
+          <button class="btn" style="width:100%;margin:0;padding:8px 10px;font-size:12px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.35);cursor:pointer;" onclick="quebrarAcordo('${escapeHtml(String(d.id))}')">⚠️ Quebrar Acordo</button>
         </div>`;
     }
     return `<div class="div-row">
       <div class="div-header">
         <span class="div-name">${escapeHtml(d.credor)}${titBadge}${negativadaBadge}${d.acordo?' <span class="badge b-rec">Acordo</span>':''}${atrasoAcordoBadge}</span>
-        <span class="item-del" onclick="if(confirm('Excluir esta dívida?')){S.dividas=del(S.dividas,${d.id});save();render();}">×</span>
+        <span class="item-del" onclick="if(confirm('Excluir esta dívida?')){S.dividas=del(S.dividas,'${escapeHtml(String(d.id))}');save();render();}">×</span>
       </div>
       <div class="div-line"><span style="color:var(--muted);">Saldo restante</span><span class="c-red" style="font-weight:600;">${fmt(restante)}</span></div>
       ${!d.acordo && d.juros?`<div class="div-line"><span style="color:var(--muted);">Juros/mês</span><span class="c-yellow">${d.juros}% → ${fmt(custo)}/mês</span></div>`:''}
@@ -12539,8 +12655,8 @@ function renderDividas(){
       <div class="div-line"><span style="color:var(--muted);">Tipo</span><span>${escapeHtml(tipoLabel)}</span></div>
       ${parcelasHtml}
       ${!d.acordo?`<div style="display:flex;gap:6px;margin-top:10px;">
-        <button class="btn btn-g" style="margin:0;padding:9px;font-size:12px;" onclick="marcarQuitada(${d.id})">✓ Marcar quitada</button>
-        <button class="btn" style="margin:0;padding:9px;font-size:12px;" onclick="abrirAcordo(${d.id})">🤝 Fazer acordo</button>
+        <button class="btn btn-g" style="margin:0;padding:9px;font-size:12px;" onclick="marcarQuitada('${escapeHtml(String(d.id))}')">✓ Marcar quitada</button>
+        <button class="btn" style="margin:0;padding:9px;font-size:12px;" onclick="abrirAcordo('${escapeHtml(String(d.id))}')">🤝 Fazer acordo</button>
       </div>`:''}
     </div>`;
   }).join('');
@@ -12553,7 +12669,7 @@ function renderDividas(){
       return `<div class="div-row" style="opacity:0.65;">
         <div class="div-header">
           <span class="div-name">${escapeHtml(d.credor)}${titBadgeQ}${negativadaBadgeQ}</span>
-          <span class="item-del" onclick="if(confirm('Excluir este registro?')){S.dividas=del(S.dividas,${d.id});save();render();}">×</span>
+          <span class="item-del" onclick="if(confirm('Excluir este registro?')){S.dividas=del(S.dividas,'${escapeHtml(String(d.id))}');save();render();}">×</span>
         </div>
         <div class="div-line"><span style="color:var(--muted);">Valor quitado</span><span class="c-green" style="font-weight:600;">${fmt(d.valorQuitado||0)}</span></div>
         <div class="div-line"><span style="color:var(--muted);">Data</span><span>${escapeHtml(d.dataQuitacao||'-')}</span></div>
@@ -19861,6 +19977,8 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 if (typeof window !== 'undefined') {
+  window.S = S;
+  window.go = go;
   window.MODELOS_GEMINI_FALLBACK = MODELOS_GEMINI_FALLBACK;
   window.chamarGeminiComFallback = chamarGeminiComFallback;
   window.aplicarLoginGate = aplicarLoginGate;
