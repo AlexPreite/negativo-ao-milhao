@@ -319,14 +319,15 @@ function processarInadimplencia60Dias(mesReferenciaOverride) {
   // 2. Regra de 60 Dias para Faturas de Cartão de Crédito (Fatia 4)
   for (const c of S.cartoes) {
     if (!c || c.ativo === false) continue;
+    const cidStr = String(c.id);
 
     // Coleta todos os meses com compras ou faturas registradas neste cartão
     const mesesFaturaSet = new Set();
     (S.comprasCartao || []).forEach(cp => {
-      if (cp.cartaoId === c.id && cp.mesFatura) mesesFaturaSet.add(cp.mesFatura);
+      if (String(cp.cartaoId) === cidStr && cp.mesFatura) mesesFaturaSet.add(cp.mesFatura);
     });
     (S.faturasCartao || []).forEach(f => {
-      if (f.cartaoId === c.id && f.mes) mesesFaturaSet.add(f.mes);
+      if (String(f.cartaoId) === cidStr && f.mes) mesesFaturaSet.add(f.mes);
     });
 
     const mesesOrdenados = Array.from(mesesFaturaSet).sort();
@@ -336,12 +337,12 @@ function processarInadimplencia60Dias(mesReferenciaOverride) {
     for (const mesFatura of mesesOrdenados) {
       const mesesAtraso = calcularMesesAtraso(mesFatura, mesRealHoje);
       if (mesesAtraso >= 2) {
-        let fatReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesFatura);
+        let fatReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === cidStr && f.mes === mesFatura);
         const fatInfo = calcularFaturaMes(c.id, mesFatura);
 
         // B1: Verifica se a fatura teve saldo rolado para a próxima competência
         const mesSeguinte = adicionarMesesYM(mesFatura, 1);
-        const fatSeguinte = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesSeguinte);
+        const fatSeguinte = (S.faturasCartao || []).find(f => String(f.cartaoId) === cidStr && f.mes === mesSeguinte);
         const foiRolada = Boolean((fatReg && fatReg.roladoParaProxima) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
 
         // Na regra de 60 dias, faturas roladas contam saldo 0 (a dívida foi transferida para a fatura seguinte)
@@ -415,7 +416,7 @@ function processarInadimplencia60Dias(mesReferenciaOverride) {
       // Cancela compras parceladas futuras do cartão (que venceriam no mês de referência ou no futuro)
       let centavosFuturos = 0;
       (S.comprasCartao || []).forEach(cp => {
-        if (cp.cartaoId === c.id) {
+        if (String(cp.cartaoId) === String(c.id)) {
           const atrasoCp = calcularMesesAtraso(cp.mesFatura, mesRealHoje);
           // Parcelas futuras ou vigentes que não entraram nas faturas já vencidas >= 2 meses
           if (atrasoCp < 2) {
@@ -8559,6 +8560,41 @@ function renderCategoriasModalGasto(){
   el.innerHTML = cats.map(c => `
     <button type="button" class="tag ${c.id===selAtual?'sel':''}" data-cat="${escapeHtml(c.id)}" onclick="selTag(this)">${escapeHtml(c.nome)}</button>
   `).join('');
+  popularSelectCartoesGasto();
+  atualizarVisibilidadeSeletorCartaoGasto();
+}
+
+function popularSelectCartoesGasto() {
+  if (typeof document === 'undefined') return;
+  const select = document.getElementById('g-cartao-id');
+  if (!select) return;
+  const cartoesAtivos = (S.cartoes || []).filter(c => c.ativo !== false);
+  if (!cartoesAtivos.length) {
+    select.innerHTML = '<option value="">Nenhum cartão cadastrado</option>';
+    return;
+  }
+  const valorAtual = select.value;
+  select.innerHTML = cartoesAtivos.map(c => {
+    const cid = String(c.id);
+    const sel = (cid === String(valorAtual)) ? 'selected' : '';
+    const tit = c.titular ? ` (${escapeHtml(c.titular)})` : '';
+    return `<option value="${escapeHtml(cid)}" ${sel}>💳 ${escapeHtml(c.nome)}${tit}</option>`;
+  }).join('');
+}
+
+function atualizarVisibilidadeSeletorCartaoGasto() {
+  if (typeof document === 'undefined') return;
+  const bloco = document.getElementById('g-bloco-seletor-cartao');
+  if (!bloco) return;
+  const origem = document.getElementById('g-origem-pagamento')?.value;
+  const isParcelado = document.getElementById('g-is-parcelado')?.checked;
+  const tipoDivida = document.getElementById('g-tipo-divida')?.value;
+
+  const deveExibir = (origem === 'cartao') || (isParcelado && tipoDivida === 'cartao');
+  bloco.style.display = deveExibir ? 'block' : 'none';
+  if (deveExibir) {
+    popularSelectCartoesGasto();
+  }
 }
 
 function atualizarSelectsTipoDivida(){
@@ -8566,7 +8602,10 @@ function atualizarSelectsTipoDivida(){
   const sDivida = document.getElementById('d-tipo');
   const tipos = S.tiposDivida || DEFAULT_TIPOS_DIVIDA;
   const optionsHtml = tipos.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.nome)}</option>`).join('');
-  if(sGasto) sGasto.innerHTML = optionsHtml;
+  if(sGasto) {
+    sGasto.innerHTML = optionsHtml;
+    sGasto.onchange = () => atualizarVisibilidadeSeletorCartaoGasto();
+  }
   if(sDivida) sDivida.innerHTML = optionsHtml;
 }
 
@@ -8639,6 +8678,7 @@ function toggleCamposParcelamento(){
       toggleCamposRecorrente();
     }
   }
+  atualizarVisibilidadeSeletorCartaoGasto();
   atualizarPreviewParcelas();
 }
 
@@ -9058,11 +9098,17 @@ function abrirModalCartao(cartaoId = null) {
     setVal('cartao-anuidade-valor-total', cartao.anuidade?.valorTotal || '');
     setVal('cartao-anuidade-mes-inicio', cartao.anuidade?.mesInicio || new Date().toISOString().slice(0, 7));
 
+    const btnExcluir = document.getElementById('c-btn-excluir');
+    if (btnExcluir) btnExcluir.style.display = 'block';
+
   } else {
     // Modo Criação
     if (elEditId) elEditId.value = '';
     if (elTitle) elTitle.textContent = 'Cadastrar Cartão de Crédito';
     if (elBtn) elBtn.textContent = 'Salvar Cartão';
+
+    const btnExcluir = document.getElementById('c-btn-excluir');
+    if (btnExcluir) btnExcluir.style.display = 'none';
 
     setVal('cartao-nome', '');
     setVal('c-nome', '');
@@ -9270,12 +9316,21 @@ function salvarCartao(dadosOverride) {
 
 function excluirCartao(id) {
   if (!Array.isArray(S.cartoes)) return { ok: false, erro: 'Sem cartões' };
-  const c = S.cartoes.find(x => x.id === id);
-  if (!c) return { ok: false, erro: 'Cartão não encontrado' };
+  const c = S.cartoes.find(x => String(x.id) === String(id));
+  if (!c) {
+    if (typeof alert === 'function') alert('Cartão não encontrado.');
+    return { ok: false, erro: 'Cartão não encontrado' };
+  }
   const confirma = typeof confirm === 'function' ? confirm(`Deseja realmente remover o cartão "${c.nome}"?`) : true;
   if (!confirma) return { ok: false, cancelado: true };
 
-  S.cartoes = S.cartoes.filter(x => x.id !== id);
+  S.cartoes = S.cartoes.filter(x => String(x.id) !== String(id));
+  if (typeof closeM === 'function') {
+    closeM('m-cartao');
+    closeM('m-fatura-cartao');
+  }
+  cartaoAtualId = null;
+  faturaMesCompetencia = null;
   save();
   render();
   if (typeof alert === 'function') {
@@ -9285,11 +9340,20 @@ function excluirCartao(id) {
 }
 
 let cartaoAtualId = null;
+let faturaMesCompetencia = null;
+
+function navegarMesFatura(direcao) {
+  if (!cartaoAtualId) return;
+  const mesBase = faturaMesCompetencia || mesAtual;
+  const novoMes = adicionarMesesYM(mesBase, direcao);
+  abrirFaturaCartao(cartaoAtualId, novoMes);
+}
 
 // Retorna resumo financeiro da fatura do cartão em determinada competência YYYY-MM
 function calcularFaturaMes(cartaoId, mesYM, _jaAcumulando = false) {
   const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
-  const cartao = (S.cartoes || []).find(c => c.id === cartaoId);
+  const cid = String(cartaoId);
+  const cartao = (S.cartoes || []).find(c => String(c.id) === cid);
   if (!cartao) {
     return {
       compras: [],
@@ -9305,7 +9369,7 @@ function calcularFaturaMes(cartaoId, mesYM, _jaAcumulando = false) {
   }
 
   // Compras ativas na competência (não canceladas por negativação e não canceladas por cancelamento de assinatura)
-  const compras = (S.comprasCartao || []).filter(c => c.cartaoId === cartaoId && c.mesFatura === ym && !c.canceladaNegativacao && !c.canceladaAssinatura);
+  const compras = (S.comprasCartao || []).filter(c => String(c.cartaoId) === cid && c.mesFatura === ym && !c.canceladaNegativacao && !c.canceladaAssinatura);
   const centavosCompras = compras.reduce((acc, c) => acc + Math.round((Number(c.val) || 0) * 100), 0);
   const valorTotalCompras = Math.round(centavosCompras) / 100;
 
@@ -9336,8 +9400,8 @@ function calcularFaturaMes(cartaoId, mesYM, _jaAcumulando = false) {
   }
 
   // Item de rotativo rolado do mês anterior: manual (gravado) ou acúmulo automático (< 60 dias)
-  const idFat = `${cartaoId}_${ym}`;
-  const fatReg = (S.faturasCartao || []).find(f => f.id === idFat || (f.cartaoId === cartaoId && f.mes === ym));
+  const idFat = `${cid}_${ym}`;
+  const fatReg = (S.faturasCartao || []).find(f => f.id === idFat || (String(f.cartaoId) === cid && f.mes === ym));
   let rotativoItem = null;
   let valorRotativo = 0;
 
@@ -9360,12 +9424,12 @@ function calcularFaturaMes(cartaoId, mesYM, _jaAcumulando = false) {
     // O acúmulo automático só ocorre se o cartão estiver ativo, não negativado e com atraso < 2 meses
     const cartaoValido = cartao.ativo !== false && !cartao.negativado;
     if (cartaoValido && atrasoAnt < 2) {
-      const fatAnt = (S.faturasCartao || []).find(f => f.cartaoId === cartaoId && f.mes === mesAnt);
+      const fatAnt = (S.faturasCartao || []).find(f => String(f.cartaoId) === cid && f.mes === mesAnt);
       const estaLiquidadaAnt = fatAnt && (fatAnt.pago || fatAnt.roladoParaProxima || fatAnt.liquidadaPorRolagem || fatAnt.negativada || fatAnt.migradoDivida);
 
       if (!estaLiquidadaAnt) {
         // Calcula a fatura da competência anterior sem recursão adicional (_jaAcumulando = true)
-        const fatAntInfo = calcularFaturaMes(cartaoId, mesAnt, true);
+        const fatAntInfo = calcularFaturaMes(cid, mesAnt, true);
 
         let saldoDev = 0;
         if (fatAnt && fatAnt.pagoParcial) {
@@ -9513,11 +9577,24 @@ function renderCartoesTopo() {
 
   container.style.display = 'flex';
   container.innerHTML = cartoesAtivos.map(c => {
-    const fatura = calcularFaturaMes(c.id, mesAtual);
+    const cid = String(c.id);
+    const fatura = calcularFaturaMes(cid, mesAtual);
     const fatReg = fatura.registroFatura;
     const estaPaga = fatReg && fatReg.pago;
     const estaParcial = fatReg && fatReg.pagoParcial;
     const estaNegativada = fatReg && (fatReg.negativada || fatReg.migradoDivida);
+
+    // Próxima fatura para indicação amigável de compras após o fechamento
+    const mesSeguinte = adicionarMesesYM(mesAtual, 1);
+    const faturaSeguinte = calcularFaturaMes(cid, mesSeguinte);
+    let proxFaturaHtml = '';
+    if (faturaSeguinte.valorTotalFatura > 0) {
+      if (fatura.valorTotalFatura === 0) {
+        proxFaturaHtml = `<div style="font-size:12px;color:#60a5fa;margin-top:4px;font-weight:600;">📅 Próx. fatura: ${fmt(faturaSeguinte.valorTotalFatura)}</div>`;
+      } else {
+        proxFaturaHtml = `<div style="font-size:11px;color:#60a5fa;margin-top:2px;">Próx. fatura: ${fmt(faturaSeguinte.valorTotalFatura)}</div>`;
+      }
+    }
 
     let statusBadge = '';
     let corValor = 'var(--red)';
@@ -9539,7 +9616,7 @@ function renderCartoesTopo() {
 
     // Fatia 3 (ADR-003): Barra visual e informações de limite de crédito
     let limiteHtml = '';
-    const lim = calcularLimiteCartao(c.id, mesAtual);
+    const lim = calcularLimiteCartao(cid, mesAtual);
     if (lim && lim.configurado) {
       let corBarra = '#4ade80'; // < 70% verde
       if (lim.pctUsado >= 90) {
@@ -9564,7 +9641,7 @@ function renderCartoesTopo() {
       </div>`;
     }
 
-    return `<div class="card" onclick="abrirFaturaCartao(${c.id})" style="min-width:230px;max-width:270px;flex:0 0 auto;cursor:pointer;border:1px solid rgba(139,92,246,0.35);background:linear-gradient(135deg, rgba(139,92,246,0.12), rgba(0,0,0,0.4));border-radius:12px;padding:12px;transition:transform 0.15s, border-color 0.15s;">
+    return `<div class="card" onclick="abrirFaturaCartao('${escapeHtml(cid)}')" style="min-width:230px;max-width:270px;flex:0 0 auto;cursor:pointer;border:1px solid rgba(139,92,246,0.35);background:linear-gradient(135deg, rgba(139,92,246,0.12), rgba(0,0,0,0.4));border-radius:12px;padding:12px;transition:transform 0.15s, border-color 0.15s;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <span style="font-weight:700;font-size:14px;color:#c084fc;">💳 ${escapeHtml(c.nome)}</span>
         <span style="font-size:11px;color:var(--muted);background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;">Venc: ${c.diaVencimento || 10}</span>
@@ -9577,6 +9654,7 @@ function renderCartoesTopo() {
       <div style="font-size:18px;font-weight:700;color:${corValor};margin-top:2px;">
         ${textoValor}
       </div>
+      ${proxFaturaHtml}
       ${limiteHtml}
       <div style="font-size:11px;color:#a855f7;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
         <span>👁️ Ver compras e ações</span>
@@ -9589,12 +9667,17 @@ function renderCartoesTopo() {
 // Abre o modal detalhado da fatura do cartão
 function abrirFaturaCartao(cartaoId, mesYM) {
   cartaoAtualId = cartaoId;
+  const cid = String(cartaoId);
   const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
-  const fatura = calcularFaturaMes(cartaoId, ym);
+  faturaMesCompetencia = ym;
+  const fatura = calcularFaturaMes(cid, ym);
   if (!fatura.cartao) return;
 
   const elTitulo = document.getElementById('fatura-titulo');
-  if (elTitulo) elTitulo.textContent = `💳 Fatura ${fatura.cartao.nome} - ${mesLabel(ym)}`;
+  if (elTitulo) elTitulo.textContent = `💳 Fatura ${fatura.cartao.nome}`;
+
+  const elCompLabel = document.getElementById('fatura-competencia-label');
+  if (elCompLabel) elCompLabel.textContent = `Fatura ${mesLabel(ym)}`;
 
   const fatReg = fatura.registroFatura;
   const estaNegativada = fatReg && (fatReg.negativada || fatReg.migradoDivida);
@@ -9604,7 +9687,7 @@ function abrirFaturaCartao(cartaoId, mesYM) {
   // Fatia 3 (ADR-003): Bloco de Gestão Inteligente de Limite de Crédito
   const elBlocoLimite = document.getElementById('fatura-bloco-limite');
   if (elBlocoLimite) {
-    const lim = calcularLimiteCartao(cartaoId, ym);
+    const lim = calcularLimiteCartao(cid, ym);
     if (lim && lim.configurado) {
       let corBarra = '#4ade80';
       if (lim.pctUsado >= 90) corBarra = '#f87171';
@@ -9717,46 +9800,60 @@ function abrirFaturaCartao(cartaoId, mesYM) {
     } else {
       btnPagarTot.textContent = '💳 Pagar Fatura Total';
     }
-    btnPagarTot.setAttribute('onclick', `pagarFaturaTotal(${cartaoId}, '${ym}')`);
+    btnPagarTot.setAttribute('onclick', `pagarFaturaTotal('${escapeHtml(cid)}', '${ym}')`);
   }
   if (btnPagarParc) {
     btnPagarParc.style.display = podePagar ? 'block' : 'none';
-    btnPagarParc.setAttribute('onclick', `abrirModalPagamentoParcial(${cartaoId}, '${ym}')`);
+    btnPagarParc.setAttribute('onclick', `abrirModalPagamentoParcial('${escapeHtml(cid)}', '${ym}')`);
   }
   if (btnAbater) {
     btnAbater.style.display = podePagar ? 'block' : 'none';
-    btnAbater.setAttribute('onclick', `abrirModalAbaterCartao(${cartaoId}, '${ym}')`);
+    btnAbater.setAttribute('onclick', `abrirModalAbaterCartao('${escapeHtml(cid)}', '${ym}')`);
   }
 
   // B3: Destino da antecipação = max(ym, mesRealHoje); botão oculto se destino estiver negativada
   const mesRealHoje = new Date().toISOString().slice(0, 7);
   const destinoMes = ym < mesRealHoje ? mesRealHoje : ym;
-  const fatDestino = (S.faturasCartao || []).find(f => f.cartaoId === cartaoId && f.mes === destinoMes);
+  const fatDestino = (S.faturasCartao || []).find(f => String(f.cartaoId) === cid && f.mes === destinoMes);
   const destinoNegativada = fatDestino && (fatDestino.negativada || fatDestino.migradoDivida);
 
   if (btnAntecipar) {
     btnAntecipar.style.display = (estaNegativada || destinoNegativada) ? 'none' : 'block';
-    btnAntecipar.setAttribute('onclick', `abrirModalAnteciparCartao(${cartaoId})`);
+    btnAntecipar.setAttribute('onclick', `abrirModalAnteciparCartao('${escapeHtml(cid)}')`);
   }
 
   const elBtnAdd = document.getElementById('btn-add-compra-fatura');
   if (elBtnAdd) {
     elBtnAdd.style.display = estaNegativada ? 'none' : 'block';
-    elBtnAdd.setAttribute('onclick', `abrirModalCompraCartao(${cartaoId})`);
+    elBtnAdd.setAttribute('onclick', `abrirModalCompraCartao('${escapeHtml(cid)}')`);
   }
 
   const elLista = document.getElementById('fatura-itens-lista');
   if (elLista) {
     let html = '';
 
-    // Item de rotativo rolado do mês anterior
+    // Item de rotativo rolado do mês anterior (Rolagem com encargos transparente)
     if (fatura.rotativoItem) {
-      html += `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.35);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <strong>🔄 ${escapeHtml(fatura.rotativoItem.desc)}</strong>
-          <span class="badge" style="background:rgba(234,179,8,0.25);color:#facc15;">Rolagem do Mês Anterior</span>
+      const rotDet = fatura.rotativoItem.detalhe || {};
+      const saldoPrincipal = rotDet.saldoAnterior || rotDet.principal || 0;
+      const jurosVal = rotDet.encargos || rotDet.juros || 0;
+      const taxaPct = rotDet.taxa || fatura.cartao.taxaRotativo || 14.5;
+      const detalheLinha = saldoPrincipal > 0
+        ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;display:flex;justify-content:space-between;padding-top:4px;border-top:1px dashed rgba(234,179,8,0.3);">
+            <span>Saldo acumulado: <strong>${fmt(saldoPrincipal)}</strong></span>
+            <span>Juros/Encargos (${taxaPct}% a.m.): <strong style="color:var(--red);">+${fmt(jurosVal)}</strong></span>
+          </div>`
+        : '';
+
+      html += `<div style="background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.35);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <strong>🔄 ${escapeHtml(fatura.rotativoItem.desc)}</strong>
+            <span class="badge" style="background:rgba(234,179,8,0.25);color:#facc15;">Rolagem com Encargos</span>
+          </div>
+          <div style="font-weight:700;color:var(--yellow);">${fmt(fatura.rotativoItem.val)}</div>
         </div>
-        <div style="font-weight:700;color:var(--yellow);">${fmt(fatura.rotativoItem.val)}</div>
+        ${detalheLinha}
       </div>`;
     }
 
@@ -9778,7 +9875,7 @@ function abrirFaturaCartao(cartaoId, mesYM) {
         const assBadge = c.assinatura ? `<span class="badge" style="background:rgba(168,85,247,0.2);color:#c084fc;">🔁 Assinatura ${c.mesNum}/${c.totalMeses}</span>` : '';
         const catBadge = `<span class="badge ${c.cat === 'recorrente' ? 'b-rec' : 'b-laz'}">${escapeHtml(getNomeCategoria(c.cat))}</span>`;
         const adiantadaBadge = c.adiantada ? `<span class="badge" style="background:rgba(59,130,246,0.2);color:#60a5fa;">⏩ Antecipada</span>` : '';
-        const cancelAssBtn = c.assinatura ? `<button type="button" class="btn" style="width:auto;margin:0;padding:2px 7px;font-size:11px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);cursor:pointer;" onclick="cancelarAssinaturaCartao(${c.id})" title="Cancelar Assinatura">🚫 Cancelar Assinatura</button>` : '';
+        const cancelAssBtn = c.assinatura ? `<button type="button" class="btn" style="width:auto;margin:0;padding:2px 7px;font-size:11px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);cursor:pointer;" onclick="cancelarAssinaturaCartao('${escapeHtml(String(c.id))}')" title="Cancelar Assinatura">🚫 Cancelar Assinatura</button>` : '';
 
         return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -9792,7 +9889,7 @@ function abrirFaturaCartao(cartaoId, mesYM) {
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-weight:600;color:var(--red);">${fmt(c.val)}</span>
             ${cancelAssBtn}
-            <span class="item-del" style="font-size:16px;cursor:pointer;color:var(--muted);" onclick="excluirCompraCartao(${c.id})" title="Excluir compra">×</span>
+            <span class="item-del" style="font-size:16px;cursor:pointer;color:var(--muted);" onclick="excluirCompraCartao('${escapeHtml(String(c.id))}')" title="Excluir compra">×</span>
           </div>
         </div>`;
       }).join('');
@@ -9988,10 +10085,11 @@ function atualizarPreviewCompraParcelada() {
 function verificarEReabrirFatura(cartaoId, mesYM) {
   if (!Array.isArray(S.faturasCartao)) return;
   const ym = String(mesYM || '').slice(0, 7);
-  const fatReg = S.faturasCartao.find(f => f.cartaoId === cartaoId && f.mes === ym);
+  const cid = String(cartaoId);
+  const fatReg = S.faturasCartao.find(f => String(f.cartaoId) === cid && f.mes === ym);
   if (!fatReg) return;
 
-  const fatInfo = calcularFaturaMes(cartaoId, ym);
+  const fatInfo = calcularFaturaMes(cid, ym);
   const novoTotal = fatInfo.valorTotalFatura;
   const vPago = Number(fatReg.valorPago) || 0;
   const saldoPendente = Math.max(0, Math.round((novoTotal - vPago) * 100) / 100);
@@ -10008,8 +10106,9 @@ function verificarEReabrirFatura(cartaoId, mesYM) {
 function salvarCompraCartao(dadosOverride) {
   const getElVal = (id) => (typeof document !== 'undefined' ? document.getElementById(id)?.value : '') || '';
   const elCartaoId = typeof document !== 'undefined' ? document.getElementById('cc-cartao-id') : null;
-  const cartaoId = dadosOverride?.cartaoId || (elCartaoId && elCartaoId.value ? parseInt(elCartaoId.value, 10) : cartaoAtualId);
-  const cartao = (S.cartoes || []).find(c => c.id === cartaoId);
+  const rawId = dadosOverride?.cartaoId || (elCartaoId && elCartaoId.value ? elCartaoId.value : cartaoAtualId);
+  const cartaoId = rawId !== null && rawId !== undefined ? String(rawId) : null;
+  const cartao = (S.cartoes || []).find(c => String(c.id) === String(cartaoId));
   if (!cartao) {
     if (typeof alert === 'function' && !dadosOverride) alert('Selecione um cartão válido.');
     return { ok: false, erro: 'Cartão não encontrado' };
@@ -10302,7 +10401,7 @@ function pagarFaturaTotal(cartaoId, mesYM) {
 
   if (!Array.isArray(S.faturasCartao)) S.faturasCartao = [];
   const idFat = `${cid}_${ym}`;
-  let fat = S.faturasCartao.find(f => f.id === idFat || (f.cartaoId === cid && f.mes === ym));
+  let fat = S.faturasCartao.find(f => f.id === idFat || (String(f.cartaoId) === String(cid) && f.mes === ym));
 
   const valorJaPago = (fat && Number(fat.valorPago)) || 0;
   const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
@@ -10342,7 +10441,7 @@ function pagarFaturaTotal(cartaoId, mesYM) {
   // Fatia A: Ao quitar a fatura do mês atual que acumulou saldo da anterior, marca a fatura anterior como liquidada por absorção/rolagem
   if (fatura.rotativoItem && fatura.rotativoItem.automatico) {
     const mesOrig = fatura.rotativoItem.detalhe?.mesOrigem || adicionarMesesYM(ym, -1);
-    let fatAnt = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === mesOrig);
+    let fatAnt = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(cid) && f.mes === mesOrig);
     if (!fatAnt) {
       const idAnt = `${cid}_${mesOrig}`;
       const fatAntInfo = calcularFaturaMes(cid, mesOrig, true);
@@ -10399,7 +10498,7 @@ function abrirModalPagamentoParcial(cartaoId, mesYM) {
   const fatura = calcularFaturaMes(cid, ym);
   if (!fatura.cartao) return;
 
-  const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === ym);
+  const fatReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(cid) && f.mes === ym);
   const valorJaPago = (fatReg && Number(fatReg.valorPago)) || 0;
   const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
 
@@ -10430,7 +10529,7 @@ function atualizarPreviewPagamentoParcial() {
   if (!elPago || !elPrev || !cartaoAtualId) return;
 
   const fatura = calcularFaturaMes(cartaoAtualId, mesAtual);
-  const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === cartaoAtualId && f.mes === mesAtual);
+  const fatReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(cartaoAtualId) && f.mes === mesAtual);
   const valorJaPago = (fatReg && Number(fatReg.valorPago)) || 0;
   const saldoBase = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
 
@@ -10465,7 +10564,7 @@ function confirmarPagamentoParcial(dadosOverride) {
 
   if (!Array.isArray(S.faturasCartao)) S.faturasCartao = [];
   const idFat = `${cid}_${ym}`;
-  let fat = S.faturasCartao.find(f => f.id === idFat || (f.cartaoId === cid && f.mes === ym));
+  let fat = S.faturasCartao.find(f => f.id === idFat || (String(f.cartaoId) === String(cid) && f.mes === ym));
 
   const valorJaPago = (fat && Number(fat.valorPago)) || 0;
   const saldoBase = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
@@ -10514,7 +10613,7 @@ function confirmarPagamentoParcial(dadosOverride) {
   // Fatia A (Bloqueador 1): Ao pagar parcialmente uma fatura que acumulou saldo da anterior, absorve e liquida a anterior por rolagem
   if (fatura.rotativoItem && fatura.rotativoItem.automatico) {
     const mesOrig = fatura.rotativoItem.detalhe?.mesOrigem || adicionarMesesYM(ym, -1);
-    let fatAnt = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === mesOrig);
+    let fatAnt = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(cid) && f.mes === mesOrig);
     if (!fatAnt) {
       const idAnt = `${cid}_${mesOrig}`;
       const fatAntInfo = calcularFaturaMes(cid, mesOrig, true);
@@ -10551,7 +10650,7 @@ function confirmarPagamentoParcial(dadosOverride) {
 
   const mesSeguinte = adicionarMesesYM(ym, 1);
   const idProx = `${cid}_${mesSeguinte}`;
-  let fatProx = S.faturasCartao.find(f => f.id === idProx || (f.cartaoId === cid && f.mes === mesSeguinte));
+  let fatProx = S.faturasCartao.find(f => f.id === idProx || (String(f.cartaoId) === String(cid) && f.mes === mesSeguinte));
   if (!fatProx) {
     fatProx = {
       id: idProx,
@@ -10618,7 +10717,7 @@ function abrirModalAbaterCartao(cartaoId, mesYM) {
   const fatura = calcularFaturaMes(cid, ym);
   if (!fatura.cartao) return;
 
-  const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === ym);
+  const fatReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(cid) && f.mes === ym);
   const valorJaPago = (fatReg && Number(fatReg.valorPago)) || 0;
   const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
 
@@ -10663,7 +10762,7 @@ function confirmarAbatimentoCartao(dadosOverride) {
 
   if (!Array.isArray(S.faturasCartao)) S.faturasCartao = [];
   const idFat = `${cid}_${ym}`;
-  let fat = S.faturasCartao.find(f => f.id === idFat || (f.cartaoId === cid && f.mes === ym));
+  let fat = S.faturasCartao.find(f => f.id === idFat || (String(f.cartaoId) === String(cid) && f.mes === ym));
 
   const valorJaPago = (fat && Number(fat.valorPago)) || 0;
   const saldoPendente = Math.max(0, Math.round((fatura.valorTotalFatura - valorJaPago) * 100) / 100);
@@ -10734,7 +10833,7 @@ function confirmarAbatimentoCartao(dadosOverride) {
     // Se quitou totalmente e havia rolagem automática absorvida da fatura anterior, liquida o registro anterior
     if (fatura.rotativoItem && fatura.rotativoItem.automatico) {
       const mesOrig = fatura.rotativoItem.detalhe?.mesOrigem || adicionarMesesYM(ym, -1);
-      let fatAnt = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === mesOrig);
+      let fatAnt = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(cid) && f.mes === mesOrig);
       if (!fatAnt) {
         const idAnt = `${cid}_${mesOrig}`;
         const fatAntInfo = calcularFaturaMes(cid, mesOrig, true);
@@ -10813,7 +10912,7 @@ function confirmarAbatimentoCartao(dadosOverride) {
 function abrirModalAnteciparCartao(cartaoId) {
   const cid = cartaoId || cartaoAtualId;
   cartaoAtualId = cid;
-  const cartao = (S.cartoes || []).find(c => c.id === cid);
+  const cartao = (S.cartoes || []).find(c => String(c.id) === String(cid));
   if (!cartao) return;
 
   // B3: O destino da antecipação deve ser max(mesAtual, mesRealHoje) — nunca para o passado real
@@ -10821,7 +10920,7 @@ function abrirModalAnteciparCartao(cartaoId) {
   const destinoMes = mesAtual < mesRealHoje ? mesRealHoje : mesAtual;
 
   // B3: Bloqueie se a fatura de destino estiver negativada/migrada
-  const fatDestino = (S.faturasCartao || []).find(f => f.cartaoId === cid && f.mes === destinoMes);
+  const fatDestino = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(cid) && f.mes === destinoMes);
   const destinoNegativada = fatDestino && (fatDestino.negativada || fatDestino.migradoDivida);
 
   const elSub = document.getElementById('antecipar-cartao-subtitulo');
@@ -10838,7 +10937,7 @@ function abrirModalAnteciparCartao(cartaoId) {
     }
 
     // B3: Só liste compras com mesFatura > destino e não canceladaNegativacao
-    const comprasFuturas = (S.comprasCartao || []).filter(c => c.cartaoId === cid && c.mesFatura > destinoMes && !c.canceladaNegativacao);
+    const comprasFuturas = (S.comprasCartao || []).filter(c => String(c.cartaoId) === String(cid) && c.mesFatura > destinoMes && !c.canceladaNegativacao);
     comprasFuturas.sort((a, b) => (a.mesFatura || '').localeCompare(b.mesFatura || ''));
 
     if (!comprasFuturas.length) {
@@ -10846,6 +10945,7 @@ function abrirModalAnteciparCartao(cartaoId) {
     } else {
       elLista.innerHTML = comprasFuturas.map(c => {
         const parcBadge = c.parcelado ? `<span class="badge b-parc">${c.parcelaNum}/${c.totalParcelas}</span>` : '';
+        const cidCompra = escapeHtml(String(c.id));
         return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
           <div style="flex:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             <strong>${escapeHtml(c.desc)}</strong>
@@ -10854,7 +10954,7 @@ function abrirModalAnteciparCartao(cartaoId) {
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-weight:600;color:var(--red);">${fmt(c.val)}</span>
-            <button type="button" class="btn" style="width:auto;padding:5px 8px;font-size:11px;background:rgba(59,130,246,0.2);color:#60a5fa;border:1px solid rgba(59,130,246,0.4);" onclick="anteciparCompraCartao(${c.id})">⏩ Antecipar p/ ${mesLabel(destinoMes)}</button>
+            <button type="button" class="btn" style="width:auto;padding:5px 8px;font-size:11px;background:rgba(59,130,246,0.2);color:#60a5fa;border:1px solid rgba(59,130,246,0.4);" onclick="anteciparCompraCartao('${cidCompra}')">⏩ Antecipar p/ ${mesLabel(destinoMes)}</button>
           </div>
         </div>`;
       }).join('');
@@ -10867,7 +10967,7 @@ function abrirModalAnteciparCartao(cartaoId) {
 // 6. Antecipação de compra ou parcela futura
 function anteciparCompraCartao(compraId) {
   if (!Array.isArray(S.comprasCartao)) return { ok: false };
-  const compra = S.comprasCartao.find(c => c.id === compraId);
+  const compra = S.comprasCartao.find(c => String(c.id) === String(compraId));
   if (!compra) return { ok: false, erro: 'Compra não encontrada' };
 
   // B3: O destino da antecipação deve ser max(mesAtual, mesRealHoje) — nunca para o passado real
@@ -10875,7 +10975,7 @@ function anteciparCompraCartao(compraId) {
   const destinoMes = mesAtual < mesRealHoje ? mesRealHoje : mesAtual;
 
   // B3: Bloqueie (guarda na função) se a fatura de destino estiver negativada/migrada
-  const fatDestino = (S.faturasCartao || []).find(f => f.cartaoId === compra.cartaoId && f.mes === destinoMes);
+  const fatDestino = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(compra.cartaoId) && f.mes === destinoMes);
   if (fatDestino && (fatDestino.negativada || fatDestino.migradoDivida)) {
     if (typeof alert === 'function') alert('Não é possível antecipar para uma fatura negativada.');
     return { ok: false, erro: 'Fatura destino negativada' };
@@ -10951,6 +11051,8 @@ function abrirModalGasto(){
     }
     if (typeof renderCategoriasModalGasto === 'function') renderCategoriasModalGasto();
     if (typeof atualizarSelectsTipoDivida === 'function') atualizarSelectsTipoDivida();
+    if (typeof popularSelectCartoesGasto === 'function') popularSelectCartoesGasto();
+    if (typeof atualizarVisibilidadeSeletorCartaoGasto === 'function') atualizarVisibilidadeSeletorCartaoGasto();
   } catch (err) {
     console.warn('Erro ao preparar campos do modal de gasto:', err);
   }
@@ -11083,20 +11185,38 @@ function addGasto(){
   const data=document.getElementById('g-data').value || new Date().toISOString().slice(0,10);
   const isParcelado = document.getElementById('g-is-parcelado')?.checked;
   const isRecorrente = document.getElementById('g-is-recorrente')?.checked;
+  const origemSel = document.getElementById('g-origem-pagamento')?.value || 'auto';
+  const cartaoIdSel = document.getElementById('g-cartao-id')?.value || null;
+  const tipoDivida = document.getElementById('g-tipo-divida')?.value || 'cartao';
   if(!desc||!val||val<=0) return;
+
+  // Identifica se este gasto deve ser lançado em um cartão de crédito da família
+  const ehGastoCartao = (origemSel === 'cartao') || (isParcelado && tipoDivida === 'cartao');
+  const cartaoVinculado = ehGastoCartao
+    ? ((S.cartoes || []).find(c => String(c.id) === String(cartaoIdSel)) || (S.cartoes || []).find(c => c.ativo !== false) || null)
+    : null;
 
   if (isParcelado) {
     const num = Math.max(2, parseInt(document.getElementById('g-num-parcelas').value) || 2);
-    const tipoDivida = document.getElementById('g-tipo-divida')?.value || 'cartao';
-    const origemDivida = (document.getElementById('g-origem-divida')?.value || '').trim();
+    const origemDivida = (document.getElementById('g-origem-divida')?.value || (cartaoVinculado ? cartaoVinculado.nome : '')).trim();
     const baseCentavos = Math.floor((val / num) * 100);
     const restoCentavos = Math.round(val * 100) - (baseCentavos * num);
     const grupoId = 'parc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+    let mesFaturaBase = null;
+    if (cartaoVinculado) {
+      const diaVenc = cartaoVinculado.diaVencimento || 10;
+      const diaFech = cartaoVinculado.diaFechamento || Math.max(1, diaVenc - 7);
+      mesFaturaBase = calcularMesFaturaCompra(data, diaFech, diaVenc);
+      if (!Array.isArray(S.comprasCartao)) S.comprasCartao = [];
+    }
 
     for (let i = 1; i <= num; i++) {
       const centavosDesta = baseCentavos + (i === num ? restoCentavos : 0);
       const vParc = centavosDesta / 100;
       const dt = adicionarMeses(data, i - 1);
+      const mesFatura = mesFaturaBase ? adicionarMesesYM(mesFaturaBase, i - 1) : null;
+
       S.gastos.push({
         id: Date.now() + i,
         grupoId,
@@ -11108,6 +11228,8 @@ function addGasto(){
         titular,
         tipoDivida,
         origemDivida,
+        cartaoId: cartaoVinculado ? cartaoVinculado.id : null,
+        mesFatura,
         parcelado: true,
         recorrente: false,
         parcelaNum: i,
@@ -11118,6 +11240,29 @@ function addGasto(){
         dataPagto: null,
         adiantada: false
       });
+
+      if (cartaoVinculado && mesFatura) {
+        const novaCompra = {
+          id: Date.now() + i + Math.floor(Math.random() * 1000),
+          cartaoId: cartaoVinculado.id,
+          desc: `${escapeHtml(desc)} (${i}/${num})`,
+          descOriginal: escapeHtml(desc),
+          val: vParc,
+          valTotal: Math.round(val * 100) / 100,
+          cat,
+          data: dt,
+          mesFatura,
+          titular: titular || cartaoVinculado.titular || '',
+          parcelado: true,
+          parcelaNum: i,
+          totalParcelas: num,
+          canceladaAssinatura: false,
+          canceladaNegativacao: false,
+          grupoId
+        };
+        S.comprasCartao.push(novaCompra);
+        verificarEReabrirFatura(cartaoVinculado.id, mesFatura);
+      }
     }
   } else if (isRecorrente) {
     const prazoSel = document.getElementById('g-prazo-recorrente')?.value || '12';
@@ -11155,22 +11300,65 @@ function addGasto(){
       });
     }
   } else {
-    const origemSel = document.getElementById('g-origem-pagamento')?.value || 'auto';
-    const novoGastoBase = {
-      id: Date.now(),
-      desc,
-      val,
-      cat,
-      data,
-      titular,
-      origemPagamento: origemSel,
-      parcelado: false,
-      recorrente: false,
-      pago: true,
-      dataPagto: data
-    };
-    const gastoFinal = registrarGastoComBeneficio(novoGastoBase);
-    S.gastos.push(gastoFinal);
+    if (cartaoVinculado) {
+      const diaVenc = cartaoVinculado.diaVencimento || 10;
+      const diaFech = cartaoVinculado.diaFechamento || Math.max(1, diaVenc - 7);
+      const mesFatura = calcularMesFaturaCompra(data, diaFech, diaVenc);
+      if (!Array.isArray(S.comprasCartao)) S.comprasCartao = [];
+
+      const novaCompra = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        cartaoId: cartaoVinculado.id,
+        desc: escapeHtml(desc),
+        val: Math.round(val * 100) / 100,
+        valTotal: Math.round(val * 100) / 100,
+        cat,
+        data,
+        mesFatura,
+        titular: titular || cartaoVinculado.titular || '',
+        parcelado: false,
+        parcelaNum: 1,
+        totalParcelas: 1,
+        canceladaAssinatura: false,
+        canceladaNegativacao: false,
+        grupoId: ''
+      };
+      S.comprasCartao.push(novaCompra);
+      verificarEReabrirFatura(cartaoVinculado.id, mesFatura);
+
+      const novoGastoBase = {
+        id: Date.now(),
+        desc,
+        val,
+        cat,
+        data,
+        titular,
+        cartaoId: cartaoVinculado.id,
+        origemPagamento: 'cartao',
+        mesFatura,
+        parcelado: false,
+        recorrente: false,
+        pago: false,
+        dataPagto: null
+      };
+      S.gastos.push(novoGastoBase);
+    } else {
+      const novoGastoBase = {
+        id: Date.now(),
+        desc,
+        val,
+        cat,
+        data,
+        titular,
+        origemPagamento: origemSel,
+        parcelado: false,
+        recorrente: false,
+        pago: true,
+        dataPagto: data
+      };
+      const gastoFinal = registrarGastoComBeneficio(novoGastoBase);
+      S.gastos.push(gastoFinal);
+    }
   }
 
   registrarNotificacaoFamilia({
@@ -11194,6 +11382,8 @@ function addGasto(){
   document.getElementById('g-bloco-parcelamento').style.display = 'none';
   document.getElementById('g-preview-parcela').textContent = '';
   if(document.getElementById('g-origem-divida')) document.getElementById('g-origem-divida').value = '';
+  const elBlocoSelCartao = document.getElementById('g-bloco-seletor-cartao');
+  if (elBlocoSelCartao) elBlocoSelCartao.style.display = 'none';
   if(document.getElementById('g-is-recorrente')) {
     document.getElementById('g-is-recorrente').checked = false;
     document.getElementById('g-bloco-recorrente').style.display = 'none';
@@ -11550,7 +11740,7 @@ function calcTotais(){
   // Total das faturas de cartões de crédito ativas no mês atual (evita poluição da lista avulsa e soma direta)
   let totalFaturasCartao = 0;
   (S.cartoes || []).filter(c => c.ativo !== false).forEach(c => {
-    const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesAtual);
+    const fatReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(c.id) && f.mes === mesAtual);
     // Faturas negativadas saem dos gastos operacionais e compõem o saldo na aba Dívidas
     if (fatReg && (fatReg.negativada || fatReg.migradoDivida)) {
       return;
@@ -11558,7 +11748,7 @@ function calcTotais(){
 
     const f = calcularFaturaMes(c.id, mesAtual);
     const mesSeguinte = adicionarMesesYM(mesAtual, 1);
-    const fatSeguinte = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesSeguinte);
+    const fatSeguinte = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(c.id) && f.mes === mesSeguinte);
     const foiRolada = Boolean((fatReg && fatReg.roladoParaProxima) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
 
     if (foiRolada) {
@@ -11625,7 +11815,7 @@ function calcTotais(){
 
   // 3. Faturas de cartões de crédito pagas ou parcialmente pagas no mês
   const faturasPagas = Math.round((S.cartoes || []).filter(c => c.ativo !== false).reduce((s,c) => {
-    const fReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesAtual);
+    const fReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(c.id) && f.mes === mesAtual);
     return s + (fReg && (fReg.pago || fReg.pagoParcial) ? (Number(fReg.valorPago) || 0) : 0);
   }, 0) * 100) / 100;
 
@@ -11640,14 +11830,14 @@ function calcTotais(){
 
   // 7. Faturas de cartões em aberto (saldo pendente de quitação no mês atual)
   const faturasAbertas = Math.round((S.cartoes || []).filter(c => c.ativo !== false).reduce((s, c) => {
-    const fReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesAtual);
+    const fReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(c.id) && f.mes === mesAtual);
     if (fReg && (fReg.negativada || fReg.migradoDivida)) return s;
 
     const f = calcularFaturaMes(c.id, mesAtual);
     const pago = fReg ? (Number(fReg.valorPago) || 0) : 0;
 
     const mesSeguinte = adicionarMesesYM(mesAtual, 1);
-    const fatSeguinte = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesSeguinte);
+    const fatSeguinte = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(c.id) && f.mes === mesSeguinte);
     const foiRolada = Boolean((fReg && (fReg.roladoParaProxima || fReg.liquidadaPorRolagem)) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
 
     if (foiRolada) {
@@ -11716,13 +11906,13 @@ function calcTotaisAno(anoStr){
   for (let m = 1; m <= 12; m++) {
     const ym = `${ano}-${String(m).padStart(2, '0')}`;
     cartoesAtivos.forEach(c => {
-      const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === ym);
+      const fatReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(c.id) && f.mes === ym);
       if (fatReg && (fatReg.negativada || fatReg.migradoDivida)) {
         return;
       }
       const f = calcularFaturaMes(c.id, ym);
       const mesSeguinte = adicionarMesesYM(ym, 1);
-      const fatSeguinte = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesSeguinte);
+      const fatSeguinte = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(c.id) && f.mes === mesSeguinte);
       const foiRolada = Boolean((fatReg && fatReg.roladoParaProxima) || (fatSeguinte && Number(fatSeguinte.rotativoRolado) > 0));
 
       if (foiRolada) {
@@ -12508,6 +12698,9 @@ function renderResumo(){
 
   // Renderiza gráfico
   renderChart();
+
+  // Renderiza Top 10 Gastos do Mês
+  renderTop10Gastos();
 }
 
 let resumoChart = null;
@@ -12731,7 +12924,7 @@ function renderGastos(){
   const cartoesComFatura = (S.cartoes || []).filter(c => {
     if (c.ativo === false) return false;
     if (filtroTitularGasto !== 'todos' && c.titular !== filtroTitularGasto) return false;
-    const fatReg = (S.faturasCartao || []).find(f => f.cartaoId === c.id && f.mes === mesAtual);
+    const fatReg = (S.faturasCartao || []).find(f => String(f.cartaoId) === String(c.id) && f.mes === mesAtual);
     // Se a fatura foi negativada (atraso >= 60 dias), sai de gastos e vai para a aba Dívidas
     if (fatReg && (fatReg.negativada || fatReg.migradoDivida)) return false;
 
@@ -12741,7 +12934,7 @@ function renderGastos(){
 
   let faturasHtml = cartoesComFatura.map(c => {
     const f = calcularFaturaMes(c.id, mesAtual);
-    const fatReg = (S.faturasCartao || []).find(x => x.cartaoId === c.id && x.mes === mesAtual);
+    const fatReg = (S.faturasCartao || []).find(x => String(x.cartaoId) === String(c.id) && x.mes === mesAtual);
     const titBadge = c.titular ? `<span class="badge b-titular">${escapeHtml(c.titular)}</span>` : '';
     let statusFatBadge = '';
     let corVal = 'c-red';
@@ -13936,6 +14129,9 @@ function renderExtratoBeneficiosModal() {
  */
 function atualizarPreviewBeneficioGasto() {
   if (typeof document === 'undefined') return;
+  if (typeof atualizarVisibilidadeSeletorCartaoGasto === 'function') {
+    atualizarVisibilidadeSeletorCartaoGasto();
+  }
   const container = document.getElementById('g-preview-beneficio');
   if (!container) return;
 
@@ -13944,6 +14140,12 @@ function atualizarPreviewBeneficioGasto() {
   const titular = document.getElementById('g-titular')?.value || '';
   const catSel = document.querySelector('#cat-tags .tag.sel')?.dataset.cat || 'recorrente';
   const origemSel = document.getElementById('g-origem-pagamento')?.value || 'auto';
+
+  if (origemSel === 'cartao') {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
 
   if (val <= 0) {
     container.style.display = 'none';
@@ -15304,6 +15506,554 @@ function abrirDetalheCupomFiscal(cupomId) {
 function fecharDetalheCupomModal() {
   if (typeof closeM === 'function') {
     closeM('m-detalhe-cupom');
+  }
+}
+
+// ============================================================================
+// SUPER-APP FAMILIAR v2.0 - RECURSOS AVANÇADOS DE IA:
+// 1. OCR DE FATURA DE CARTÃO DE CRÉDITO
+// 2. OCR DE EXTRATO BANCÁRIO / VA / VR
+// 3. TOP 10 MAIORES GASTOS DO MÊS + DIAGNÓSTICO DE DESPERDÍCIOS COM IA
+// ============================================================================
+
+let itensFaturaDetectados = [];
+let itensExtratoDetectados = [];
+
+/**
+ * Lê uma fatura de cartão de crédito (PDF ou imagem) via Gemini Vision com fallback
+ * e extrai compras individuais discriminando descrição, valor, data e parcelamento.
+ *
+ * @param {string} base64 - Conteúdo do arquivo em base64
+ * @param {string} mimeType - Tipo MIME (ex: 'application/pdf', 'image/jpeg', 'image/png')
+ * @returns {Promise<Array>} Lista de lançamentos individuais
+ */
+async function lerFaturaCartaoComIA(base64, mimeType = 'image/jpeg') {
+  if (!base64) {
+    throw new Error('Conteúdo do arquivo não fornecido para leitura.');
+  }
+
+  const prompt = `Você recebeu a fatura de um cartão de crédito brasileiro.
+Extraia todas as compras e lançamentos individuais desta fatura.
+Ignore pagamentos de faturas anteriores, créditos, estornos e encargos/juros.
+Retorne estritamente um array JSON puro (sem markdown, sem backticks):
+[{"desc":"Nome do Estabelecimento","val":12.34,"data":"YYYY-MM-DD","parcelaNum":1,"totalParcelas":3}]
+Se for compra à vista, defina parcelaNum como 1 e totalParcelas como 1.
+Se a data vier sem o ano, use o ano atual.
+Garanta que val seja um número positivo (ex: 29.90).`;
+
+  const resultado = await chamarGeminiComFallback({
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { inline_data: { mime_type: mimeType, data: base64 } }
+      ]
+    }],
+    modelos: MODELOS_GEMINI_COMPROVANTES,
+    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2500 }
+  });
+
+  const rawText = (resultado && resultado.text) ? String(resultado.text).trim() : '';
+  const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+  let itens = [];
+  try {
+    const parsed = JSON.parse(cleaned);
+    itens = Array.isArray(parsed) ? parsed : (parsed.itens || parsed.compras || parsed.lancamentos || []);
+  } catch (err) {
+    console.error('Erro ao interpretar JSON da fatura do cartão:', err, rawText);
+    throw new Error('Não foi possível identificar compras válidas no documento da fatura.');
+  }
+
+  return itens.map((it, idx) => ({
+    id: idx,
+    selecionado: true,
+    desc: String(it.desc || it.descricao || it.estabelecimento || 'Compra').trim(),
+    val: Math.max(0.01, parseFloat(String(it.val || it.valor || 0).replace(',', '.')) || 0),
+    data: it.data || new Date().toISOString().slice(0, 10),
+    parcelaNum: parseInt(it.parcelaNum) || 1,
+    totalParcelas: parseInt(it.totalParcelas) || 1
+  })).filter(it => it.val > 0);
+}
+
+/**
+ * Handler ao selecionar arquivo de fatura de cartão no input file
+ */
+async function aoSelecionarArquivoFaturaCartao(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+
+  if (typeof FileReader === 'undefined') {
+    console.warn('FileReader não disponível no ambiente.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result;
+    const base64 = dataUrl.split(',')[1];
+    const mimeType = file.type || 'image/jpeg';
+
+    if (typeof exibirToastNotificacao === 'function') {
+      exibirToastNotificacao('⏳ Analisando fatura com IA...');
+    }
+
+    try {
+      const itens = await lerFaturaCartaoComIA(base64, mimeType);
+      if (!itens.length) {
+        if (typeof alert === 'function') alert('Nenhuma compra identificada no documento da fatura.');
+        return;
+      }
+
+      itensFaturaDetectados = itens;
+      renderizarPreviewFaturaDetectada();
+      openM('m-preview-importar-fatura');
+    } catch (err) {
+      console.error('Falha ao processar fatura de cartão:', err);
+      if (typeof alert === 'function') alert(`Erro ao processar fatura: ${err.message}`);
+    } finally {
+      if (event.target) event.target.value = '';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+/**
+ * Renderiza os lançamentos detectados da fatura no modal de confirmação
+ */
+function renderizarPreviewFaturaDetectada() {
+  const elLista = document.getElementById('preview-fatura-lista');
+  const elTotal = document.getElementById('preview-fatura-total');
+  const elSub = document.getElementById('preview-fatura-subtitulo');
+  if (!elLista) return;
+
+  const total = itensFaturaDetectados
+    .filter(i => i.selecionado)
+    .reduce((s, i) => s + i.val, 0);
+
+  if (elTotal) elTotal.textContent = fmt(Math.round(total * 100) / 100);
+  if (elSub) elSub.textContent = `${itensFaturaDetectados.length} compras detectadas na fatura pela IA.`;
+
+  elLista.innerHTML = itensFaturaDetectados.map((it, idx) => {
+    const parcBadge = it.totalParcelas > 1 ? `<span class="badge b-parc">${it.parcelaNum}/${it.totalParcelas}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
+      <input type="checkbox" ${it.selecionado ? 'checked' : ''} onchange="toggleItemImportarFatura(${idx})" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;"/>
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <strong>${escapeHtml(it.desc)}</strong>
+          ${parcBadge}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">Data: ${escapeHtml(it.data)}</div>
+      </div>
+      <div style="font-weight:700;color:var(--red);">${fmt(it.val)}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleItemImportarFatura(idx) {
+  if (itensFaturaDetectados[idx]) {
+    itensFaturaDetectados[idx].selecionado = !itensFaturaDetectados[idx].selecionado;
+    renderizarPreviewFaturaDetectada();
+  }
+}
+
+/**
+ * Grava as compras confirmadas da fatura diretamente em S.comprasCartao
+ */
+function confirmarImportarFaturaModal() {
+  const selecionados = itensFaturaDetectados.filter(i => i.selecionado);
+  if (!selecionados.length) {
+    if (typeof alert === 'function') alert('Selecione pelo menos uma compra para importar.');
+    return;
+  }
+
+  if (!Array.isArray(S.comprasCartao)) S.comprasCartao = [];
+  const cid = cartaoAtualId || (S.cartoes && S.cartoes[0] ? S.cartoes[0].id : null);
+  if (!cid) {
+    if (typeof alert === 'function') alert('Nenhum cartão selecionado.');
+    return;
+  }
+
+  const mesDestino = faturaMesCompetencia || mesAtual;
+
+  selecionados.forEach((it, idx) => {
+    const isParc = it.totalParcelas > 1;
+    const novaCompra = {
+      id: Date.now() + idx + Math.floor(Math.random() * 1000),
+      cartaoId: cid,
+      desc: escapeHtml(it.desc),
+      val: Math.round(it.val * 100) / 100,
+      valTotal: isParc ? Math.round(it.val * it.totalParcelas * 100) / 100 : Math.round(it.val * 100) / 100,
+      cat: 'outros',
+      data: it.data || new Date().toISOString().slice(0, 10),
+      mesFatura: mesDestino,
+      titular: '',
+      parcelado: isParc,
+      parcelaNum: it.parcelaNum || 1,
+      totalParcelas: it.totalParcelas || 1,
+      canceladaAssinatura: false,
+      canceladaNegativacao: false,
+      grupoId: isParc ? 'imp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4) : ''
+    };
+    S.comprasCartao.push(novaCompra);
+  });
+
+  save();
+  render();
+  closeM('m-preview-importar-fatura');
+
+  if (document.getElementById('m-fatura-cartao')?.classList.contains('open')) {
+    abrirFaturaCartao(cid, mesDestino);
+  }
+
+  if (typeof alert === 'function') {
+    alert(`🎉 ${selecionados.length} compras importadas com sucesso na fatura de ${mesLabel(mesDestino)}!`);
+  }
+}
+
+/**
+ * Lê extrato bancário ou de benefícios via IA e extrai os débitos/saídas
+ *
+ * @param {string} base64 - Conteúdo do arquivo em base64
+ * @param {string} mimeType - Tipo MIME
+ * @returns {Promise<Array>} Lista de despesas extraídas
+ */
+async function lerExtratoBancarioComIA(base64, mimeType = 'image/jpeg') {
+  if (!base64) {
+    throw new Error('Conteúdo do arquivo não fornecido para leitura.');
+  }
+
+  const prompt = `Você é um leitor e analista especialista em extratos bancários, extratos de contas correntes e cartões de benefício (VA / VR) brasileiros.
+Analise este documento e extraia todas as saídas, despesas, débitos e pagamentos individuais.
+Ignore depósitos, créditos, transferências recebidas e saldos.
+Retorne estritamente um array JSON puro (sem markdown, sem backticks):
+[{"desc":"Nome do Estabelecimento","val":12.34,"data":"YYYY-MM-DD","cat":"alimentacao|moradia|transporte|lazer|saude|outros","origemSugerida":"salario|VA|VR"}]
+Se o extrato for de Vale Alimentação / Refeição (Sodexo, Alelo, VR, Ticket, Pluxee), defina origemSugerida como VA ou VR.
+Se for banco tradicional ou fintech (Nubank, Inter, Bradesco, Itaú, Caixa), use salario.
+Garanta que val seja um número positivo.`;
+
+  const resultado = await chamarGeminiComFallback({
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { inline_data: { mime_type: mimeType, data: base64 } }
+      ]
+    }],
+    modelos: MODELOS_GEMINI_COMPROVANTES,
+    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2500 }
+  });
+
+  const rawText = (resultado && resultado.text) ? String(resultado.text).trim() : '';
+  const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+  let itens = [];
+  try {
+    const parsed = JSON.parse(cleaned);
+    itens = Array.isArray(parsed) ? parsed : (parsed.itens || parsed.despesas || parsed.debitos || []);
+  } catch (err) {
+    console.error('Erro ao interpretar JSON do extrato:', err, rawText);
+    throw new Error('Não foi possível identificar débitos no extrato fornecido.');
+  }
+
+  return itens.map((it, idx) => ({
+    id: idx,
+    selecionado: true,
+    desc: String(it.desc || it.descricao || it.estabelecimento || 'Débito').trim(),
+    val: Math.max(0.01, parseFloat(String(it.val || it.valor || 0).replace(',', '.')) || 0),
+    data: it.data || new Date().toISOString().slice(0, 10),
+    cat: it.cat || 'recorrente',
+    origem: it.origemSugerida || 'salario'
+  })).filter(it => it.val > 0);
+}
+
+/**
+ * Handler ao selecionar arquivo de extrato no input file
+ */
+async function aoSelecionarArquivoExtratoGasto(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+
+  if (typeof FileReader === 'undefined') {
+    console.warn('FileReader não disponível no ambiente.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result;
+    const base64 = dataUrl.split(',')[1];
+    const mimeType = file.type || 'image/jpeg';
+
+    if (typeof exibirToastNotificacao === 'function') {
+      exibirToastNotificacao('⏳ Analisando extrato com IA...');
+    }
+
+    try {
+      const itens = await lerExtratoBancarioComIA(base64, mimeType);
+      if (!itens.length) {
+        if (typeof alert === 'function') alert('Nenhuma despesa ou saída identificada no extrato.');
+        return;
+      }
+
+      itensExtratoDetectados = itens;
+      renderizarPreviewExtratoDetectado();
+      openM('m-preview-importar-extrato');
+    } catch (err) {
+      console.error('Falha ao processar extrato bancário:', err);
+      if (typeof alert === 'function') alert(`Erro ao processar extrato: ${err.message}`);
+    } finally {
+      if (event.target) event.target.value = '';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+/**
+ * Renderiza as despesas do extrato no modal de confirmação com dropdown de destino editável
+ */
+function renderizarPreviewExtratoDetectado() {
+  const elLista = document.getElementById('preview-extrato-lista');
+  const elTotal = document.getElementById('preview-extrato-total');
+  const elSub = document.getElementById('preview-extrato-subtitulo');
+  if (!elLista) return;
+
+  const total = itensExtratoDetectados
+    .filter(i => i.selecionado)
+    .reduce((s, i) => s + i.val, 0);
+
+  if (elTotal) elTotal.textContent = fmt(Math.round(total * 100) / 100);
+  if (elSub) elSub.textContent = `${itensExtratoDetectados.length} saídas identificadas no extrato.`;
+
+  elLista.innerHTML = itensExtratoDetectados.map((it, idx) => {
+    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" ${it.selecionado ? 'checked' : ''} onchange="toggleItemImportarExtrato(${idx})" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;"/>
+          <strong>${escapeHtml(it.desc)}</strong>
+        </div>
+        <div style="font-weight:700;color:var(--red);">${fmt(it.val)}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);gap:6px;flex-wrap:wrap;">
+        <span>📅 ${escapeHtml(it.data)}</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <span>Destino:</span>
+          <select style="padding:2px 6px;font-size:11px;border-radius:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);" onchange="itensExtratoDetectados[${idx}].origem = this.value">
+            <option value="salario" ${it.origem === 'salario' ? 'selected' : ''}>💵 Conta Corrente / Salário</option>
+            <option value="VA" ${it.origem === 'VA' ? 'selected' : ''}>🥗 Vale Alimentação</option>
+            <option value="VR" ${it.origem === 'VR' ? 'selected' : ''}>🍽️ Vale Refeição</option>
+          </select>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleItemImportarExtrato(idx) {
+  if (itensExtratoDetectados[idx]) {
+    itensExtratoDetectados[idx].selecionado = !itensExtratoDetectados[idx].selecionado;
+    renderizarPreviewExtratoDetectado();
+  }
+}
+
+/**
+ * Salva as despesas confirmadas do extrato bancário
+ */
+function confirmarImportarExtratoModal() {
+  const selecionados = itensExtratoDetectados.filter(i => i.selecionado);
+  if (!selecionados.length) {
+    if (typeof alert === 'function') alert('Selecione pelo menos uma despesa para lançar.');
+    return;
+  }
+
+  if (!Array.isArray(S.gastos)) S.gastos = [];
+
+  selecionados.forEach((it, idx) => {
+    const novoGastoBase = {
+      id: Date.now() + idx + Math.floor(Math.random() * 1000),
+      desc: it.desc,
+      val: Math.round(it.val * 100) / 100,
+      cat: it.cat || 'recorrente',
+      data: it.data || new Date().toISOString().slice(0, 10),
+      titular: '',
+      origemPagamento: it.origem || 'salario',
+      parcelado: false,
+      recorrente: false,
+      pago: true,
+      dataPagto: it.data || new Date().toISOString().slice(0, 10)
+    };
+
+    if (it.origem === 'VA' || it.origem === 'VR') {
+      const gastoFinal = registrarGastoComBeneficio(novoGastoBase);
+      S.gastos.push(gastoFinal);
+    } else {
+      S.gastos.push(novoGastoBase);
+    }
+  });
+
+  save();
+  render();
+  closeM('m-preview-importar-extrato');
+  closeM('m-gasto');
+
+  if (typeof alert === 'function') {
+    alert(`🎉 ${selecionados.length} despesas importadas do extrato com sucesso!`);
+  }
+}
+
+/**
+ * Calcula o Top 10 maiores estabelecimentos/despesas do mês consolidando gastos e cartões
+ *
+ * @param {string|null} mesYM - Competência YYYY-MM
+ * @returns {Array} Lista ordenada dos 10 maiores estabelecimentos
+ */
+function calcularTop10GastosDoMes(mesYM) {
+  const ym = mesYM ? String(mesYM).slice(0, 7) : mesAtual;
+  const mapa = new Map();
+
+  // 1. Gastos avulsos do mês
+  const gas = (S.gastos || []).filter(g => {
+    if (g.negociado || g.canceladaNegativacao) return false;
+    const gMes = (g.mesFatura || g.data || '').slice(0, 7);
+    return gMes === ym;
+  });
+
+  gas.forEach(g => {
+    let nome = (g.descOriginal || g.desc || 'Diversos').trim();
+    nome = nome.replace(/\s*\(\d+\/\d+\)\s*$/i, '').trim();
+    const val = Number(g.val) || 0;
+    if (val <= 0) return;
+
+    const item = mapa.get(nome) || { estabelecimento: nome, valorTotal: 0, qtdCompras: 0, cat: g.cat || 'outros' };
+    item.valorTotal = Math.round((item.valorTotal + val) * 100) / 100;
+    item.qtdCompras += 1;
+    mapa.set(nome, item);
+  });
+
+  // 2. Compras em cartão de crédito da competência
+  (S.comprasCartao || []).forEach(c => {
+    if (c.canceladaNegativacao || c.canceladaAssinatura) return;
+    if (c.mesFatura === ym) {
+      let nome = (c.descOriginal || c.desc || 'Cartão').trim();
+      nome = nome.replace(/\s*\(\d+\/\d+\)\s*$/i, '').trim();
+      const val = Number(c.val) || 0;
+      if (val <= 0) return;
+
+      const item = mapa.get(nome) || { estabelecimento: nome, valorTotal: 0, qtdCompras: 0, cat: c.cat || 'outros' };
+      item.valorTotal = Math.round((item.valorTotal + val) * 100) / 100;
+      item.qtdCompras += 1;
+      mapa.set(nome, item);
+    }
+  });
+
+  const lista = Array.from(mapa.values());
+  lista.sort((a, b) => b.valorTotal - a.valorTotal);
+  return lista.slice(0, 10);
+}
+
+/**
+ * Renderiza a lista visual do Top 10 Maiores Gastos do Mês
+ */
+function renderTop10Gastos() {
+  const elLista = document.getElementById('top10-ranking-lista');
+  if (!elLista) return;
+
+  const top10 = calcularTop10GastosDoMes(mesAtual);
+  if (!top10.length) {
+    elLista.innerHTML = '<p style="color:var(--muted);font-size:12px;padding:12px 0;text-align:center;margin:0;">Nenhum gasto registrado neste mês ainda.</p>';
+    return;
+  }
+
+  const maiorValor = top10[0].valorTotal || 1;
+  const medalhas = ['🥇', '🥈', '🥉', '4º', '5º', '6º', '7º', '8º', '9º', '10º'];
+  const coresMedalhas = ['#facc15', '#94a3b8', '#d97706', 'var(--muted)', 'var(--muted)', 'var(--muted)', 'var(--muted)', 'var(--muted)', 'var(--muted)', 'var(--muted)'];
+
+  elLista.innerHTML = top10.map((item, idx) => {
+    const pct = Math.min(100, Math.max(5, Math.round((item.valorTotal / maiorValor) * 100)));
+    const pos = medalhas[idx] || `${idx + 1}º`;
+    const corPos = coresMedalhas[idx] || 'var(--muted)';
+
+    return `<div style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:3px;">
+        <div style="display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          <span style="font-weight:700;color:${corPos};min-width:20px;">${pos}</span>
+          <span style="font-weight:600;color:var(--text);">${escapeHtml(item.estabelecimento)}</span>
+          <span style="font-size:10px;color:var(--muted);">(${item.qtdCompras}x)</span>
+        </div>
+        <span style="font-weight:700;color:var(--red);">${fmt(item.valorTotal)}</span>
+      </div>
+      <div style="width:100%;height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg, #ec4899, #8b5cf6);border-radius:3px;transition:width 0.3s;"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/**
+ * Consulta a IA Gemini para analisar o Top 10 de gastos e sugerir cortes de desperdícios
+ */
+async function analisarDesperdiciosTop10IA() {
+  const top10 = calcularTop10GastosDoMes(mesAtual);
+  const elDiag = document.getElementById('top10-diagnostico-ia');
+  const btn = document.getElementById('btn-analisar-desperdicios');
+
+  if (!top10.length) {
+    if (typeof alert === 'function') alert('Cadastre despesas neste mês para poder analisar desperdícios.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Analisando com IA...';
+  }
+
+  try {
+    const resumoItens = top10.map((t, idx) => `${idx + 1}. ${t.estabelecimento}: ${fmt(t.valorTotal)} (${t.qtdCompras} compras)`).join('\n');
+    const totalTop10 = fmt(top10.reduce((s, i) => s + i.valorTotal, 0));
+
+    const prompt = `Você é o Consultor Financeiro Familiar do aplicativo "Negativo ao Milhão".
+Analise os 10 maiores gastos/estabelecimentos da família neste mês (${mesLabel(mesAtual)}):
+${resumoItens}
+Total acumulado no Top 10: ${totalTop10}.
+
+Instruções:
+1. Identifique onde estão os maiores riscos de vazamento financeiro ou supérfluos (ex: delivery repetido, mercado inflacionado, lazer excessivo).
+2. Forneça 3 orientações práticas e objetivas sobre o que cortar imediatamente para fazer sobrar dinheiro até o fim do mês.
+3. Termine com uma frase curta encorajadora e de disciplina financeira.
+Responda em formato limpo, direto e profissional, usando tópicos destacados em negrito.`;
+
+    const resultado = await chamarGeminiComFallback({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      modelos: MODELOS_GEMINI_FALLBACK,
+      generationConfig: { maxOutputTokens: 800 }
+    });
+
+    const textoIA = (resultado && resultado.text) ? resultado.text.trim() : 'Diagnóstico indisponível no momento.';
+
+    if (elDiag) {
+      elDiag.style.display = 'block';
+      const htmlFormatado = escapeHtml(textoIA)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n\n/g, '<br><br>')
+        .replace(/\n/g, '<br>');
+
+      elDiag.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;border-bottom:1px solid rgba(168,85,247,0.25);padding-bottom:6px;">
+          <span style="font-weight:700;color:#c084fc;">💡 Diagnóstico do Consultor IA</span>
+          <button type="button" class="btn" style="width:auto;margin:0;padding:2px 8px;font-size:11px;background:none;border:none;color:var(--muted);cursor:pointer;" onclick="document.getElementById('top10-diagnostico-ia').style.display='none'">✕</button>
+        </div>
+        <div style="line-height:1.5;">${htmlFormatado}</div>
+      `;
+    }
+  } catch (err) {
+    console.error('Erro ao analisar Top 10 com IA:', err);
+    if (elDiag) {
+      elDiag.style.display = 'block';
+      elDiag.innerHTML = `<p style="color:var(--red);margin:0;">⚠️ Não foi possível gerar a análise com IA no momento: ${escapeHtml(err.message)}</p>`;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '💡 Analisar com IA';
+    }
   }
 }
 
@@ -19694,6 +20444,13 @@ if (typeof module !== 'undefined' && module.exports) {
     calcularFaturaMes,
     renderCartoesTopo,
     abrirFaturaCartao,
+    navegarMesFatura,
+    faturaMesCompetencia: () => faturaMesCompetencia,
+    setFaturaMesCompetencia: (v) => { faturaMesCompetencia = v; },
+    getCartaoAtualId: () => cartaoAtualId,
+    setCartaoAtualId: (v) => { cartaoAtualId = v; },
+    popularSelectCartoesGasto,
+    atualizarVisibilidadeSeletorCartaoGasto,
     abrirModalCompraCartao,
     salvarCompraCartao,
     excluirCompraCartao,
@@ -20137,6 +20894,24 @@ if (typeof module !== 'undefined' && module.exports) {
     iniciarNovoChatIA,
     AVATARES_ILUSTRADOS_LISTA,
     CORES_PALETA_MEMBRO,
+    // Super-App - OCR de Faturas de Cartão, Extratos Bancários e Top 10 Gastos
+    lerFaturaCartaoComIA,
+    aoSelecionarArquivoFaturaCartao,
+    renderizarPreviewFaturaDetectada,
+    toggleItemImportarFatura,
+    confirmarImportarFaturaModal,
+    lerExtratoBancarioComIA,
+    aoSelecionarArquivoExtratoGasto,
+    renderizarPreviewExtratoDetectado,
+    toggleItemImportarExtrato,
+    confirmarImportarExtratoModal,
+    calcularTop10GastosDoMes,
+    renderTop10Gastos,
+    analisarDesperdiciosTop10IA,
+    getItensFaturaDetectados: () => itensFaturaDetectados,
+    setItensFaturaDetectados: (v) => { itensFaturaDetectados = v; },
+    getItensExtratoDetectados: () => itensExtratoDetectados,
+    setItensExtratoDetectados: (v) => { itensExtratoDetectados = v; },
     getState: () => S,
     S
   };
@@ -20216,5 +20991,35 @@ if (typeof window !== 'undefined') {
   window.solicitarResetSenhaWhatsApp = solicitarResetSenhaWhatsApp;
   window.isUsuarioAlex = isUsuarioAlex;
   window.iniciarNovoChatIA = iniciarNovoChatIA;
+  window.excluirCartao = excluirCartao;
+  window.navegarMesFatura = navegarMesFatura;
+  window.popularSelectCartoesGasto = popularSelectCartoesGasto;
+  window.atualizarVisibilidadeSeletorCartaoGasto = atualizarVisibilidadeSeletorCartaoGasto;
+  window.abrirModalCartao = abrirModalCartao;
+  window.abrirFaturaCartao = abrirFaturaCartao;
+  window.salvarCartao = salvarCartao;
+  window.calcularFaturaMes = calcularFaturaMes;
+  window.pagarFaturaTotal = pagarFaturaTotal;
+  window.abrirModalPagamentoParcial = abrirModalPagamentoParcial;
+  window.confirmarPagamentoParcial = confirmarPagamentoParcial;
+  window.abrirModalAbaterCartao = abrirModalAbaterCartao;
+  window.confirmarAbatimentoCartao = confirmarAbatimentoCartao;
+  window.abrirModalAnteciparCartao = abrirModalAnteciparCartao;
+  window.anteciparCompraCartao = anteciparCompraCartao;
+  window.getCartaoAtualId = () => cartaoAtualId;
+  window.setCartaoAtualId = (v) => { cartaoAtualId = v; };
+  window.lerFaturaCartaoComIA = lerFaturaCartaoComIA;
+  window.aoSelecionarArquivoFaturaCartao = aoSelecionarArquivoFaturaCartao;
+  window.renderizarPreviewFaturaDetectada = renderizarPreviewFaturaDetectada;
+  window.toggleItemImportarFatura = toggleItemImportarFatura;
+  window.confirmarImportarFaturaModal = confirmarImportarFaturaModal;
+  window.lerExtratoBancarioComIA = lerExtratoBancarioComIA;
+  window.aoSelecionarArquivoExtratoGasto = aoSelecionarArquivoExtratoGasto;
+  window.renderizarPreviewExtratoDetectado = renderizarPreviewExtratoDetectado;
+  window.toggleItemImportarExtrato = toggleItemImportarExtrato;
+  window.confirmarImportarExtratoModal = confirmarImportarExtratoModal;
+  window.calcularTop10GastosDoMes = calcularTop10GastosDoMes;
+  window.renderTop10Gastos = renderTop10Gastos;
+  window.analisarDesperdiciosTop10IA = analisarDesperdiciosTop10IA;
 }
 

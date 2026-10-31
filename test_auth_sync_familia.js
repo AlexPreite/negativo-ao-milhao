@@ -165,7 +165,10 @@ const domMock = {
         },
         value: '',
         textContent: '',
-        innerHTML: ''
+        innerHTML: '',
+        setAttribute(k, v) { this[k] = v; },
+        getAttribute(k) { return this[k]; },
+        removeAttribute(k) { delete this[k]; }
       };
     }
     return this.elements[id];
@@ -892,6 +895,412 @@ test('extrairComImagem e chamarGeminiVisionCupom utilizam MODELOS_GEMINI_COMPROV
       console.log('  ✅ [PASS] chamarGeminiComFallback lança erro explicativo após todos os modelos falharem');
     } catch (err) {
       console.error('  ❌ [FAIL] chamarGeminiComFallback lança erro explicativo após todos os modelos falharem');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  // ----------------------------------------------------
+  // 10. TESTES DE EXCLUSÃO DE CARTÃO, REFLEXO NO CARTÃO AGI E BLINDAGEM DE IDS
+  // ----------------------------------------------------
+  console.log('\n10. Verificação de Exclusão de Cartões, Vínculo com Agi e Lançamentos:');
+
+  test('HTML possui botão de exclusão de cartão nos modais #m-cartao e #m-fatura-cartao', () => {
+    assert.ok(htmlContent.includes('id="c-btn-excluir"'), 'Modal #m-cartao deve conter o botão #c-btn-excluir');
+    assert.ok(htmlContent.includes('onclick="excluirCartao(cartaoAtualId)"'), 'Botão de exclusão deve chamar excluirCartao(cartaoAtualId)');
+    assert.ok(htmlContent.includes('id="m-fatura-cartao"'), 'Modal #m-fatura-cartao deve existir no HTML');
+    const faturaModalPart = htmlContent.slice(htmlContent.indexOf('id="m-fatura-cartao"'), htmlContent.indexOf('id="m-fatura-cartao"') + 2000);
+    assert.ok(faturaModalPart.includes('excluirCartao(cartaoAtualId)'), 'Cabeçalho de #m-fatura-cartao deve conter botão de exclusão chamando excluirCartao(cartaoAtualId)');
+  });
+
+  test('HTML possui seletor de cartão de crédito no modal de gasto (#g-origem-pagamento e #g-bloco-seletor-cartao)', () => {
+    assert.ok(htmlContent.includes('<option value="cartao">💳 Cartão de Crédito</option>'), 'Select #g-origem-pagamento deve possuir a opção de Cartão de Crédito');
+    assert.ok(htmlContent.includes('id="g-bloco-seletor-cartao"'), 'Modal #m-gasto deve conter o bloco condicional #g-bloco-seletor-cartao');
+    assert.ok(htmlContent.includes('id="g-cartao-id"'), 'Bloco seletor de cartão deve conter o <select id="g-cartao-id">');
+  });
+
+  test('HTML possui barra de navegação de competências em #m-fatura-cartao', () => {
+    assert.ok(htmlContent.includes('id="fatura-competencia-label"'), 'Modal de fatura deve conter label da competência');
+    assert.ok(htmlContent.includes('navegarMesFatura(-1)'), 'Modal de fatura deve conter botão para mês anterior');
+    assert.ok(htmlContent.includes('navegarMesFatura(1)'), 'Modal de fatura deve conter botão para próximo mês');
+  });
+
+  test('excluirCartao() remove cartões tanto com IDs numéricos quanto alfanuméricos ("agi")', () => {
+    context.S.cartoes = [
+      { id: 'agi', nome: 'Cartão Agi', limite: 2500, ativo: true },
+      { id: 99, nome: 'Cartão Nubank', limite: 1500, ativo: true }
+    ];
+    context.setCartaoAtualId('agi');
+    
+    // Exclui cartão alfanumérico 'agi'
+    const resAgi = context.excluirCartao('agi');
+    assert.strictEqual(resAgi.ok, true, 'Deve excluir cartão com id string "agi" com sucesso');
+    assert.strictEqual(context.S.cartoes.length, 1, 'Deve restar apenas 1 cartão');
+    assert.strictEqual(context.S.cartoes[0].id, 99, 'Cartão restante deve ser o de ID numérico');
+    assert.strictEqual(context.getCartaoAtualId(), null, 'Deve resetar cartaoAtualId após exclusão');
+
+    // Exclui cartão com id numérico 99
+    const resNum = context.excluirCartao(99);
+    assert.strictEqual(resNum.ok, true, 'Deve excluir cartão com id numérico 99 com sucesso');
+    assert.strictEqual(context.S.cartoes.length, 0, 'Lista de cartões deve ficar vazia');
+  });
+
+  test('renderCartoesTopo() interpola IDs alfanuméricos como "agi" com aspas seguras evitando ReferenceError', () => {
+    context.S.cartoes = [
+      { id: 'agi', nome: 'Agi', limite: 3000, diaFechamento: 15, diaVencimento: 22, ativo: true }
+    ];
+    context.S.comprasCartao = [];
+    context.S.faturasCartao = [];
+    
+    context.renderCartoesTopo();
+    const el = domMock.getElementById('cartoes-topo-container');
+    const htmlGerado = el.innerHTML || '';
+    
+    assert.ok(htmlGerado.includes("abrirFaturaCartao('agi')"), 'onclick deve interpolar o ID com aspas seguras para evitar ReferenceError');
+    assert.ok(!htmlGerado.includes("abrirFaturaCartao(agi)"), 'Não pode gerar abrirFaturaCartao(agi) sem aspas');
+  });
+
+  test('salvarCompraCartao() aceita IDs alfanuméricos ("agi") sem converter para NaN', () => {
+    context.S.cartoes = [
+      { id: 'agi', nome: 'Agi', limite: 3000, diaFechamento: 15, diaVencimento: 22, ativo: true }
+    ];
+    context.S.comprasCartao = [];
+    
+    const res = context.salvarCompraCartao({
+      cartaoId: 'agi',
+      desc: 'Compra Teste Agi',
+      val: 180.50,
+      data: '2026-10-05',
+      parcelado: false
+    });
+
+    assert.strictEqual(res.ok, true, 'Deve salvar compra no cartão Agi');
+    assert.strictEqual(context.S.comprasCartao.length, 1);
+    assert.strictEqual(String(context.S.comprasCartao[0].cartaoId), 'agi');
+    assert.strictEqual(context.S.comprasCartao[0].val, 180.50);
+
+    const fatura = context.calcularFaturaMes('agi', '2026-10');
+    assert.strictEqual(fatura.valorTotalFatura, 180.50, 'Fatura calculada para o cartão Agi deve refletir o valor');
+  });
+
+  test('addGasto() com origem "cartao" vincula automaticamente a S.comprasCartao e reflete na fatura do cartão Agi', () => {
+    context.S.cartoes = [
+      { id: 'agi', nome: 'Agi', limite: 5000, diaFechamento: 20, diaVencimento: 27, ativo: true }
+    ];
+    context.S.gastos = [];
+    context.S.comprasCartao = [];
+    context.S.faturasCartao = [];
+
+    // Mock dos inputs de #m-gasto
+    domMock.getElementById('g-titular').value = 'Alexsander';
+    domMock.getElementById('g-desc').value = 'Mercado Semanal';
+    domMock.getElementById('g-val').value = '250.00';
+    domMock.getElementById('g-data').value = '2026-10-10';
+    domMock.getElementById('g-is-parcelado').checked = false;
+    domMock.getElementById('g-is-recorrente').checked = false;
+    domMock.getElementById('g-origem-pagamento').value = 'cartao';
+    domMock.getElementById('g-cartao-id').value = 'agi';
+
+    context.addGasto();
+
+    assert.strictEqual(context.S.gastos.length, 1, 'Deve registrar o gasto em S.gastos');
+    assert.strictEqual(context.S.comprasCartao.length, 1, 'Deve espelhar a compra em S.comprasCartao');
+    assert.strictEqual(String(context.S.comprasCartao[0].cartaoId), 'agi', 'cartaoId em comprasCartao deve ser agi');
+    assert.strictEqual(context.S.comprasCartao[0].val, 250);
+
+    const faturaAgi = context.calcularFaturaMes('agi', '2026-10');
+    assert.strictEqual(faturaAgi.valorTotalFatura, 250, 'Fatura do cartão Agi deve refletir exatamente o valor lançado no modal de gastos');
+  });
+
+  test('addGasto() parcelado no cartão Agi gera as parcelas sequenciais em S.comprasCartao', () => {
+    context.S.cartoes = [
+      { id: 'agi', nome: 'Agi', limite: 5000, diaFechamento: 20, diaVencimento: 27, ativo: true }
+    ];
+    context.S.gastos = [];
+    context.S.comprasCartao = [];
+    context.S.faturasCartao = [];
+
+    domMock.getElementById('g-titular').value = 'Alexsander';
+    domMock.getElementById('g-desc').value = 'Smartphone';
+    domMock.getElementById('g-val').value = '900.00';
+    domMock.getElementById('g-data').value = '2026-10-10';
+    domMock.getElementById('g-is-parcelado').checked = true;
+    domMock.getElementById('g-num-parcelas').value = '3';
+    domMock.getElementById('g-origem-pagamento').value = 'cartao';
+    domMock.getElementById('g-cartao-id').value = 'agi';
+    domMock.getElementById('g-tipo-divida').value = 'cartao';
+
+    context.addGasto();
+
+    assert.strictEqual(context.S.comprasCartao.length, 3, 'Deve gerar exatamente 3 parcelas em S.comprasCartao');
+    assert.strictEqual(context.S.comprasCartao[0].mesFatura, '2026-10');
+    assert.strictEqual(context.S.comprasCartao[1].mesFatura, '2026-11');
+    assert.strictEqual(context.S.comprasCartao[2].mesFatura, '2026-12');
+    assert.strictEqual(context.S.comprasCartao[0].val, 300);
+
+    const faturaOut = context.calcularFaturaMes('agi', '2026-10');
+    const faturaNov = context.calcularFaturaMes('agi', '2026-11');
+    assert.strictEqual(faturaOut.valorTotalFatura, 300, 'Fatura de Outubro deve ter parcela 1/3');
+    assert.strictEqual(faturaNov.valorTotalFatura, 300, 'Fatura de Novembro deve ter parcela 2/3');
+  });
+
+  test('Compras realizadas após o dia de fechamento caem na fatura da competência seguinte', () => {
+    const diaFech = 10;
+    const diaVenc = 17;
+    // Compra no dia 12 (após fechamento do dia 10)
+    const mesFatura = context.calcularMesFaturaCompra('2026-10-12', diaFech, diaVenc);
+    assert.strictEqual(mesFatura, '2026-11', 'Compra após o fechamento deve alocar para a fatura do mês subsequente');
+
+    // Compra no dia 8 (antes do fechamento do dia 10)
+    const mesFaturaAntes = context.calcularMesFaturaCompra('2026-10-08', diaFech, diaVenc);
+    assert.strictEqual(mesFaturaAntes, '2026-10', 'Compra antes do fechamento deve alocar para a fatura do mês corrente');
+  });
+
+  test('navegarMesFatura() avança e recua competência da fatura e atualiza estado', () => {
+    context.S.cartoes = [
+      { id: 'agi', nome: 'Agi', limite: 5000, diaFechamento: 20, diaVencimento: 27, ativo: true }
+    ];
+    context.abrirFaturaCartao('agi', '2026-10');
+    assert.strictEqual(context.faturaMesCompetencia(), '2026-10');
+
+    // Avança 1 mês
+    context.navegarMesFatura(1);
+    assert.strictEqual(context.faturaMesCompetencia(), '2026-11');
+
+    // Recua 1 mês
+    context.navegarMesFatura(-1);
+    assert.strictEqual(context.faturaMesCompetencia(), '2026-10');
+  });
+
+  // ----------------------------------------------------
+  // 11. TESTES DE OCR DE FATURAS, EXTRATOS & TOP 10 MAIORES GASTOS
+  // ----------------------------------------------------
+  console.log('\n11. Verificação de OCR de Faturas/Extratos e Top 10 Gastos com IA:');
+
+  test('HTML possui modais e controles para OCR de Faturas, OCR de Extratos e Top 10 Gastos', () => {
+    // 1. Fatura de Cartão
+    assert.ok(htmlContent.includes('id="m-preview-importar-fatura"'), 'Deve conter modal m-preview-importar-fatura');
+    assert.ok(htmlContent.includes('id="preview-fatura-lista"'), 'Deve conter elemento preview-fatura-lista');
+    assert.ok(htmlContent.includes('id="preview-fatura-total"'), 'Deve conter preview-fatura-total');
+    assert.ok(htmlContent.includes('id="fatura-ocr-input"'), 'Deve conter input de arquivo fatura-ocr-input');
+    assert.ok(htmlContent.includes('aoSelecionarArquivoFaturaCartao'), 'Deve vincular onchange ao aoSelecionarArquivoFaturaCartao');
+
+    // 2. Extrato Bancário / Benefícios
+    assert.ok(htmlContent.includes('id="m-preview-importar-extrato"'), 'Deve conter modal m-preview-importar-extrato');
+    assert.ok(htmlContent.includes('id="preview-extrato-lista"'), 'Deve conter preview-extrato-lista');
+    assert.ok(htmlContent.includes('id="preview-extrato-total"'), 'Deve conter preview-extrato-total');
+    assert.ok(htmlContent.includes('id="extrato-ocr-input"'), 'Deve conter input de arquivo extrato-ocr-input');
+    assert.ok(htmlContent.includes('aoSelecionarArquivoExtratoGasto'), 'Deve vincular onchange ao aoSelecionarArquivoExtratoGasto');
+
+    // 3. Top 10 Maiores Gastos do Mês
+    assert.ok(htmlContent.includes('id="card-top10-gastos"'), 'Deve conter card-top10-gastos');
+    assert.ok(htmlContent.includes('id="top10-ranking-lista"'), 'Deve conter elemento top10-ranking-lista');
+    assert.ok(htmlContent.includes('id="btn-analisar-desperdicios"'), 'Deve conter btn-analisar-desperdicios');
+    assert.ok(htmlContent.includes('id="top10-diagnostico-ia"'), 'Deve conter top10-diagnostico-ia');
+  });
+
+  test('Transparência em faturas: detalha explicitamente juros e encargos de rotativo sobre saldo anterior', () => {
+    context.S.cartoes = [
+      { id: 'agi', nome: 'Agi', limite: 5000, diaFechamento: 20, diaVencimento: 27, taxaRotativo: 14.5, ativo: true }
+    ];
+    context.S.comprasCartao = [];
+    context.S.faturasCartao = [
+      {
+        cartaoId: 'agi',
+        mes: '2026-09',
+        valorTotalFatura: 1000,
+        totalPago: 400, // Pagou 400, restou 600
+        saldoRestante: 600,
+        pagoParcial: true,
+        fechada: true
+      }
+    ];
+
+    const faturaOut = context.calcularFaturaMes('agi', '2026-10');
+    assert.ok(faturaOut.rotativoItem, 'Deve gerar rotativoItem quando houver saldo não pago da competência anterior');
+    assert.strictEqual(faturaOut.rotativoItem.detalhe.saldoAnterior, 600, 'Saldo anterior deve ser R$ 600');
+    assert.strictEqual(faturaOut.rotativoItem.detalhe.juros, 87, 'Juros de 14.5% sobre 600 deve ser R$ 87');
+    assert.strictEqual(faturaOut.valorTotalFatura, 687, 'Fatura de Outubro deve totalizar R$ 687 (600 + 87)');
+  });
+
+  await (async () => {
+    totalTests++;
+    try {
+      const originalChamar = context.chamarGeminiComFallback;
+      context.chamarGeminiComFallback = async () => ({
+        text: JSON.stringify([
+          { desc: 'Mercado Livre', val: 150.00, data: '2026-10-05', parcelaNum: 1, totalParcelas: 1 },
+          { desc: 'Notebook Dell', val: 400.00, data: '2026-10-01', parcelaNum: 2, totalParcelas: 10 }
+        ])
+      });
+
+      const itens = await context.lerFaturaCartaoComIA('base64faturaFake', 'image/jpeg');
+      assert.strictEqual(itens.length, 2, 'Deve extrair 2 itens da fatura');
+      assert.strictEqual(itens[0].desc, 'Mercado Livre');
+      assert.strictEqual(itens[0].val, 150);
+      assert.strictEqual(itens[0].selecionado, true);
+      assert.strictEqual(itens[1].parcelaNum, 2);
+      assert.strictEqual(itens[1].totalParcelas, 10);
+
+      context.chamarGeminiComFallback = originalChamar;
+      passedTests++;
+      console.log('  ✅ [PASS] lerFaturaCartaoComIA() extrai compras e parcelas da fatura via Gemini');
+    } catch (err) {
+      console.error('  ❌ [FAIL] lerFaturaCartaoComIA() extrai compras e parcelas da fatura via Gemini');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  test('confirmarImportarFaturaModal() grava itens selecionados em S.comprasCartao vinculados ao cartão ativo', () => {
+    context.S.cartoes = [{ id: 'agi', nome: 'Agi', limite: 5000, diaFechamento: 20, diaVencimento: 27, ativo: true }];
+    context.setCartaoAtualId('agi');
+    context.setFaturaMesCompetencia('2026-10');
+    context.S.comprasCartao = [];
+
+    context.setItensFaturaDetectados([
+      { id: 0, selecionado: true, desc: 'Amazon Prime', val: 19.90, data: '2026-10-03', parcelaNum: 1, totalParcelas: 1 },
+      { id: 1, selecionado: false, desc: 'Compra Desmarcada', val: 50.00, data: '2026-10-04', parcelaNum: 1, totalParcelas: 1 },
+      { id: 2, selecionado: true, desc: 'Sofá 3 Lugares', val: 200.00, data: '2026-10-05', parcelaNum: 1, totalParcelas: 5 }
+    ]);
+
+    context.confirmarImportarFaturaModal();
+
+    assert.strictEqual(context.S.comprasCartao.length, 2, 'Deve importar apenas os 2 itens selecionados');
+    assert.strictEqual(context.S.comprasCartao[0].desc, 'Amazon Prime');
+    assert.strictEqual(context.S.comprasCartao[0].cartaoId, 'agi');
+    assert.strictEqual(context.S.comprasCartao[0].mesFatura, '2026-10');
+    assert.strictEqual(context.S.comprasCartao[1].desc, 'Sofá 3 Lugares');
+    assert.strictEqual(context.S.comprasCartao[1].parcelado, true);
+    assert.strictEqual(context.S.comprasCartao[1].totalParcelas, 5);
+  });
+
+  await (async () => {
+    totalTests++;
+    try {
+      const originalChamar = context.chamarGeminiComFallback;
+      context.chamarGeminiComFallback = async () => ({
+        text: JSON.stringify([
+          { desc: 'Padaria Central', val: 28.50, data: '2026-10-06', cat: 'alimentacao', origemSugerida: 'VR' },
+          { desc: 'Supermercado Dia', val: 215.00, data: '2026-10-07', cat: 'alimentacao', origemSugerida: 'VA' },
+          { desc: 'Posto Petrobras', val: 100.00, data: '2026-10-08', cat: 'transporte', origemSugerida: 'salario' }
+        ])
+      });
+
+      const itens = await context.lerExtratoBancarioComIA('base64extratoFake', 'application/pdf');
+      assert.strictEqual(itens.length, 3, 'Deve extrair 3 transações do extrato');
+      assert.strictEqual(itens[0].origem, 'VR');
+      assert.strictEqual(itens[1].origem, 'VA');
+      assert.strictEqual(itens[2].origem, 'salario');
+
+      context.chamarGeminiComFallback = originalChamar;
+      passedTests++;
+      console.log('  ✅ [PASS] lerExtratoBancarioComIA() extrai saídas bancárias e sugere origem (VA/VR/Salário)');
+    } catch (err) {
+      console.error('  ❌ [FAIL] lerExtratoBancarioComIA() extrai saídas bancárias e sugere origem (VA/VR/Salário)');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  test('confirmarImportarExtratoModal() salva gastos e respeita confirmação de destino (salário vs VA/VR)', () => {
+    context.S.gastos = [];
+    context.setItensExtratoDetectados([
+      { id: 0, selecionado: true, desc: 'Almoço Restaurante', val: 45.00, data: '2026-10-09', cat: 'alimentacao', origem: 'VR' },
+      { id: 1, selecionado: true, desc: 'Conta de Energia', val: 180.00, data: '2026-10-10', cat: 'moradia', origem: 'salario' }
+    ]);
+
+    context.confirmarImportarExtratoModal();
+
+    assert.strictEqual(context.S.gastos.length, 2, 'Deve adicionar 2 gastos a S.gastos');
+    const gastoVR = context.S.gastos.find(g => g.desc === 'Almoço Restaurante');
+    const gastoSalario = context.S.gastos.find(g => g.desc === 'Conta de Energia');
+
+    assert.ok(gastoVR, 'Gasto de VR deve existir');
+    assert.strictEqual(gastoVR.origemPagamento, 'VR');
+    assert.ok(gastoSalario, 'Gasto de salário deve existir');
+    assert.strictEqual(gastoSalario.origemPagamento, 'salario');
+  });
+
+  test('calcularTop10GastosDoMes() consolida gastos e cartões, unifica parcelas e ordena decrescente', () => {
+    context.S.gastos = [
+      { id: 1, desc: 'iFood (1/3)', val: 50.00, data: '2026-10-01' },
+      { id: 2, desc: 'iFood (2/3)', val: 50.00, data: '2026-10-15' },
+      { id: 3, desc: 'Supermercado Assaí', val: 400.00, data: '2026-10-05' },
+      { id: 4, desc: 'Gasto Outro Mês', val: 999.00, data: '2026-09-10' }
+    ];
+    context.S.comprasCartao = [
+      { id: 10, desc: 'Supermercado Assaí', val: 300.00, mesFatura: '2026-10' },
+      { id: 11, desc: 'Farmácia Drogasil', val: 120.00, mesFatura: '2026-10' }
+    ];
+
+    const top10 = context.calcularTop10GastosDoMes('2026-10');
+
+    // 1º lugar: Supermercado Assaí (400 + 300 = 700, 2 compras)
+    assert.strictEqual(top10[0].estabelecimento, 'Supermercado Assaí');
+    assert.strictEqual(top10[0].valorTotal, 700);
+    assert.strictEqual(top10[0].qtdCompras, 2);
+
+    // 2º lugar: Farmácia Drogasil (120)
+    assert.strictEqual(top10[1].estabelecimento, 'Farmácia Drogasil');
+    assert.strictEqual(top10[1].valorTotal, 120);
+
+    // 3º lugar: iFood (50 + 50 = 100, unificado sem sufixo de parcelas)
+    assert.strictEqual(top10[2].estabelecimento, 'iFood');
+    assert.strictEqual(top10[2].valorTotal, 100);
+    assert.strictEqual(top10[2].qtdCompras, 2);
+
+    // Gasto do mês 2026-09 não deve constar
+    assert.strictEqual(top10.some(t => t.estabelecimento === 'Gasto Outro Mês'), false);
+  });
+
+  test('renderTop10Gastos() renderiza o ranking com barras proporcionais no elemento #top10-ranking-lista', () => {
+    domMock.getElementById('top10-ranking-lista').innerHTML = '';
+    const hojeMes = new Date().toISOString().slice(0, 7);
+    context.S.gastos = [
+      { id: 1, desc: 'Posto Ipiranga', val: 200.00, data: hojeMes + '-10' }
+    ];
+    context.S.comprasCartao = [];
+
+    context.renderTop10Gastos();
+
+    const htmlLista = domMock.getElementById('top10-ranking-lista').innerHTML;
+    assert.ok(htmlLista.includes('Posto Ipiranga'), 'HTML deve conter o nome do estabelecimento');
+    assert.ok(htmlLista.includes('200'), 'HTML deve conter o valor');
+  });
+
+  await (async () => {
+    totalTests++;
+    try {
+      let promptRecebido = '';
+      const originalChamar = context.chamarGeminiComFallback;
+      context.chamarGeminiComFallback = async (opts) => {
+        promptRecebido = opts.contents[0].parts[0].text;
+        return { text: '**Diagnóstico:** Reduza os gastos de combustíveis e padarias.' };
+      };
+
+      const hojeMes = new Date().toISOString().slice(0, 7);
+      context.S.gastos = [
+        { id: 1, desc: 'Posto Ipiranga', val: 200.00, data: hojeMes + '-10' }
+      ];
+      context.S.comprasCartao = [];
+
+      domMock.getElementById('top10-diagnostico-ia').innerHTML = '';
+      domMock.getElementById('top10-diagnostico-ia').style = {};
+
+      await context.analisarDesperdiciosTop10IA();
+
+      assert.ok(promptRecebido.includes('Consultor Financeiro Familiar'), 'Deve enviar prompt especializado de corte de desperdícios');
+      assert.ok(promptRecebido.includes('Posto Ipiranga'), 'Deve conter os estabelecimentos do Top 10 no prompt');
+      const htmlDiag = domMock.getElementById('top10-diagnostico-ia').innerHTML;
+      assert.ok(htmlDiag.includes('Diagnóstico do Consultor IA'), 'Deve renderizar cabeçalho do diagnóstico');
+      assert.ok(htmlDiag.includes('Reduza os gastos de combustíveis'), 'Deve renderizar texto da resposta da IA formatado');
+
+      context.chamarGeminiComFallback = originalChamar;
+      passedTests++;
+      console.log('  ✅ [PASS] analisarDesperdiciosTop10IA() envia ranking ao Gemini e renderiza recomendações');
+    } catch (err) {
+      console.error('  ❌ [FAIL] analisarDesperdiciosTop10IA() envia ranking ao Gemini e renderiza recomendações');
       console.error('     Erro:', err.message);
       throw err;
     }

@@ -1235,6 +1235,20 @@
         <p class="card-label">Progresso das Metas</p>
         <div id="dashboard-metas"></div>
       </div>
+
+      <!-- TOP 10 MAIORES GASTOS DO MÊS + DIAGNÓSTICO IA -->
+      <div class="card" id="card-top10-gastos" style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div>
+            <p class="card-label" style="margin:0;">🏆 Top 10 Maiores Gastos do Mês</p>
+            <span style="font-size:11px;color:var(--muted);">Por estabelecimento ou despesa</span>
+          </div>
+          <button type="button" class="btn" id="btn-analisar-desperdicios" style="width:auto;margin:0;padding:5px 10px;font-size:11px;background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.35);cursor:pointer;" onclick="analisarDesperdiciosTop10IA()">💡 Analisar com IA</button>
+        </div>
+        <div id="top10-ranking-lista"></div>
+        <div id="top10-diagnostico-ia" style="display:none;margin-top:10px;padding:12px;border-radius:var(--radius-sm);background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.25);font-size:12.5px;line-height:1.45;color:var(--text);"></div>
+      </div>
+
       <button class="btn btn-primary" onclick="go('agente')">📊 Consultar agente financeiro</button>
     </div>
 
@@ -1274,6 +1288,10 @@
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button class="btn" style="flex:1;" onclick="abrirModalGasto()">+ Adicionar gasto</button>
         <button class="btn btn-primary" id="btn-ler-cupom-gastos" style="flex:1;" onclick="abrirScannerCupom()">📷 Ler Cupom / QR</button>
+      </div>
+      <div style="margin-top:8px;">
+        <input type="file" id="extrato-ocr-input" accept="image/*,application/pdf" style="display:none;" onchange="aoSelecionarArquivoExtratoGasto(event)">
+        <button type="button" class="btn" id="btn-ler-extrato-gastos" style="width:100%;margin:0;background:rgba(59,130,246,0.14);color:#60a5fa;border:1px solid rgba(59,130,246,0.35);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;" onclick="document.getElementById('extrato-ocr-input').click()">📄 Ler Extrato Bancário / VA / VR com IA</button>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button type="button" class="btn" style="flex:1; background:rgba(236,72,153,0.12); color:#ec4899; border:1px solid rgba(236,72,153,0.3); font-size:12px; font-weight:700;" onclick="abrirModalTetosCategorias()">🎯 Tetos por Categoria</button>
@@ -2289,7 +2307,10 @@
   <div class="modal">
     <span class="modal-close" onclick="closeM('m-gasto')">×</span>
     <p class="modal-title">Novo gasto</p>
-    <button type="button" class="btn" style="background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.4);margin-bottom:12px;width:100%;font-weight:600;" onclick="abrirModalCartao()">💳 + Cadastrar Cartão de Crédito</button>
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button type="button" class="btn" style="flex:1;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.4);margin:0;font-size:12px;font-weight:600;" onclick="abrirModalCartao()">💳 + Cartão</button>
+      <button type="button" class="btn" style="flex:1;background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.4);margin:0;font-size:12px;font-weight:600;" onclick="document.getElementById('extrato-ocr-input').click()">📄 Importar Extrato</button>
+    </div>
     <div class="input-row"><label>Titular</label><input type="text" id="g-titular" placeholder="Ex: Alex, Gabi..." list="titulares-list" oninput="atualizarPreviewBeneficioGasto()"/></div>
     <div class="input-row"><label>Descrição</label><input type="text" id="g-desc" placeholder="Ex: Aluguel, Supermercado, Viagem..." oninput="atualizarPreviewBeneficioGasto()"/></div>
     <div class="input-row"><label>Valor (R$)</label><input type="number" id="g-val" placeholder="0,00" inputmode="decimal" oninput="atualizarPreviewParcelas(); atualizarPreviewBeneficioGasto();"/></div>
@@ -2298,9 +2319,14 @@
       <select id="g-origem-pagamento" onchange="atualizarPreviewBeneficioGasto()">
         <option value="auto">Automático (Detectar VA / VR ou Salário)</option>
         <option value="salario">Salário / Conta Corrente</option>
+        <option value="cartao">💳 Cartão de Crédito</option>
         <option value="VA">Vale-Alimentação (VA)</option>
         <option value="VR">Vale-Refeição (VR)</option>
       </select>
+    </div>
+    <div class="input-row" id="g-bloco-seletor-cartao" style="display:none;">
+      <label>Qual cartão?</label>
+      <select id="g-cartao-id"></select>
     </div>
     <div id="g-preview-beneficio" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px;font-size:12px;"></div>
     <div class="input-row"><label>Data</label><input type="date" id="g-data"/></div>
@@ -2425,15 +2451,25 @@
       </div>
     </div>
     <button type="button" class="btn btn-g" id="c-btn-salvar" style="margin-top:10px;" onclick="salvarCartao()">Salvar Cartão</button>
+    <button type="button" class="btn" id="c-btn-excluir" style="display:none;background:rgba(239,68,68,0.18);color:#f87171;border:1px solid rgba(239,68,68,0.35);margin-top:8px;" onclick="excluirCartao(document.getElementById('c-edit-id').value)">🗑️ Excluir Cartão</button>
   </div>
 </div>
 
 <div class="modal-bg" id="m-fatura-cartao">
   <div class="modal" style="max-height:85vh;display:flex;flex-direction:column;">
     <span class="modal-close" onclick="closeM('m-fatura-cartao')">×</span>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-right:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-right:20px;gap:6px;flex-wrap:wrap;">
       <p class="modal-title" id="fatura-titulo" style="margin:0;">💳 Detalhes da Fatura</p>
-      <button type="button" class="btn" style="width:auto;margin:0;padding:5px 10px;font-size:12px;background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.35);cursor:pointer;" onclick="abrirModalCartao(cartaoAtualId)">✏️ Editar Cartão</button>
+      <div style="display:flex;gap:6px;">
+        <button type="button" class="btn" style="width:auto;margin:0;padding:5px 10px;font-size:12px;background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.35);cursor:pointer;" onclick="abrirModalCartao(cartaoAtualId)">✏️ Editar Cartão</button>
+        <button type="button" class="btn" style="width:auto;margin:0;padding:5px 10px;font-size:12px;background:rgba(239,68,68,0.18);color:#f87171;border:1px solid rgba(239,68,68,0.35);cursor:pointer;" onclick="excluirCartao(cartaoAtualId)">🗑️ Excluir Cartão</button>
+      </div>
+    </div>
+    <!-- NAVEGAÇÃO DE COMPETÊNCIA DA FATURA -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;">
+      <button type="button" class="btn" style="width:auto;margin:0;padding:4px 10px;font-size:12px;background:rgba(255,255,255,0.08);color:var(--text);border:1px solid var(--border);cursor:pointer;" onclick="navegarMesFatura(-1)">◀ Anterior</button>
+      <span id="fatura-competencia-label" style="font-size:13px;font-weight:700;color:var(--text);"></span>
+      <button type="button" class="btn" style="width:auto;margin:0;padding:4px 10px;font-size:12px;background:rgba(255,255,255,0.08);color:var(--text);border:1px solid var(--border);cursor:pointer;" onclick="navegarMesFatura(1)">Próxima ▶</button>
     </div>
     <!-- GESTÃO INTELIGENTE DE LIMITE (Fatia 3) -->
     <div id="fatura-bloco-limite" style="display:none;margin-bottom:10px;"></div>
@@ -2454,10 +2490,50 @@
       <button type="button" class="btn" id="btn-antecipar-parcelas" style="grid-column:1/-1;padding:8px 6px;font-size:12px;margin:0;background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.35);" onclick="abrirModalAnteciparCartao()">⏩ Antecipar Faturas/Parcelas</button>
     </div>
 
-    <button type="button" class="btn btn-g" style="margin-bottom:12px;padding:8px;font-size:13px;" id="btn-add-compra-fatura" onclick="abrirModalCompraCartao(cartaoAtualId)">+ Adicionar compra neste cartão</button>
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button type="button" class="btn btn-g" style="flex:1;margin:0;padding:8px 6px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:4px;" id="btn-add-compra-fatura" onclick="abrirModalCompraCartao(cartaoAtualId)">+ Adicionar Compra</button>
+      <input type="file" id="fatura-ocr-input" accept="image/*,application/pdf" style="display:none;" onchange="aoSelecionarArquivoFaturaCartao(event)">
+      <button type="button" class="btn" id="btn-ler-fatura-ia" style="flex:1;margin:0;padding:8px 6px;font-size:12px;background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.35);display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;" onclick="document.getElementById('fatura-ocr-input').click()">📷 Ler Fatura com IA</button>
+    </div>
     <p class="sec-title" style="font-size:13px;margin:0 0 6px;">Itens da fatura</p>
     <div id="fatura-itens-lista" style="flex:1;overflow-y:auto;max-height:260px;margin-bottom:12px;"></div>
     <button class="btn" onclick="closeM('m-fatura-cartao')">Fechar</button>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW / CONFIRMAÇÃO DE OCR DE FATURA DE CARTÃO -->
+<div class="modal-bg" id="m-preview-importar-fatura">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column;">
+    <span class="modal-close" onclick="closeM('m-preview-importar-fatura')">×</span>
+    <p class="modal-title" style="margin:0 0 4px;">📷 Importar Compras da Fatura</p>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 10px;" id="preview-fatura-subtitulo">A IA leu sua fatura! Selecione as compras para lançar.</p>
+    <div id="preview-fatura-lista" style="flex:1;overflow-y:auto;max-height:360px;margin-bottom:12px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:12px;">
+      <span style="font-size:12px;color:var(--muted);">Total selecionado:</span>
+      <span id="preview-fatura-total" style="font-size:16px;font-weight:700;color:var(--red);">R$ 0,00</span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="btn" style="margin:0;" onclick="closeM('m-preview-importar-fatura')">Cancelar</button>
+      <button type="button" class="btn btn-g" id="btn-confirmar-importar-fatura" style="margin:0;" onclick="confirmarImportarFaturaModal()">Importar Compras</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW / CONFIRMAÇÃO DE OCR DE EXTRATO BANCÁRIO / VA / VR -->
+<div class="modal-bg" id="m-preview-importar-extrato">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column;">
+    <span class="modal-close" onclick="closeM('m-preview-importar-extrato')">×</span>
+    <p class="modal-title" style="margin:0 0 4px;">📄 Importar Extrato Bancário / VA / VR</p>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 10px;" id="preview-extrato-subtitulo">A IA identificou as saídas do extrato! Revise antes de lançar.</p>
+    <div id="preview-extrato-lista" style="flex:1;overflow-y:auto;max-height:360px;margin-bottom:12px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:12px;">
+      <span style="font-size:12px;color:var(--muted);">Total de despesas selecionadas:</span>
+      <span id="preview-extrato-total" style="font-size:16px;font-weight:700;color:var(--red);">R$ 0,00</span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="btn" style="margin:0;" onclick="closeM('m-preview-importar-extrato')">Cancelar</button>
+      <button type="button" class="btn btn-g" id="btn-confirmar-importar-extrato" style="margin:0;" onclick="confirmarImportarExtratoModal()">Lançar Despesas</button>
+    </div>
   </div>
 </div>
 
