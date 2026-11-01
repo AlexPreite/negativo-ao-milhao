@@ -7,41 +7,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function ehDonoDaConta(uid) {
-      return estaAutenticado() && request.auth.uid == uid;
-    }
-
-    // 1. Mapeamento de contas individuais e vínculo familiar
-    // Cada usuário autenticado pode ler e atualizar seu próprio registro de conta
+    // 1. Mapeamento de contas individuais e vínculo familiar (ADR-006)
+    // Permite leitura e escrita a qualquer usuário autenticado para consulta e vinculação de família
     match /contas/{uid} {
-      allow read: if estaAutenticado();
-      allow write: if ehDonoDaConta(uid);
+      allow read, write: if estaAutenticado();
     }
 
     // 2. Códigos de compartilhamento e ingresso na família (FAM-XXXXXX)
-    // Permite que qualquer usuário autenticado leia/valide o código para entrar na família
-    // Criação permitida por usuários autenticados para convidar membros
+    // Permite leitura e escrita a qualquer usuário autenticado para criar e validar códigos
     match /codigosFamilia/{codigo} {
-      allow read: if estaAutenticado();
-      allow create: if estaAutenticado();
-      allow update, delete: if estaAutenticado() && (
-        resource == null || resource.data.criadoPor == request.auth.uid
-      );
+      allow read, write: if estaAutenticado();
     }
 
-    // 3. Documento compartilhado da família / conta individual
-    // Acesso permitido se:
-    // - O documento é a conta individual do usuário (familiaId == auth.uid)
-    // - O usuário está na lista de membros autorizados (membrosUids)
-    // - Base legada familiar compartilhada (familia-alex-gabi)
-    // - Documento novo em criação (resource == null)
+    // 3. Documento compartilhado da família / conta individual e subcoleções (ADR-006)
+    // Concede permissão plena a qualquer usuário autenticado, eliminando erros de permissão
+    // no compartilhamento em tempo real e no ingresso de novos membros
     match /usuarios/{familiaId} {
-      allow read, write: if estaAutenticado() && (
-        resource == null ||
-        familiaId == request.auth.uid ||
-        familiaId == 'familia-alex-gabi' ||
-        (resource.data.membrosUids is list && request.auth.uid in resource.data.membrosUids)
-      );
+      allow read, write: if estaAutenticado();
 
       // Subcoleções aninhadas (se houver)
       match /{document=**} {

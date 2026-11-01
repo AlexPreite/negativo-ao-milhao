@@ -6267,11 +6267,20 @@ function escutarSincronizacaoTempoReal() {
       if (doc && doc.exists) {
         const dadosNuvem = doc.data();
         if (dadosNuvem) {
-          const meuMembroId = (fbUser ? fbUser.uid : null) || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
+          // Blindagem de identidade ADR-006:
+          // Captura com máxima precedência a identidade do aparelho local
+          const meuMembroId = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) ||
+                              (fbUser ? fbUser.uid : null) ||
+                              S.membroAtivoId ||
+                              'm_1';
           const chaveLocal = apiKey || S.apiKey;
 
           Object.assign(S, dadosNuvem);
+          // NUNCA sobrescreve a identidade do aparelho local com a de outro membro que sincronizou na nuvem
           S.membroAtivoId = meuMembroId;
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('dnm_meu_membro_id', meuMembroId);
+          }
           if (chaveLocal && !S.apiKey) S.apiKey = chaveLocal;
 
           try {
@@ -7296,19 +7305,26 @@ function updateContaStatus() {
 /**
  * Retorna o ID do documento da família no Firestore.
  * Prioriza identidade do Alex para base histórica unificada 'familia-alex-gabi'.
- * Para outros usuários, bloqueia fallback espúrio de 'familia-alex-gabi' herdado de storage.
+ * Retorna o ID do documento da família no Firestore (ADR-006).
+ * Dá precedência ao ID configurado no localStorage ou em memória (familiaId),
+ * garantindo que membros convidados (como a Gabi) permaneçam no documento familiar compartilhado.
  */
 function docId() {
+  const doLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('dnm_familia_id') : null;
+  if (doLocal && doLocal.trim() !== '') {
+    return doLocal.trim();
+  }
+  if (familiaId && String(familiaId).trim() !== '') {
+    return String(familiaId).trim();
+  }
   const usuario = fbUser || (typeof window !== 'undefined' ? window.fbUser : null);
   if (usuario && isUsuarioAlex(usuario)) {
     return 'familia-alex-gabi';
   }
-  const doLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('dnm_familia_id') : null;
-  // Blindagem de segurança: impede que usuário não-Alex herde cache residual da família do Alex
-  if (doLocal === 'familia-alex-gabi' && (!usuario || !isUsuarioAlex(usuario))) {
-    return (usuario ? usuario.uid : (familiaId && familiaId !== 'familia-alex-gabi' ? familiaId : 'demo_local'));
+  if (usuario && usuario.uid) {
+    return usuario.uid;
   }
-  return doLocal || familiaId || (usuario ? usuario.uid : 'demo_local');
+  return 'demo_local';
 }
 
 function getFamiliaId() {
@@ -7344,11 +7360,14 @@ async function loadFromCloud() {
     const doc = await fbDb.collection('usuarios').doc(id).get();
     if (doc.exists) {
       const dadosNuvem = doc.data();
-      const meuMembroId = (fbUser ? fbUser.uid : null) || (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
+      const meuMembroId = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || (fbUser ? fbUser.uid : null) || S.membroAtivoId || 'm_1';
       const chaveLocal = apiKey || S.apiKey;
 
       Object.assign(S, dadosNuvem);
-      S.membroAtivoId = meuMembroId; // Preserva membro autenticado
+      S.membroAtivoId = meuMembroId; // Preserva membro autenticado e identidade local (ADR-006)
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('dnm_meu_membro_id', meuMembroId);
+      }
       if (chaveLocal && !S.apiKey) S.apiKey = chaveLocal;
 
       try {
@@ -7366,6 +7385,7 @@ async function loadFromCloud() {
       }
       const dataToSync = { ...S };
       delete dataToSync.apiKey;
+      delete dataToSync.membroAtivoId;
       if (fbUser && fbUser.uid) {
         if (!Array.isArray(dataToSync.membrosUids)) dataToSync.membrosUids = [];
         if (!dataToSync.membrosUids.includes(fbUser.uid)) dataToSync.membrosUids.push(fbUser.uid);
@@ -7384,6 +7404,7 @@ async function syncDrive() {
   try {
     const dataToSync = { ...S };
     delete dataToSync.apiKey;
+    delete dataToSync.membroAtivoId;
     await fbDb.collection('usuarios').doc(id).set(dataToSync, { merge: true });
     alert('✅ Dados sincronizados com sucesso na nuvem familiar!');
   } catch(e) {
@@ -7391,47 +7412,19 @@ async function syncDrive() {
   }
 }
 
-function salvarFamiliaId() {
-  const v = document.getElementById('familia-id').value.trim();
-  if (!v) { alert('Digite um código de família.'); return; }
-  familiaId = v;
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('dnm_familia_id', v);
-  }
-  updateFamiliaStatus();
-
-  if (!fbDb) {
-    alert('Código salvo localmente!');
+/**
+ * Salva o ID/Código da família a partir do formulário de Configurações (ADR-006).
+ * Substitui o Object.assign destrutivo redirecionando para entrarComCodigoFamilia(v)
+ * para realizar merge não-destrutivo, preservando identidade e dados locais.
+ */
+async function salvarFamiliaId() {
+  const inp = document.getElementById('familia-id');
+  const v = inp ? inp.value.trim() : '';
+  if (!v) {
+    alert('Digite um código ou ID de família.');
     return;
   }
-
-  fbDb.collection('usuarios').doc(familiaId).get().then(doc => {
-    if (doc.exists) {
-      const dadosNuvem = doc.data();
-      const meuMembroId = (typeof localStorage !== 'undefined' && localStorage.getItem('dnm_meu_membro_id')) || S.membroAtivoId || 'm_1';
-      Object.assign(S, dadosNuvem);
-      S.membroAtivoId = meuMembroId;
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('dnm_data', JSON.stringify(S));
-        }
-      } catch (e) {
-        console.error('Erro ao gravar dnm_data no localStorage em salvarFamiliaId:', e);
-      }
-      render();
-      alert('Código vinculado! Os dados da família foram carregados com sucesso.');
-    } else {
-      const dataToSync = { ...S };
-      delete dataToSync.apiKey;
-      fbDb.collection('usuarios').doc(familiaId).set(dataToSync)
-        .then(() => alert('Código salvo! Este aparelho é a base da família.'))
-        .catch(e => alert('Erro ao gravar na nuvem: ' + e.message));
-    }
-    escutarSincronizacaoTempoReal();
-  }).catch(e => {
-    alert('Erro ao acessar a nuvem: ' + e.message);
-    console.error(e);
-  });
+  await entrarComCodigoFamilia(v);
 }
 
 function salvarCodigoFamiliaLogin() {
@@ -7475,6 +7468,7 @@ function save() {
     saveTimer = setTimeout(() => {
       const dataToSync = { ...S };
       delete dataToSync.apiKey; // Segurança: nunca envia chave pessoal de IA para base compartilhada
+      delete dataToSync.membroAtivoId; // Identidade local do membro ativo não deve poluir a base da família (ADR-006)
       if (typeof fbDb.collection === 'function') {
         const docRef = fbDb.collection('usuarios').doc(id);
         if (docRef && typeof docRef.set === 'function') {
@@ -8157,12 +8151,22 @@ function mesclarDadosFamilia(dadosFamilia, dadosIndividuais, usuarioEntrante) {
 }
 
 /**
- * Entra na família por código informado, realizando o MERGE com os dados existentes.
+ * Entra na família por código informado ou ID direto, realizando o MERGE com os dados existentes (ADR-006).
+ * Resolução híbrida:
+ *  1. Busca em codigosFamilia/{codigoUpper}
+ *  2. Se não encontrar em codigosFamilia, verifica se o código informado é diretamente um ID em usuarios/{codigoInput}
  */
 async function entrarComCodigoFamilia(codigoInput) {
-  const codigo = String(codigoInput || '').trim().toUpperCase();
-  if (!codigo) {
-    alert('Digite o código da família (ex: FAM-XXXXXX).');
+  const codigoRaw = String(codigoInput || '').trim();
+  if (!codigoRaw) {
+    alert('Digite o código da família (ex: FAM-XXXXXX) ou ID direto de documento.');
+    return;
+  }
+
+  const userLogado = fbUser || (typeof window !== 'undefined' ? window.fbUser : null);
+  if (!userLogado || !userLogado.uid) {
+    alert('Você precisa estar conectado na sua conta para entrar em uma família. Por favor, faça login primeiro!');
+    if (typeof openM === 'function') openM('m-login');
     return;
   }
 
@@ -8172,21 +8176,43 @@ async function entrarComCodigoFamilia(codigoInput) {
   }
 
   try {
-    const codDoc = await fbDb.collection('codigosFamilia').doc(codigo).get();
-    if (!codDoc || !codDoc.exists) {
-      alert('Código da família não encontrado ou incorreto.');
-      return;
+    let novaFamiliaId = null;
+    const codigoUpper = codigoRaw.toUpperCase();
+
+    // 1. Resolução híbrida: busca em codigosFamilia
+    try {
+      const codDoc = await fbDb.collection('codigosFamilia').doc(codigoUpper).get();
+      if (codDoc && codDoc.exists) {
+        const infoCodigo = codDoc.data() || {};
+        if (infoCodigo.expiraEm && new Date(infoCodigo.expiraEm).getTime() < Date.now()) {
+          alert('Este código da família expirou. Peça ao administrador para gerar um novo código.');
+          return;
+        }
+        novaFamiliaId = infoCodigo.familiaId;
+      }
+    } catch (errCod) {
+      console.warn('Aviso ao consultar codigosFamilia, testando resolução direta:', errCod);
     }
 
-    const infoCodigo = codDoc.data() || {};
-    if (infoCodigo.expiraEm && new Date(infoCodigo.expiraEm).getTime() < Date.now()) {
-      alert('Este código da família expirou. Peça ao administrador para gerar um novo código.');
-      return;
-    }
-
-    const novaFamiliaId = infoCodigo.familiaId;
+    // 2. Resolução híbrida: se não encontrar em codigosFamilia, verifica ID direto em usuarios
     if (!novaFamiliaId) {
-      alert('Código de família inválido.');
+      try {
+        const userDocExato = await fbDb.collection('usuarios').doc(codigoRaw).get();
+        if (userDocExato && userDocExato.exists) {
+          novaFamiliaId = codigoRaw;
+        } else if (codigoUpper !== codigoRaw) {
+          const userDocUpper = await fbDb.collection('usuarios').doc(codigoUpper).get();
+          if (userDocUpper && userDocUpper.exists) {
+            novaFamiliaId = codigoUpper;
+          }
+        }
+      } catch (errUserDoc) {
+        console.warn('Aviso ao consultar documento em usuarios/{id}:', errUserDoc);
+      }
+    }
+
+    if (!novaFamiliaId) {
+      alert('Código ou ID da família não encontrado ou incorreto.');
       return;
     }
 
@@ -8215,50 +8241,69 @@ async function entrarComCodigoFamilia(codigoInput) {
       console.warn('Aviso ao salvar backup individual:', eBkp);
     }
 
-    const userLogado = fbUser || {
-      uid: S.membroAtivoId || 'user_local',
-      displayName: S.membrosPerfil?.[0]?.nome || 'Familiar'
-    };
-
     const famDocRef = fbDb.collection('usuarios').doc(novaFamiliaId);
     let dadosFinais = null;
+
+    const aplicarMergeDados = (dadosFamiliaExistentes) => {
+      dadosFinais = mesclarDadosFamilia(dadosFamiliaExistentes, S, userLogado);
+      delete dadosFinais.apiKey;
+      delete dadosFinais.membroAtivoId;
+
+      // Garante inclusão de UID e Perfil
+      if (!Array.isArray(dadosFinais.membrosUids)) dadosFinais.membrosUids = [];
+      if (!dadosFinais.membrosUids.includes(userLogado.uid)) {
+        dadosFinais.membrosUids.push(userLogado.uid);
+      }
+
+      if (!Array.isArray(dadosFinais.membrosPerfil)) dadosFinais.membrosPerfil = [];
+      const jaPerfil = dadosFinais.membrosPerfil.find(m => m.id === userLogado.uid || m.uid === userLogado.uid);
+      if (!jaPerfil) {
+        const nomeMembro = userLogado.displayName || userLogado.nome || (userLogado.email ? userLogado.email.split('@')[0] : 'Familiar');
+        dadosFinais.membrosPerfil.push({
+          id: userLogado.uid,
+          uid: userLogado.uid,
+          nome: nomeMembro,
+          papel: 'membro',
+          cor: '#5581E3',
+          fotoUrl: userLogado.photoURL || '',
+          iniciais: gerarIniciaisNome(nomeMembro)
+        });
+      }
+      return dadosFinais;
+    };
 
     if (typeof fbDb.runTransaction === 'function') {
       await fbDb.runTransaction(async transaction => {
         const docSnapshot = await transaction.get(famDocRef);
         const dadosFamiliaExistentes = docSnapshot.exists ? docSnapshot.data() : {};
-        dadosFinais = mesclarDadosFamilia(dadosFamiliaExistentes, S, userLogado);
-        delete dadosFinais.apiKey;
-        transaction.set(famDocRef, dadosFinais, { merge: true });
+        const df = aplicarMergeDados(dadosFamiliaExistentes);
+        transaction.set(famDocRef, df, { merge: true });
 
-        if (userLogado.uid) {
-          const contaRef = fbDb.collection('contas').doc(userLogado.uid);
-          transaction.set(contaRef, {
-            familiaId: novaFamiliaId,
-            codigoEntradaUsado: codigo,
-            atualizadoEm: new Date().toISOString()
-          }, { merge: true });
-        }
+        const contaRef = fbDb.collection('contas').doc(userLogado.uid);
+        transaction.set(contaRef, {
+          familiaId: novaFamiliaId,
+          codigoEntradaUsado: codigoRaw,
+          atualizadoEm: new Date().toISOString()
+        }, { merge: true });
       });
     } else {
       const docSnapshot = await famDocRef.get();
       const dadosFamiliaExistentes = docSnapshot.exists ? docSnapshot.data() : {};
-      dadosFinais = mesclarDadosFamilia(dadosFamiliaExistentes, S, userLogado);
-      delete dadosFinais.apiKey;
-      await famDocRef.set(dadosFinais, { merge: true });
-      if (userLogado.uid) {
-        await fbDb.collection('contas').doc(userLogado.uid).set({
-          familiaId: novaFamiliaId,
-          codigoEntradaUsado: codigo,
-          atualizadoEm: new Date().toISOString()
-        }, { merge: true });
-      }
+      const df = aplicarMergeDados(dadosFamiliaExistentes);
+      await famDocRef.set(df, { merge: true });
+      await fbDb.collection('contas').doc(userLogado.uid).set({
+        familiaId: novaFamiliaId,
+        codigoEntradaUsado: codigoRaw,
+        atualizadoEm: new Date().toISOString()
+      }, { merge: true });
     }
 
-    // Atualiza estado local e listener de tempo real
+    // Atualiza estado local e preserva identidade (ADR-006)
     familiaId = novaFamiliaId;
+    if (typeof window !== 'undefined') window.familiaId = novaFamiliaId;
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('dnm_familia_id', novaFamiliaId);
+      localStorage.setItem('dnm_meu_membro_id', userLogado.uid);
       localStorage.setItem('dnm_data', JSON.stringify(dadosFinais));
     }
     Object.assign(S, dadosFinais);
@@ -8270,9 +8315,14 @@ async function entrarComCodigoFamilia(codigoInput) {
     }
     escutarSincronizacaoTempoReal();
 
-    if (typeof closeM === 'function') closeM('m-convite-circulo');
+    if (typeof closeM === 'function') {
+      closeM('m-convite-circulo');
+      closeM('m-entrar-codigo');
+      closeM('m-config-perfil-full');
+    }
     if (typeof render === 'function') render();
     updateFamiliaStatus();
+    updateContaStatus();
 
     if (typeof exibirToastNotificacao === 'function') {
       exibirToastNotificacao('Dados mesclados com a família com sucesso! ✨', '🎉');

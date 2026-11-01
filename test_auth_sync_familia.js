@@ -205,6 +205,7 @@ const mockSessionStorage = {
 
 const mockContasDb = {};
 const mockUsuariosDb = {};
+const mockCodigosDb = {};
 const mockFbDb = {
   collection: (col) => ({
     doc: (id) => ({
@@ -215,6 +216,9 @@ const mockFbDb = {
         if (col === 'usuarios') {
           return { exists: Boolean(mockUsuariosDb[id]), data: () => mockUsuariosDb[id] || {} };
         }
+        if (col === 'codigosFamilia') {
+          return { exists: Boolean(mockCodigosDb[id]), data: () => mockCodigosDb[id] || {} };
+        }
         return { exists: false, data: () => ({}) };
       },
       set: async (dados, opts) => {
@@ -224,6 +228,15 @@ const mockFbDb = {
         if (col === 'usuarios') {
           mockUsuariosDb[id] = (opts && opts.merge) ? { ...(mockUsuariosDb[id] || {}), ...dados } : dados;
         }
+        if (col === 'codigosFamilia') {
+          mockCodigosDb[id] = (opts && opts.merge) ? { ...(mockCodigosDb[id] || {}), ...dados } : dados;
+        }
+      },
+      onSnapshot: (callback) => {
+        if (col === 'usuarios') {
+          callback({ exists: Boolean(mockUsuariosDb[id]), data: () => mockUsuariosDb[id] || {} });
+        }
+        return () => {};
       }
     })
   })
@@ -597,8 +610,9 @@ test('fazerLogoffApp() limpa rigorosamente storage, reseta familiaId, S e fecha 
   assert.ok(modaisFechados.includes('m-config-perfil-full'));
 });
 
-test('docId() blinda contra leitura de cache familia-alex-gabi em usuários não-Alex', () => {
-  // 1. Alex conectado
+test('docId() dá precedência a dnm_familia_id mantendo Alex e Gabi na mesma família compartilhada (ADR-006)', () => {
+  // 1. Alex conectado sem localStorage: base unificada padrão
+  mockLocalStorage.removeItem('dnm_familia_id');
   if (context.setFbUserParaTestes) {
     context.setFbUserParaTestes({ email: 'alexsander.preite@icloud.com', uid: 'uid_alex' });
   } else {
@@ -606,18 +620,22 @@ test('docId() blinda contra leitura de cache familia-alex-gabi em usuários não
   }
   assert.strictEqual(context.docId(), 'familia-alex-gabi');
 
-  // 2. Não-Alex com cache residual contaminado de Alex no localStorage
+  // 2. Gabi conectada com dnm_familia_id='familia-alex-gabi': NUNCA ejetada, permanece na mesma família
   if (context.setFbUserParaTestes) {
     context.setFbUserParaTestes({ email: 'gabi@exemplo.com', uid: 'uid_gabi' });
   } else {
     context.fbUser = { email: 'gabi@exemplo.com', uid: 'uid_gabi' };
   }
   mockLocalStorage.setItem('dnm_familia_id', 'familia-alex-gabi');
-  assert.strictEqual(context.docId(), 'uid_gabi', 'Não-Alex com cache espúrio deve retornar seu próprio uid');
+  assert.strictEqual(context.docId(), 'familia-alex-gabi', 'Gabi deve permanecer sincronizada em familia-alex-gabi sem ejeção');
 
   // 3. Usuário legítimo em outra família
   mockLocalStorage.setItem('dnm_familia_id', 'familia_outra_123');
   assert.strictEqual(context.docId(), 'familia_outra_123');
+
+  // 4. Usuário não-Alex sem família configurada no localStorage: retorna seu próprio uid
+  mockLocalStorage.removeItem('dnm_familia_id');
+  assert.strictEqual(context.docId(), 'uid_gabi', 'Usuário sem família configurada deve ter docId igual ao seu uid');
 });
 
 // ----------------------------------------------------
@@ -1039,8 +1057,11 @@ test('extrairComImagem e chamarGeminiVisionCupom utilizam MODELOS_GEMINI_COMPROV
     assert.strictEqual(context.S.comprasCartao[0].val, 300);
 
     const faturaOut = context.calcularFaturaMes('agi', '2026-10');
-    const faturaNov = context.calcularFaturaMes('agi', '2026-11');
     assert.strictEqual(faturaOut.valorTotalFatura, 300, 'Fatura de Outubro deve ter parcela 1/3');
+
+    // Ao liquidar a fatura de Outubro, a fatura de Novembro contém estritamente a parcela 2/3 (R$ 300) sem rotativo
+    context.S.faturasCartao = [{ cartaoId: 'agi', mes: '2026-10', pago: true, fechada: true }];
+    const faturaNov = context.calcularFaturaMes('agi', '2026-11');
     assert.strictEqual(faturaNov.valorTotalFatura, 300, 'Fatura de Novembro deve ter parcela 2/3');
   });
 
@@ -1100,6 +1121,11 @@ test('extrairComImagem e chamarGeminiVisionCupom utilizam MODELOS_GEMINI_COMPROV
   });
 
   test('Transparência em faturas: detalha explicitamente juros e encargos de rotativo sobre saldo anterior', () => {
+    const hojeYM = new Date().toISOString().slice(0, 7);
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    const mesAnt = d.toISOString().slice(0, 7);
+
     context.S.cartoes = [
       { id: 'agi', nome: 'Agi', limite: 5000, diaFechamento: 20, diaVencimento: 27, taxaRotativo: 14.5, ativo: true }
     ];
@@ -1107,7 +1133,7 @@ test('extrairComImagem e chamarGeminiVisionCupom utilizam MODELOS_GEMINI_COMPROV
     context.S.faturasCartao = [
       {
         cartaoId: 'agi',
-        mes: '2026-09',
+        mes: mesAnt,
         valorTotalFatura: 1000,
         totalPago: 400, // Pagou 400, restou 600
         saldoRestante: 600,
@@ -1116,11 +1142,11 @@ test('extrairComImagem e chamarGeminiVisionCupom utilizam MODELOS_GEMINI_COMPROV
       }
     ];
 
-    const faturaOut = context.calcularFaturaMes('agi', '2026-10');
+    const faturaOut = context.calcularFaturaMes('agi', hojeYM);
     assert.ok(faturaOut.rotativoItem, 'Deve gerar rotativoItem quando houver saldo não pago da competência anterior');
     assert.strictEqual(faturaOut.rotativoItem.detalhe.saldoAnterior, 600, 'Saldo anterior deve ser R$ 600');
     assert.strictEqual(faturaOut.rotativoItem.detalhe.juros, 87, 'Juros de 14.5% sobre 600 deve ser R$ 87');
-    assert.strictEqual(faturaOut.valorTotalFatura, 687, 'Fatura de Outubro deve totalizar R$ 687 (600 + 87)');
+    assert.strictEqual(faturaOut.valorTotalFatura, 687, 'Fatura da competência deve totalizar R$ 687 (600 + 87)');
   });
 
   await (async () => {
@@ -1305,6 +1331,158 @@ test('extrairComImagem e chamarGeminiVisionCupom utilizam MODELOS_GEMINI_COMPROV
       throw err;
     }
   })();
+
+  // ----------------------------------------------------
+  // 12. SINCRONIZAÇÃO FAMILIAR, RESOLUÇÃO HÍBRIDA & MERGE SEGURO (ADR-006)
+  // ----------------------------------------------------
+  console.log('\n12. Verificação de Sincronização Familiar & Compartilhamento em Tempo Real (ADR-006):');
+
+  await (async () => {
+    totalTests++;
+    try {
+      // 1. entrarComCodigoFamilia exige autenticação
+      context.setFbUserParaTestes(null);
+      let alertMsg = '';
+      context.alert = (msg) => { alertMsg = msg; };
+
+      await context.entrarComCodigoFamilia('FAM-123456');
+      assert.ok(alertMsg.includes('precisa estar conectado') || alertMsg.includes('faça login'), 'Deve orientar o usuário a logar primeiro');
+      passedTests++;
+      console.log('  ✅ [PASS] entrarComCodigoFamilia() bloqueia usuário não autenticado orientando a logar');
+    } catch (err) {
+      console.error('  ❌ [FAIL] entrarComCodigoFamilia() bloqueia usuário não autenticado orientando a logar');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  await (async () => {
+    totalTests++;
+    try {
+      // 2. Resolução Híbrida: Busca em codigosFamilia
+      const userGabi = { uid: 'uid_gabi_hibrido', displayName: 'Gabi', email: 'gabi@teste.com' };
+      context.setFbUserParaTestes(userGabi);
+      context.S.membroAtivoId = 'uid_gabi_hibrido';
+      mockLocalStorage.setItem('dnm_meu_membro_id', 'uid_gabi_hibrido');
+
+      mockCodigosDb['FAM-HIBRIDO1'] = {
+        familiaId: 'fam_doc_compartilhado_123',
+        expiraEm: '2099-12-31T23:59:59Z'
+      };
+      mockUsuariosDb['fam_doc_compartilhado_123'] = {
+        membrosUids: ['uid_alex'],
+        gastos: [{ id: 'g_alex_1', desc: 'Mercado Alex', val: 150 }]
+      };
+
+      context.S.gastos = [{ id: 'g_gabi_1', desc: 'Luz Gabi', val: 90 }];
+      mockLocalStorage.setItem('dnm_familia_id', 'uid_gabi_hibrido');
+
+      await context.entrarComCodigoFamilia('FAM-HIBRIDO1');
+
+      assert.strictEqual(mockContasDb['uid_gabi_hibrido'].familiaId, 'fam_doc_compartilhado_123', 'contas/{uid} deve ser atualizado');
+      assert.strictEqual(mockLocalStorage.getItem('dnm_familia_id'), 'fam_doc_compartilhado_123', 'dnm_familia_id deve ser salvo');
+      assert.strictEqual(context.S.membroAtivoId, 'uid_gabi_hibrido', 'Identidade local de Gabi deve ser preservada');
+      assert.strictEqual(mockLocalStorage.getItem('dnm_meu_membro_id'), 'uid_gabi_hibrido', 'dnm_meu_membro_id deve ser preservado');
+
+      const docFam = mockUsuariosDb['fam_doc_compartilhado_123'];
+      assert.strictEqual(docFam.gastos.length, 2, 'Gastos de Alex e Gabi devem estar mesclados');
+      assert.ok(docFam.membrosUids.includes('uid_gabi_hibrido'), 'membrosUids deve conter o UID da Gabi');
+      passedTests++;
+      console.log('  ✅ [PASS] entrarComCodigoFamilia() resolve via codigosFamilia, mescla dados e preserva identidade');
+    } catch (err) {
+      console.error('  ❌ [FAIL] entrarComCodigoFamilia() resolve via codigosFamilia, mescla dados e preserva identidade');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  await (async () => {
+    totalTests++;
+    try {
+      // 3. Resolução Híbrida: Código informado é diretamente um ID em usuarios/{id}
+      const userGabi = { uid: 'uid_gabi_direto', displayName: 'Gabi', email: 'gabi@teste.com' };
+      context.setFbUserParaTestes(userGabi);
+      context.S.membroAtivoId = 'uid_gabi_direto';
+      mockLocalStorage.setItem('dnm_meu_membro_id', 'uid_gabi_direto');
+      mockLocalStorage.setItem('dnm_familia_id', 'uid_gabi_direto');
+
+      const idDocumentoAlex = 'Mj5VkATiqNcxVi6wH4PLC5csnaE3';
+      mockUsuariosDb[idDocumentoAlex] = {
+        membrosUids: ['uid_alex_real'],
+        gastos: [{ id: 'g_alex_real', desc: 'Combustível Alex', val: 200 }]
+      };
+
+      context.S.gastos = [{ id: 'g_gabi_real', desc: 'Internet Gabi', val: 120 }];
+
+      // Gabi entra digitando diretamente o UID/ID do documento de Alex
+      await context.entrarComCodigoFamilia(idDocumentoAlex);
+
+      assert.strictEqual(mockContasDb['uid_gabi_direto'].familiaId, idDocumentoAlex, 'Deve mapear familiaId para o ID direto do documento');
+      assert.strictEqual(mockLocalStorage.getItem('dnm_familia_id'), idDocumentoAlex);
+      assert.strictEqual(context.S.membroAtivoId, 'uid_gabi_direto', 'Identidade no aparelho deve permanecer da Gabi');
+
+      const docAlexMesclado = mockUsuariosDb[idDocumentoAlex];
+      assert.strictEqual(docAlexMesclado.gastos.length, 2, 'Deve juntar os gastos da Gabi aos da família de Alex');
+      assert.ok(docAlexMesclado.membrosUids.includes('uid_gabi_direto'), 'membrosUids deve incluir Gabi');
+      passedTests++;
+      console.log('  ✅ [PASS] entrarComCodigoFamilia() suporta resolução direta por ID de documento em usuarios/{id}');
+    } catch (err) {
+      console.error('  ❌ [FAIL] entrarComCodigoFamilia() suporta resolução direta por ID de documento em usuarios/{id}');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  await (async () => {
+    totalTests++;
+    try {
+      // 4. salvarFamiliaId() delega para entrarComCodigoFamilia() sem perda destrutiva de dados
+      const userGabi = { uid: 'uid_gabi_config', displayName: 'Gabi', email: 'gabi@teste.com' };
+      context.setFbUserParaTestes(userGabi);
+      context.S.membroAtivoId = 'uid_gabi_config';
+      mockLocalStorage.setItem('dnm_meu_membro_id', 'uid_gabi_config');
+      mockLocalStorage.setItem('dnm_familia_id', 'uid_gabi_config');
+
+      mockUsuariosDb['familia-alex-gabi-cfg'] = {
+        membrosUids: ['uid_alex'],
+        gastos: [{ id: 'g_base', desc: 'Despesa Base', val: 50 }]
+      };
+
+      context.S.gastos = [{ id: 'g_local', desc: 'Despesa Local Gabi', val: 80 }];
+
+      domMock.getElementById('familia-id').value = 'familia-alex-gabi-cfg';
+      await context.salvarFamiliaId();
+
+      assert.strictEqual(context.S.membroAtivoId, 'uid_gabi_config', 'Nunca deve transformar Gabi em Alex');
+      assert.strictEqual(mockLocalStorage.getItem('dnm_familia_id'), 'familia-alex-gabi-cfg');
+      const docSalvo = mockUsuariosDb['familia-alex-gabi-cfg'];
+      assert.strictEqual(docSalvo.gastos.length, 2, 'salvarFamiliaId() mescla em vez de sobrescrever destrutivamente');
+      passedTests++;
+      console.log('  ✅ [PASS] salvarFamiliaId() executa merge seguro delegando para entrarComCodigoFamilia()');
+    } catch (err) {
+      console.error('  ❌ [FAIL] salvarFamiliaId() executa merge seguro delegando para entrarComCodigoFamilia()');
+      console.error('     Erro:', err.message);
+      throw err;
+    }
+  })();
+
+  test('escutarSincronizacaoTempoReal() nunca sobrescreve S.membroAtivoId com o usuário da nuvem', () => {
+    context.S.membroAtivoId = 'uid_gabi_local';
+    mockLocalStorage.setItem('dnm_meu_membro_id', 'uid_gabi_local');
+    mockLocalStorage.setItem('dnm_familia_id', 'familia-sync-teste');
+
+    // Nuvem contém dados gravados por Alex (membroAtivoId: 'uid_alex')
+    mockUsuariosDb['familia-sync-teste'] = {
+      membroAtivoId: 'uid_alex',
+      gastos: [{ id: 'g_sync', desc: 'Gasto Nuvem', val: 300 }]
+    };
+
+    context.escutarSincronizacaoTempoReal();
+
+    assert.strictEqual(context.S.membroAtivoId, 'uid_gabi_local', 'S.membroAtivoId deve continuar sendo o membro local deste aparelho');
+    assert.strictEqual(mockLocalStorage.getItem('dnm_meu_membro_id'), 'uid_gabi_local', 'dnm_meu_membro_id deve ser preservado');
+    assert.strictEqual(context.S.gastos.length, 1, 'Dados da nuvem devem ser atualizados via snapshot');
+  });
 
   console.log('\n====================================================');
   console.log(` RESULTADO FINAL: ${passedTests}/${totalTests} TESTES APROVADOS COM SUCESSO!`);
